@@ -80,6 +80,23 @@ class ConversationRead(_ORMModel):
     updated_at: datetime
 
 
+# --- Conversation turns (chat) --------------------------------------------
+class ConversationStart(BaseModel):
+    tenant_id: uuid.UUID
+    channel: Channel = "web"
+    message: str = Field(min_length=1)
+
+
+class MessageSend(BaseModel):
+    message: str = Field(min_length=1)
+
+
+class ConversationReply(BaseModel):
+    conversation_id: uuid.UUID
+    reply: str
+    stop_reason: str
+
+
 # --- Message --------------------------------------------------------------
 class MessageCreate(BaseModel):
     conversation_id: uuid.UUID

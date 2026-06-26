@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     supabase_connection_string: str
     secret_encryption_key: str
     brevo_api_key: str | None = None
+    anthropic_api_key: str | None = None
 
     @property
     def database_url(self) -> str:
