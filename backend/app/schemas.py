@@ -80,6 +80,25 @@ class ConversationRead(_ORMModel):
     updated_at: datetime
 
 
+# --- Images ----------------------------------------------------------------
+class ImageRead(_ORMModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    category: str
+    filename: str
+    description: str | None
+    url: str
+    created_at: datetime
+
+
+class ImageCategoriesSet(BaseModel):
+    categories: list[str] = Field(default_factory=list)
+
+
+class ImageCategoriesRead(BaseModel):
+    categories: list[str]
+
+
 # --- Conversation turns (chat) --------------------------------------------
 class ConversationStart(BaseModel):
     tenant_id: uuid.UUID

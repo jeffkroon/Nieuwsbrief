@@ -23,6 +23,7 @@ class Match:
     away: str
     url: str
     price: str = PRICE_ON_REQUEST
+    image_url: str | None = None  # gekozen clubfoto; valt anders terug op dummy
 
 
 @dataclass(frozen=True)
@@ -43,3 +44,4 @@ class NewsletterContent:
     header_subtitle: str | None = None
     header_cta_text: str | None = None
     header_cta_url: str | None = None
+    header_image_url: str | None = None  # gekozen bannerfoto; valt anders terug op brand

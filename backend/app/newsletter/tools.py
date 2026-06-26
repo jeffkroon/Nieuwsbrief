@@ -24,6 +24,7 @@ from app.newsletter import extraction
 from app.newsletter.models import Match, NewsletterContent
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.templates import load_template
+from app.repositories import images as images_repo
 from app.repositories import newsletters as newsletters_repo
 from app.repositories import secrets as secrets_repo
 from app.services.brevo import BrevoClient, BrevoError
@@ -64,6 +65,18 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "list_images",
+        "description": "Lijst de geüploade foto's van deze tenant per categorie (bv. 'banner', "
+        "'club', 'wedstrijd') met bestandsnaam, omschrijving en url. Gebruik dit om een bannerfoto "
+        "te kiezen en per wedstrijd de juiste clubfoto te matchen op bestandsnaam/omschrijving "
+        "(bv. een Arsenal-wedstrijd -> een arsenal-foto).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"category": {"type": "string", "description": "bv. banner, club, wedstrijd"}},
+            "required": ["category"],
+        },
+    },
+    {
         "name": "find_matches",
         "description": "Haal de ECHTE, beschikbare wedstrijden van de klantensite op, met "
         "thuisclub, uitclub, de echte ticket-URL en de vanafprijs. Gebruik UITSLUITEND "
@@ -97,6 +110,7 @@ TOOL_DEFINITIONS = [
                 "slot_cta_text": {"type": "string"},
                 "slot_cta_url": {"type": "string"},
                 "preview_text": {"type": "string"},
+                "header_image_url": {"type": "string", "description": "URL van de gekozen bannerfoto uit list_images('banner')"},
                 "matches": {
                     "type": "array",
                     "items": {
@@ -105,6 +119,7 @@ TOOL_DEFINITIONS = [
                             "home": {"type": "string"},
                             "away": {"type": "string"},
                             "url": {"type": "string", "description": "Echte ticket-URL uit find_matches"},
+                            "image_url": {"type": "string", "description": "URL van de gematchte clubfoto uit list_images"},
                         },
                         "required": ["home", "away", "url"],
                     },
@@ -143,6 +158,17 @@ def _tool_get_brand_config(ctx: ToolContext, _: dict) -> dict:
     return {"config": _load_tenant(ctx).config}
 
 
+def _tool_list_images(ctx: ToolContext, tool_input: dict) -> dict:
+    category = tool_input["category"].strip().lower()
+    images = images_repo.list_images(ctx.session, ctx.tenant_id, category)
+    return {
+        "category": category,
+        "images": [
+            {"filename": im.filename, "description": im.description, "url": im.url} for im in images
+        ],
+    }
+
+
 def _tool_analyze_website_tone(ctx: ToolContext, tool_input: dict) -> dict:
     brand = _load_tenant(ctx).config
     url = tool_input.get("url") or brand.get("website_url") or brand.get("matches_url")
@@ -179,7 +205,9 @@ def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]
                 "Gebruik find_matches om bestaande wedstrijden te krijgen."
             )
         price = extraction.extract_price(llm, html, source_url=url)
-        result.append(Match(home=m["home"], away=m["away"], url=url, price=price))
+        result.append(
+            Match(home=m["home"], away=m["away"], url=url, price=price, image_url=m.get("image_url"))
+        )
     return result
 
 
@@ -201,6 +229,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         header_subtitle=tool_input.get("header_subtitle"),
         header_cta_text=tool_input.get("header_cta_text"),
         header_cta_url=tool_input.get("header_cta_url"),
+        header_image_url=tool_input.get("header_image_url"),
         intro_1=tool_input["intro_1"],
         intro_2=tool_input["intro_2"],
         main_cta_text=tool_input["main_cta_text"],
@@ -261,6 +290,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
 
 _DISPATCH: dict[str, Callable[[ToolContext, dict], dict]] = {
     "get_brand_config": _tool_get_brand_config,
+    "list_images": _tool_list_images,
     "analyze_website_tone": _tool_analyze_website_tone,
     "find_matches": _tool_find_matches,
     "create_newsletter_draft": _tool_create_newsletter_draft,

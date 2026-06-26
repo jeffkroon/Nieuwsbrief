@@ -31,9 +31,16 @@ Werkwijze:
    beschikbare wedstrijden als opties aan. Verzin nooit zelf een wedstrijd of URL.
 5. Schrijf een enthousiaste intro in de tone of voice van de site (zie stap 2) en
    volgens de `claude_prompt`: twee korte alinea's, direct en sportief.
-6. Roep als laatste `create_newsletter_draft` aan en geef per wedstrijd de
-   thuisclub, uitclub en de echte `url` uit `find_matches` mee. De prijs en link
-   worden automatisch live van de site gevalideerd en gescrapet.
+6. Kies de foto's met `list_images`:
+   - Categorie `banner`: kies een bannerfoto en geef die url mee als `header_image_url`.
+   - Per wedstrijd: zoek in de club-/wedstrijdcategorie de foto die past bij de
+     thuisclub, op basis van de bestandsnaam of omschrijving (een Arsenal-wedstrijd
+     krijgt een arsenal-foto). Geef die url mee als `image_url` bij de wedstrijd.
+   - Vind je geen passende foto, laat `image_url`/`header_image_url` dan weg (er is
+     een nette fallback). Verzin nooit zelf een foto-url.
+7. Roep als laatste `create_newsletter_draft` aan en geef per wedstrijd de
+   thuisclub, uitclub, de echte `url` uit `find_matches` en (indien gevonden) de
+   `image_url` mee. De prijs en link worden automatisch live gevalideerd en gescrapet.
 
 Geef ook de header-elementen mee voor op de foto:
 - `header_title`: een korte, pakkende kop (max ongeveer 6 woorden), goed leesbaar.

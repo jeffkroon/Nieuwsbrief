@@ -15,6 +15,19 @@ def get_cipher() -> SecretCipher:
 
 
 @lru_cache
+def get_storage():
+    """Bouwt de Supabase Storage-client. Faalt duidelijk als config ontbreekt."""
+    from app.services.storage import SupabaseStorage
+
+    settings = get_settings()
+    return SupabaseStorage(
+        settings.supabase_url,
+        settings.supabase_service_role_key,
+        bucket=settings.images_bucket,
+    )
+
+
+@lru_cache
 def get_anthropic_client():
     """Bouwt de Anthropic-client. Faalt duidelijk als de API-key ontbreekt."""
     import anthropic

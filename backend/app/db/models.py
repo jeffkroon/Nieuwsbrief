@@ -169,6 +169,21 @@ class Newsletter(Base):
     tenant: Mapped[Tenant] = relationship(back_populates="newsletters")
 
 
+class Image(Base):
+    __tablename__ = "images"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 

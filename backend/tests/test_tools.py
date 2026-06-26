@@ -127,6 +127,21 @@ def test_find_matches(session, cipher) -> None:
     assert llm.messages.calls[0]["messages"][0]["content"].startswith("Bron-URL:")
 
 
+def test_list_images(session, cipher) -> None:
+    from app.repositories import images as images_repo
+
+    tenant = _tenant(session)
+    images_repo.create_image(
+        session, tenant_id=tenant.id, category="club", filename="arsenal.jpg",
+        description="Arsenal shirt", storage_path="p/arsenal.jpg", url="https://cdn/arsenal.jpg",
+    )
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    result = execute_tool("list_images", {"category": "club"}, ctx)
+    assert result["category"] == "club"
+    assert result["images"][0]["filename"] == "arsenal.jpg"
+    assert result["images"][0]["url"] == "https://cdn/arsenal.jpg"
+
+
 def test_analyze_website_tone(session, cipher) -> None:
     tenant = _tenant(session)
     llm = FakeLLM({"tone_of_voice": "Informeel en sportief, je-vorm."})

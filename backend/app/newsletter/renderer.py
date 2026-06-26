@@ -19,10 +19,8 @@ REQUIRED_BRAND_FIELDS = (
     "brand_telefoon",
     "brand_kvk",
     "website_url",
-    "base_tickets_url",
     "primary_color",
     "logo_url",
-    "header_image_url",
     "dummy_image_url",
     "facebook_url",
     "instagram_url",
@@ -50,7 +48,7 @@ def club_image_url(club: str, brand: dict) -> str:
 def render_banner(match: Match, brand: dict) -> str:
     """Bouw het HTML-tabelblok voor één wedstrijd. De link is de echte ticket-URL."""
     color = brand["primary_color"]
-    img_url = club_image_url(match.home, brand)
+    img_url = match.image_url or club_image_url(match.home, brand)
     link = match.url
     # De prijs bevat al een euroteken (bv "€ 249"); geen extra € toevoegen.
     # Bij "op aanvraag" tonen we geen "v.a." en geen bedrag-opmaak.
@@ -122,11 +120,11 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
 
     replacements = {
         "{{EMAIL_TITEL}}": f"{content.theme} | {brand['brand_name']}",
+        "{{HEADER_IMAGE_URL}}": content.header_image_url or brand.get("header_image_url", ""),
         "{{HEADER_TITEL}}": content.header_title or content.theme,
         "{{HEADER_SUBTITEL}}": content.header_subtitle or "",
         "{{HEADER_CTA}}": _render_hero_cta(brand, content),
         "{{WEBSITE_URL}}": brand["website_url"],
-        "{{HEADER_IMAGE_URL}}": brand["header_image_url"],
         "{{LOGO_URL}}": brand["logo_url"],
         "{{BRAND_NAME}}": brand["brand_name"],
         "{{BRAND_ADRES}}": brand["brand_adres"],
