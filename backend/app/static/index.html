@@ -65,7 +65,7 @@ async function loadTenants() {
       opt.textContent = t.name;
       tenantSel.appendChild(opt);
     }
-    addMsg("system", "Kies een klant en beschrijf de nieuwsbrief. Ik zet het concept klaar in Brevo.");
+    addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
   } catch (e) {
     addMsg("system", "Kon klanten niet laden: " + e.message);
   }
@@ -116,6 +116,7 @@ input.addEventListener("keydown", (e) => {
 tenantSel.addEventListener("change", () => {
   conversationId = null;
   addMsg("system", "Nieuwe klant gekozen, nieuw gesprek gestart.");
+  addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
 });
 
 loadTenants();
