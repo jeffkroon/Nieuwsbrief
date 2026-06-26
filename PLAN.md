@@ -86,29 +86,46 @@ Let op: het oude `SKILL.md` gebruikte afwijkende namen (`club_afbeeldingen`,
 
 ## Fasen
 
-### Fase 0: Datamodel (in uitvoering)
+### Fase 0: Datamodel (gereed)
 - [x] `mail`-schema + tabellen (migratie 001)
-- [ ] Schema-revisie: tenant-model + secrets (migratie 002)
-- [ ] Seed voetbalreizenxl als tenant
+- [x] Schema-revisie: tenant-model + secrets (migratie 002)
+- [x] Seed voetbalreizenxl als tenant
 
-### Fase 1: Backend-fundament
-- [ ] DB-sessielaag + config (`DATABASE_URL` via pooler)
-- [ ] Secret-encryptie (master key in env)
-- [ ] Repository-laag per entiteit
-- [ ] CRUD-routes tenants + health, met tests (80%+)
+### Fase 1: Backend-fundament (gereed)
+- [x] DB-sessielaag + config (`SUPABASE_CONNECTION_STRING` via pooler)
+- [x] Secret-encryptie (Fernet, master key in env)
+- [x] Repository-laag per entiteit
+- [x] CRUD-routes tenants + health, met tests (96% coverage)
 
-### Fase 2: Content-pipeline (Claude tool-use)
-- [ ] Tools: `get_brand_config`, `fetch_match_price`, `render_newsletter`, `create_brevo_draft`
-- [ ] `create_brevo_draft` dwingt concept af (nooit verzenden)
-- [ ] Conversation-orchestratie (Claude API, model claude-opus-4-8)
-- [ ] HTML-templates porten uit `clients/football-travel-group/templates/`
+### Fase 2: Content-pipeline (Claude tool-use) (gereed)
+- [x] Tools: `get_brand_config`, `fetch_match_price`, `create_newsletter_draft`
+- [x] Brevo-client dwingt concept af (geen verzend/plan-methode)
+- [x] Conversation-orchestratie (Claude API, claude-opus-4-8, adaptive thinking)
+- [x] HTML-template geport naar `backend/app/newsletter/html/`
+- [x] Conversations-route + service (gesprek + berichten opslaan)
+- [x] Live end-to-end bewezen: Brevo concept-campagne 902 aangemaakt (status draft)
 
-### Fase 3: Web-chat interface
-- [ ] Chat-frontend gekoppeld aan de backend
-- [ ] Tenant-selectie + gespreksgeschiedenis
+### Fase 3: Web-chat interface (gereed)
+- [x] Chat-frontend (`backend/app/static/index.html`), door FastAPI geserveerd op `/`
+- [x] Tenant-selectie + gespreksgeschiedenis per gesprek
 
-### Fase 4: Uitrol overige tenants
+### Fase 4: Uitrol overige tenants (te doen)
 - [ ] voetbalticketshop, voetbaltrips als tenants + brand-config + Brevo-koppeling
+- [ ] Per tenant eigen Brevo API-key via `PUT /tenants/{id}/secrets`
+
+---
+
+## Lokaal draaien
+
+```bash
+cd backend && python -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+# Chat: http://localhost:8000/   |   API-docs: http://localhost:8000/docs
+```
+
+Vereist in repo-root `.env`: `SUPABASE_CONNECTION_STRING`, `SECRET_ENCRYPTION_KEY`,
+`ANTHROPIC_API_KEY`. Brevo-key per tenant via `PUT /tenants/{id}/secrets`.
 
 ---
 
