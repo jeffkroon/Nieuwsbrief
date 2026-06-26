@@ -41,6 +41,7 @@ MATCH_URL = "https://www.voetbalreizenxl.nl/tickets/chelsea-brighton-hove-albion
 DRAFT_INPUT = {
     "subject": "Premier League toppers",
     "theme": "Premier League topperweek",
+    "confirmed": True,
     "intro_1": "Eerste alinea.",
     "intro_2": "Tweede alinea.",
     "main_cta_text": "Bekijk alles",
@@ -269,6 +270,20 @@ def test_create_draft_rejects_nonexistent_match(session, cipher) -> None:
     )
     with pytest.raises(ValueError, match="bestaat niet"):
         execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
+
+
+def test_create_draft_requires_confirmation(session, cipher) -> None:
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "confirmed"}  # geen toestemming
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": "€ 299"}),
+        brevo_factory=lambda key: FakeBrevo(key),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>x</html>")),
+    )
+    with pytest.raises(ValueError, match="toestemming"):
+        execute_tool("create_newsletter_draft", payload, ctx)
 
 
 def test_create_draft_without_brevo_key_raises(session, cipher) -> None:

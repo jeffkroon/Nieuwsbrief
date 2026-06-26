@@ -124,6 +124,7 @@ TOOL_DEFINITIONS = [
                 "slot_cta_text": {"type": "string"},
                 "slot_cta_url": {"type": "string"},
                 "preview_text": {"type": "string"},
+                "confirmed": {"type": "boolean", "description": "Zet alleen op true NADAT de gebruiker expliciet toestemming heeft gegeven om het concept in Brevo aan te maken"},
                 "header_image_url": {"type": "string", "description": "URL van de gekozen bannerfoto uit list_images('banner')"},
                 "matches": {
                     "type": "array",
@@ -282,6 +283,11 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
 
 
 def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
+    if not tool_input.get("confirmed"):
+        raise ValueError(
+            "Nog geen toestemming om het concept aan te maken. Vat de nieuwsbrief samen, "
+            "vraag de gebruiker eerst om toestemming, en roep dit pas aan met confirmed=true."
+        )
     tenant = _load_tenant(ctx)
     brand = tenant.config
 

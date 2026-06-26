@@ -17,22 +17,24 @@ p, h1, h2, h3 { margin:0; }
 a { color:#0092ff; text-decoration:underline; }
 a[x-apple-data-detectors] { color:inherit !important; text-decoration:inherit !important; }
 @media (max-width: 600px) {
-  .main-wrap   { width:100% !important; }
+  .main-wrap    { width:100% !important; }
+  .hero-wrap    { width:100% !important; height:220px !important; }
+  .hero-cell    { height:220px !important; padding:20px 16px !important; }
   .hero-title   { font-size:26px !important; }
   .hero-subtitle{ font-size:14px !important; }
-  .hero-cell    { padding:24px 18px !important; }
-  .banner-wrap { width:100% !important; }
-  .img-col      { width:150px !important; overflow:hidden !important; }
-  .banner-img   { width:150px !important; height:150px !important; }
+  .banner-wrap  { width:100% !important; }
+  .img-col      { width:120px !important; overflow:hidden !important; }
+  .banner-img   { width:120px !important; height:120px !important; }
   .content-col  { padding:10px 10px 10px 8px !important; }
-  .home-name    { font-size:14px !important; }
+  .home-name    { font-size:15px !important; }
   .vs-line      { font-size:9px !important; }
-  .away-name    { font-size:14px !important; }
+  .away-name    { font-size:15px !important; }
   .price-pill   { padding:5px 8px !important; }
   .price-va     { font-size:9px !important; }
-  .price-amount { font-size:13px !important; }
-  .cta-btn      { padding:8px 13px !important; font-size:12px !important; }
-  .main-cta    { width:100% !important; }
+  .price-amount { font-size:14px !important; }
+  .cta-btn      { padding:9px 12px !important; font-size:12px !important; }
+  .hero-cta     { padding:11px 18px !important; }
+  .main-cta     { width:100% !important; }
 }
 </style></head>
 <body link="#0092ff" style="background-color:#ffffff; margin:0; padding:0;" text="#3b3f44" yahoo="fix">
@@ -53,7 +55,8 @@ a[x-apple-data-detectors] { color:inherit !important; text-decoration:inherit !i
   <![endif]-->
   <div>
     <table cellspacing="0" cellpadding="0" border="0" role="presentation" width="590" align="center"
-      style="width:590px; height:300px; background-color:#1a3a6e; background-image:url('{{HEADER_IMAGE_URL}}'); background-size:cover; background-position:center center;">
+      class="hero-wrap"
+      style="width:590px; max-width:100%; height:300px; background-color:#1a3a6e; background-image:url('{{HEADER_IMAGE_URL}}'); background-size:cover; background-position:center center;">
     <tbody><tr><td class="hero-cell" valign="bottom" align="center"
       style="height:300px; padding:32px 28px; background-image:linear-gradient(to bottom, rgba(0,0,0,0) 35%, rgba(0,0,0,0.65) 100%);">
       <a href="{{WEBSITE_URL}}" target="_blank" style="text-decoration:none;">
