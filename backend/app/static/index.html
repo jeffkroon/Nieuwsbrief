@@ -203,7 +203,7 @@ async function loadImages() {
   const cat = viewCategory.value;
   if (!tid || !cat) { imageGrid.innerHTML = ""; return; }
   const imgs = await (await fetch(`/tenants/${tid}/images?category=${encodeURIComponent(cat)}`)).json();
-  imageGrid.innerHTML = imgs.length ? "" : '<p class="hint">Nog geen foto's in deze categorie.</p>';
+  imageGrid.innerHTML = imgs.length ? "" : `<p class="hint">Nog geen foto&#39;s in deze categorie.</p>`;
   for (const im of imgs) {
     const el = document.createElement("div");
     el.className = "thumb";
