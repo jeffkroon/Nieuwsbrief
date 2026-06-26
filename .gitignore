@@ -1,0 +1,27 @@
+# API-sleutels en omgevingsvariabelen — nooit committen
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Gegenereerde nieuwsbrieven (grote HTML-bestanden, per run opnieuw aangemaakt)
+clients/*/newsletters/
+
+# Tijdelijke bestanden
+*.tmp
+*.log
+
+# Testafbeeldingen en screenshots in de root
+/*.png
+/*.jpg
+/*.jpeg
+
+# Playwright en andere tool-caches
+.playwright-mcp/

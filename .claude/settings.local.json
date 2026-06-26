@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\ColinJonkDunionOnlin\\\\OneDrive - Podobrace\\\\Dunion Online Marketing - Claude-Workspace\\\\Email Marketing\\\\tools\")",
+      "Bash(Out-Null)",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\ColinJonkDunionOnlin\\\\OneDrive - Podobrace\\\\Dunion Online Marketing - Claude-Workspace\\\\Email Marketing\\\\clients\\\\dunion\\\\newsletters\")",
+      "Bash(Write-Host \"Mappen aangemaakt\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\ColinJonkDunionOnlin\\\\OneDrive - Podobrace\\\\Dunion Online Marketing - Claude-Workspace\\\\Email Marketing\\\\tools\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\ColinJonkDunionOnlin\\\\OneDrive - Podobrace\\\\Dunion Online Marketing - Claude-Workspace\\\\Email Marketing\\\\clients\\\\dunion\\\\newsletters\")",
+      "Bash(pip install *)",
+      "PowerShell(pip install requests python-dotenv)",
+      "PowerShell(python --version)",
+      "PowerShell(python -m pip install requests python-dotenv)",
+      "Bash(python tools/fetch_linkedin_posts.py --url \"https://www.linkedin.com/company/dunion-online-marketing/\" --posts 4)",
+      "Bash(python -c ' *)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_snapshot"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "sharepoint",
+    "playwright"
+  ]
+}
