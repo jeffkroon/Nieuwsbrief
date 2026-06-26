@@ -33,6 +33,7 @@ BRAND = {
 
 TEMPLATE = (
     "<title>{{EMAIL_TITEL}}</title>"
+    "<h1>{{HEADER_TITEL}}</h1><span>{{HEADER_SUBTITEL}}</span>"
     "<a href='{{WEBSITE_URL}}'>{{BRAND_NAME}}</a>"
     "<p>{{INTRO_1}}</p><p>{{INTRO_2}}</p>"
     "<a href='{{HOOFD_CTA_URL}}'>{{HOOFD_CTA_TEKST}}</a>"
@@ -116,3 +117,35 @@ def test_missing_brand_field_raises() -> None:
 def test_no_matches_raises() -> None:
     with pytest.raises(ValueError, match="wedstrijd"):
         render_newsletter(TEMPLATE, BRAND, _content(()))
+
+
+def test_header_title_falls_back_to_theme() -> None:
+    # Geen header_title meegegeven -> valt terug op het thema.
+    html = render_newsletter(TEMPLATE, BRAND, _content((Match(home="A", away="B", url="https://site/a/"),)))
+    assert "<h1>Kerst in Londen</h1>" in html
+
+
+def test_header_title_and_subtitle_used() -> None:
+    content = NewsletterContent(
+        theme="Kerst in Londen", subject="x", intro_1="a", intro_2="b",
+        main_cta_text="c", main_cta_url="u", slot_cta_text="d", slot_cta_url="u",
+        matches=(Match(home="A", away="B", url="https://site/a/"),),
+        header_title="PREMIER LEAGUE TOPPERS", header_subtitle="Beleef het live",
+    )
+    html = render_newsletter(TEMPLATE, BRAND, content)
+    assert "<h1>PREMIER LEAGUE TOPPERS</h1>" in html
+    assert "Beleef het live" in html
+
+
+def test_price_has_no_double_euro() -> None:
+    # De prijs bevat al een euroteken; de banner mag er geen tweede toevoegen.
+    m = Match(home="Chelsea", away="Arsenal", url="https://site/a/", price="€ 249")
+    banner = render_banner(m, BRAND)
+    assert "€ 249" in banner
+    assert "€ €" not in banner and "&euro;" not in banner
+
+
+def test_price_on_request_no_va_amount_prefix() -> None:
+    banner = render_banner(Match(home="A", away="B", url="https://site/a/"), BRAND)
+    assert "op aanvraag" in banner
+    assert "&euro;" not in banner

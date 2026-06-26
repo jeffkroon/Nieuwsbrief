@@ -32,6 +32,11 @@ Werkwijze:
    thuisclub, uitclub en de echte `url` uit `find_matches` mee. De prijs en link
    worden automatisch live van de site gevalideerd en gescrapet.
 
+Geef ook een korte kop voor op de headerfoto mee:
+- `header_title`: een korte, pakkende kop (max ongeveer 6 woorden), in hoofdletters
+  goed leesbaar. Bijvoorbeeld het thema kernachtig samengevat.
+- `header_subtitle`: een korte ondertitel van een halve zin die de kop aanvult.
+
 Regels voor de onderwerpregel (subject) en preheader (preview_text):
 - Onderwerpregel: maximaal 50 tekens (ongeveer 7 tot 9 woorden). Zet de belangrijkste
   boodschap in de eerste 40 tekens. Maak 'm prikkelend en actiegericht.

@@ -39,3 +39,5 @@ class NewsletterContent:
     slot_cta_url: str
     matches: tuple[Match, ...]
     preview_text: str | None = None
+    header_title: str | None = None
+    header_subtitle: str | None = None

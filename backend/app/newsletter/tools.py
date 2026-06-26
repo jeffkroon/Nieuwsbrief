@@ -74,6 +74,8 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "subject": {"type": "string"},
                 "theme": {"type": "string"},
+                "header_title": {"type": "string", "description": "Korte pakkende kop op de headerfoto"},
+                "header_subtitle": {"type": "string", "description": "Korte ondertitel onder de kop"},
                 "intro_1": {"type": "string"},
                 "intro_2": {"type": "string"},
                 "main_cta_text": {"type": "string"},
@@ -170,6 +172,8 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
     content = NewsletterContent(
         theme=tool_input["theme"],
         subject=tool_input["subject"],
+        header_title=tool_input.get("header_title"),
+        header_subtitle=tool_input.get("header_subtitle"),
         intro_1=tool_input["intro_1"],
         intro_2=tool_input["intro_2"],
         main_cta_text=tool_input["main_cta_text"],

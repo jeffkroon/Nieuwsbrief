@@ -7,7 +7,7 @@ worden bewust niet vervangen.
 
 from __future__ import annotations
 
-from app.newsletter.models import Match, NewsletterContent
+from app.newsletter.models import PRICE_ON_REQUEST, Match, NewsletterContent
 
 BANNER_MARKER = "<!-- ##BANNERS## -->"
 
@@ -52,6 +52,12 @@ def render_banner(match: Match, brand: dict) -> str:
     color = brand["primary_color"]
     img_url = club_image_url(match.home, brand)
     link = match.url
+    # De prijs bevat al een euroteken (bv "€ 249"); geen extra € toevoegen.
+    # Bij "op aanvraag" tonen we geen "v.a." en geen bedrag-opmaak.
+    if match.price == PRICE_ON_REQUEST:
+        price_va, price_amount = "", "op aanvraag"
+    else:
+        price_va, price_amount = "v.a.", match.price
     return f"""
 <table cellspacing="0" cellpadding="0" border="0" role="presentation" width="584" align="center"
   class="banner-wrap"
@@ -73,8 +79,8 @@ def render_banner(match: Match, brand: dict) -> str:
     <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
       style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">
     <tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">
-      <span class="price-va" style="display:block; font-family:Arial,sans-serif; font-size:11px; color:#666; line-height:1.4;">v.a.</span>
-      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:#111; line-height:1.2;">&euro;&nbsp;{match.price}</span>
+      <span class="price-va" style="display:block; font-family:Arial,sans-serif; font-size:11px; color:#666; line-height:1.4;">{price_va}</span>
+      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:#111; line-height:1.2;">{price_amount}</span>
     </td></tr></tbody></table>
     <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
       style="background:{color}; border-radius:4px; border-collapse:separate;">
@@ -96,6 +102,8 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
 
     replacements = {
         "{{EMAIL_TITEL}}": f"{content.theme} | {brand['brand_name']}",
+        "{{HEADER_TITEL}}": content.header_title or content.theme,
+        "{{HEADER_SUBTITEL}}": content.header_subtitle or "",
         "{{WEBSITE_URL}}": brand["website_url"],
         "{{HEADER_IMAGE_URL}}": brand["header_image_url"],
         "{{LOGO_URL}}": brand["logo_url"],
