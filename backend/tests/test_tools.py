@@ -128,6 +128,36 @@ def test_find_matches(session, cipher) -> None:
     assert llm.messages.calls[0]["messages"][0]["content"].startswith("Bron-URL:")
 
 
+def test_image_filename_resolves_to_real_url(session, cipher) -> None:
+    # De agent geeft een bestandsnaam mee; de backend zoekt de echte opslag-URL op.
+    from app.repositories import images as images_repo
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    images_repo.create_image(
+        session, tenant_id=tenant.id, category="banner", filename="allianz-arena.jpg",
+        description="Allianz Arena", storage_path="p/a.jpg", url="https://cdn/real-allianz.jpg",
+    )
+    images_repo.create_image(
+        session, tenant_id=tenant.id, category="club", filename="bayern.jpg",
+        description="Bayern", storage_path="p/b.jpg", url="https://cdn/real-bayern.jpg",
+    )
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["header_image_url"] = "banner:allianz_arena"  # shorthand/underscore zoals het model soms doet
+    payload["clubs"] = [{"name": "Bayern", "url": MATCH_URL, "image_url": "bayern.jpg", "price": "10,-"}]
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": None}),
+        brevo_factory=lambda key: FakeBrevo(key),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>x</html>")),
+    )
+    execute_tool("create_newsletter_draft", payload, ctx)
+    from app.db.models import Newsletter
+    nl = session.query(Newsletter).filter_by(tenant_id=tenant.id).order_by(Newsletter.created_at.desc()).first()
+    assert "https://cdn/real-allianz.jpg" in nl.html  # header opgelost
+    assert "https://cdn/real-bayern.jpg" in nl.html   # clubfoto opgelost
+    assert "banner:allianz_arena" not in nl.html      # geen kapotte shorthand
+
+
 def test_list_images(session, cipher) -> None:
     from app.repositories import images as images_repo
 

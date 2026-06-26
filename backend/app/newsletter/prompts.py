@@ -48,10 +48,12 @@ Doorloop daarna deze stappen, telkens overleggend:
 3. KOP & ONDERTITEL: stel een kop (`header_title`) en ondertitel (`header_subtitle`)
    voor in de tone of voice, en vraag of het zo goed is of aangepast moet worden.
 4. FOTO'S: toon met `list_images` welke foto's er per categorie zijn. Stel een banner
-   voor (`header_image_url`) en per blok een passende foto (`image_url`), gematcht op
-   bestandsnaam/omschrijving. Laat de gebruiker bevestigen of kiezen. Is er geen
+   voor en per blok een passende foto, gematcht op bestandsnaam/omschrijving. Geef de
+   foto ALTIJD door als de exacte BESTANDSNAAM uit list_images (bv. "bayern.jpg") in
+   `header_image_url` en `image_url`, NOOIT als verkorte of verzonnen URL. De backend
+   zoekt zelf de juiste link op. Laat de gebruiker bevestigen of kiezen. Is er geen
    passende foto, meld dat eerlijk en vraag of ze er een uploaden of dat de fallback
-   oké is. Verzin nooit een foto-url.
+   oké is. Verzin nooit een foto-naam.
 5. TEKSTEN: stel de intro (twee korte alinea's), de onderwerpregel en de preheader
    voor, en vraag akkoord of aanpassingen.
 

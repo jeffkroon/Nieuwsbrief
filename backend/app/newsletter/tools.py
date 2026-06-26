@@ -12,6 +12,7 @@ echt zijn, ongeacht hoe de site is opgebouwd.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -125,7 +126,7 @@ TOOL_DEFINITIONS = [
                 "slot_cta_url": {"type": "string"},
                 "preview_text": {"type": "string"},
                 "confirmed": {"type": "boolean", "description": "Zet alleen op true NADAT de gebruiker expliciet toestemming heeft gegeven om het concept in Brevo aan te maken"},
-                "header_image_url": {"type": "string", "description": "URL van de gekozen bannerfoto uit list_images('banner')"},
+                "header_image_url": {"type": "string", "description": "BESTANDSNAAM van de gekozen bannerfoto uit list_images('banner'), bv. 'allianz-arena.jpg'. Niet de volledige URL."},
                 "matches": {
                     "type": "array",
                     "description": "Wedstrijdblokken. Mag leeg zijn voor een ALGEMENE nieuwsbrief "
@@ -138,7 +139,7 @@ TOOL_DEFINITIONS = [
                             "away": {"type": "string"},
                             "url": {"type": "string", "description": "Bereikbare ticket-URL (uit find_matches of find_ticket_links)"},
                             "price": {"type": "string", "description": "Handmatige vanafprijs; ALLEEN gebruiken als de site geen prijs heeft en de gebruiker die heeft opgegeven"},
-                            "image_url": {"type": "string", "description": "URL van de gematchte clubfoto uit list_images"},
+                            "image_url": {"type": "string", "description": "BESTANDSNAAM van de gematchte foto uit list_images (niet de volledige URL)"},
                         },
                         "required": ["home", "away", "url"],
                     },
@@ -153,7 +154,7 @@ TOOL_DEFINITIONS = [
                             "name": {"type": "string"},
                             "url": {"type": "string", "description": "Bereikbare clubpagina-URL"},
                             "price": {"type": "string", "description": "Handmatige vanafprijs als de site er geen heeft"},
-                            "image_url": {"type": "string", "description": "URL van de clubfoto uit list_images"},
+                            "image_url": {"type": "string", "description": "BESTANDSNAAM van de clubfoto uit list_images (niet de volledige URL)"},
                             "stadium": {"type": "string", "description": "Naam van het stadion (klein lettertype in het blok)"},
                             "city": {"type": "string", "description": "Naam van de stad (klein lettertype in het blok)"},
                         },
@@ -241,6 +242,34 @@ def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:
     return {"source_url": url, "count": len(matches), "matches": matches}
 
 
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def _resolve_image(ctx: ToolContext, value: str | None) -> str | None:
+    """Zet een door de agent gekozen foto-verwijzing om naar de echte opslag-URL.
+
+    Het model kan een bestandsnaam (of 'categorie:bestandsnaam') meegeven; wij zoeken
+    de echte URL op in de geüploade foto's van deze tenant. Een volledige http-URL
+    wordt overgenomen. Niets gevonden -> None (nette fallback in de renderer).
+    """
+    if not value:
+        return None
+    if value.startswith(("http://", "https://")):
+        return value
+    name = value.split(":")[-1].strip()
+    images = images_repo.list_images(ctx.session, ctx.tenant_id)
+    for im in images:  # exacte bestandsnaam
+        if im.filename == name:
+            return im.url
+    needle = _norm(name)  # genormaliseerde 'bevat'-match op naam of omschrijving
+    if needle:
+        for im in images:
+            if needle in _norm(im.filename) or needle in _norm(im.description or ""):
+                return im.url
+    return None
+
+
 def _resolve_price(ctx: ToolContext, llm, url: str, manual: str | None) -> str:
     """URL moet bereikbaar zijn (200). Scrape de prijs; val terug op handmatige prijs."""
     status, html = extraction.fetch_page(url, ctx.http_client)
@@ -264,7 +293,7 @@ def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]
         Match(
             home=m["home"], away=m["away"], url=m["url"],
             price=_resolve_price(ctx, llm, m["url"], m.get("price")),
-            image_url=m.get("image_url"),
+            image_url=_resolve_image(ctx, m.get("image_url")),
         )
         for m in raw_matches
     ]
@@ -278,7 +307,7 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
         Club(
             name=c["name"], url=c["url"],
             price=_resolve_price(ctx, llm, c["url"], c.get("price")),
-            image_url=c.get("image_url"),
+            image_url=_resolve_image(ctx, c.get("image_url")),
             stadium=c.get("stadium"), city=c.get("city"),
         )
         for c in raw_clubs
@@ -308,7 +337,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         header_title=tool_input.get("header_title"),
         header_subtitle=tool_input.get("header_subtitle"),
         header_cta_text=tool_input.get("header_cta_text"),
-        header_image_url=tool_input.get("header_image_url"),
+        header_image_url=_resolve_image(ctx, tool_input.get("header_image_url")),
         intro_1=tool_input["intro_1"],
         intro_2=tool_input["intro_2"],
         main_cta_text=tool_input["main_cta_text"],
