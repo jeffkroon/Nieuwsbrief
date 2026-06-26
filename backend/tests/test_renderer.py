@@ -33,7 +33,7 @@ BRAND = {
 
 TEMPLATE = (
     "<title>{{EMAIL_TITEL}}</title>"
-    "<h1>{{HEADER_TITEL}}</h1><span>{{HEADER_SUBTITEL}}</span>"
+    "<h1>{{HEADER_TITEL}}</h1><span>{{HEADER_SUBTITEL}}</span>{{HEADER_CTA}}"
     "<a href='{{WEBSITE_URL}}'>{{BRAND_NAME}}</a>"
     "<p>{{INTRO_1}}</p><p>{{INTRO_2}}</p>"
     "<a href='{{HOOFD_CTA_URL}}'>{{HOOFD_CTA_TEKST}}</a>"
@@ -135,6 +135,25 @@ def test_header_title_and_subtitle_used() -> None:
     html = render_newsletter(TEMPLATE, BRAND, content)
     assert "<h1>PREMIER LEAGUE TOPPERS</h1>" in html
     assert "Beleef het live" in html
+
+
+def test_hero_cta_default() -> None:
+    html = render_newsletter(TEMPLATE, BRAND, _content((Match(home="A", away="B", url="https://site/a/"),)))
+    assert "Bekijk alle wedstrijden" in html
+    # Default-URL valt terug op base_tickets_url uit de brand.
+    assert "https://www.voetbalreizenxl.nl/tickets/" in html
+
+
+def test_hero_cta_custom_text_and_url() -> None:
+    content = NewsletterContent(
+        theme="t", subject="s", intro_1="a", intro_2="b",
+        main_cta_text="c", main_cta_url="u", slot_cta_text="d", slot_cta_url="u",
+        matches=(Match(home="A", away="B", url="https://site/a/"),),
+        header_cta_text="Pak je tickets", header_cta_url="https://site/overzicht/",
+    )
+    html = render_newsletter(TEMPLATE, BRAND, content)
+    assert "Pak je tickets" in html
+    assert 'href="https://site/overzicht/"' in html
 
 
 def test_price_has_no_double_euro() -> None:

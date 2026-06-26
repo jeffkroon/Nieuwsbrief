@@ -41,3 +41,5 @@ class NewsletterContent:
     preview_text: str | None = None
     header_title: str | None = None
     header_subtitle: str | None = None
+    header_cta_text: str | None = None
+    header_cta_url: str | None = None

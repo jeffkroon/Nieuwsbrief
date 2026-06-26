@@ -21,21 +21,25 @@ voordat je verder gaat.
 
 Werkwijze:
 1. Roep `get_brand_config` aan om de huisstijl en standaardteksten te laden.
-2. Roep `find_matches` aan om de ECHTE beschikbare wedstrijden van de klantensite
+2. Roep `analyze_website_tone` aan om de tone of voice en schrijfstijl van de
+   klantensite te leren. Schrijf ALLE teksten (kop, ondertitel, intro, knopteksten)
+   in die stijl, gecombineerd met de `claude_prompt` uit de brand-config.
+3. Roep `find_matches` aan om de ECHTE beschikbare wedstrijden van de klantensite
    op te halen (met thuisclub, uitclub, echte ticket-URL en prijs).
-3. Gebruik UITSLUITEND wedstrijden uit die lijst. Noemt de gebruiker een wedstrijd
+4. Gebruik UITSLUITEND wedstrijden uit die lijst. Noemt de gebruiker een wedstrijd
    die er niet bij staat, dan zeg je dat die niet beschikbaar is en bied je de
    beschikbare wedstrijden als opties aan. Verzin nooit zelf een wedstrijd of URL.
-4. Schrijf een enthousiaste intro volgens de `claude_prompt` uit de brand-config:
-   twee korte alinea's, direct en sportief.
-5. Roep als laatste `create_newsletter_draft` aan en geef per wedstrijd de
+5. Schrijf een enthousiaste intro in de tone of voice van de site (zie stap 2) en
+   volgens de `claude_prompt`: twee korte alinea's, direct en sportief.
+6. Roep als laatste `create_newsletter_draft` aan en geef per wedstrijd de
    thuisclub, uitclub en de echte `url` uit `find_matches` mee. De prijs en link
    worden automatisch live van de site gevalideerd en gescrapet.
 
-Geef ook een korte kop voor op de headerfoto mee:
-- `header_title`: een korte, pakkende kop (max ongeveer 6 woorden), in hoofdletters
-  goed leesbaar. Bijvoorbeeld het thema kernachtig samengevat.
+Geef ook de header-elementen mee voor op de foto:
+- `header_title`: een korte, pakkende kop (max ongeveer 6 woorden), goed leesbaar.
 - `header_subtitle`: een korte ondertitel van een halve zin die de kop aanvult.
+- `header_cta_text`: de tekst van de knop op de foto, bijvoorbeeld "Bekijk alle
+  wedstrijden". `header_cta_url`: meestal de overzichtspagina van de wedstrijden.
 
 Regels voor de onderwerpregel (subject) en preheader (preview_text):
 - Onderwerpregel: maximaal 50 tekens (ongeveer 7 tot 9 woorden). Zet de belangrijkste

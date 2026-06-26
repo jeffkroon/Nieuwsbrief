@@ -127,6 +127,21 @@ def test_find_matches(session, cipher) -> None:
     assert llm.messages.calls[0]["messages"][0]["content"].startswith("Bron-URL:")
 
 
+def test_analyze_website_tone(session, cipher) -> None:
+    tenant = _tenant(session)
+    llm = FakeLLM({"tone_of_voice": "Informeel en sportief, je-vorm."})
+    ctx = ToolContext(
+        session=session,
+        tenant_id=tenant.id,
+        cipher=cipher,
+        llm=llm,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>welkom bij voetbalreizen</html>")),
+    )
+    result = execute_tool("analyze_website_tone", {}, ctx)
+    assert "sportief" in result["tone_of_voice"]
+    assert result["source_url"] == CONFIG["website_url"]
+
+
 def test_create_draft_happy_path(session, cipher) -> None:
     tenant = _tenant(session)
     secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")

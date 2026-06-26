@@ -52,6 +52,18 @@ TOOL_DEFINITIONS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "analyze_website_tone",
+        "description": "Analyseer de tone of voice en schrijfstijl van de klantensite, zodat je "
+        "de teksten in dezelfde stijl schrijft. Optioneel een specifieke URL; anders de "
+        "website_url uit de brand-config. Roep dit aan voor je teksten schrijft.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Optionele pagina-URL om de stijl van te lezen"}
+            },
+        },
+    },
+    {
         "name": "find_matches",
         "description": "Haal de ECHTE, beschikbare wedstrijden van de klantensite op, met "
         "thuisclub, uitclub, de echte ticket-URL en de vanafprijs. Gebruik UITSLUITEND "
@@ -76,6 +88,8 @@ TOOL_DEFINITIONS = [
                 "theme": {"type": "string"},
                 "header_title": {"type": "string", "description": "Korte pakkende kop op de headerfoto"},
                 "header_subtitle": {"type": "string", "description": "Korte ondertitel onder de kop"},
+                "header_cta_text": {"type": "string", "description": "Tekst van de knop op de headerfoto, bv. 'Bekijk alle wedstrijden'"},
+                "header_cta_url": {"type": "string", "description": "URL waar de header-knop heen gaat (meestal de overzichtspagina)"},
                 "intro_1": {"type": "string"},
                 "intro_2": {"type": "string"},
                 "main_cta_text": {"type": "string"},
@@ -129,6 +143,17 @@ def _tool_get_brand_config(ctx: ToolContext, _: dict) -> dict:
     return {"config": _load_tenant(ctx).config}
 
 
+def _tool_analyze_website_tone(ctx: ToolContext, tool_input: dict) -> dict:
+    brand = _load_tenant(ctx).config
+    url = tool_input.get("url") or brand.get("website_url") or brand.get("matches_url")
+    if not url:
+        raise ValueError("geen website-URL om de tone of voice te analyseren")
+    status, html = extraction.fetch_page(url, ctx.http_client)
+    if status != 200:
+        raise ValueError(f"kon {url} niet ophalen (status {status})")
+    return {"source_url": url, "tone_of_voice": extraction.extract_tone(_require_llm(ctx), html, source_url=url)}
+
+
 def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:
     brand = _load_tenant(ctx).config
     url = tool_input.get("url") or brand.get("matches_url") or brand.get("website_url")
@@ -174,6 +199,8 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         subject=tool_input["subject"],
         header_title=tool_input.get("header_title"),
         header_subtitle=tool_input.get("header_subtitle"),
+        header_cta_text=tool_input.get("header_cta_text"),
+        header_cta_url=tool_input.get("header_cta_url"),
         intro_1=tool_input["intro_1"],
         intro_2=tool_input["intro_2"],
         main_cta_text=tool_input["main_cta_text"],
@@ -234,6 +261,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
 
 _DISPATCH: dict[str, Callable[[ToolContext, dict], dict]] = {
     "get_brand_config": _tool_get_brand_config,
+    "analyze_website_tone": _tool_analyze_website_tone,
     "find_matches": _tool_find_matches,
     "create_newsletter_draft": _tool_create_newsletter_draft,
 }

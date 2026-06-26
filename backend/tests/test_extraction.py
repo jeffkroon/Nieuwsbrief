@@ -7,7 +7,13 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from app.newsletter.extraction import extract_matches, extract_price, fetch_page, html_to_text
+from app.newsletter.extraction import (
+    extract_matches,
+    extract_price,
+    extract_tone,
+    fetch_page,
+    html_to_text,
+)
 
 
 @dataclass
@@ -61,6 +67,13 @@ def test_extract_matches_normalizes_prices() -> None:
     call = llm.messages.calls[0]
     assert call["model"] == "claude-haiku-4-5"
     assert call["output_config"]["format"]["type"] == "json_schema"
+
+
+def test_extract_tone() -> None:
+    llm = FakeLLM({"tone_of_voice": "Informeel, je-vorm, energiek en sportief."})
+    tone = extract_tone(llm, "<html>...</html>", source_url="https://x/")
+    assert "sportief" in tone
+    assert llm.messages.calls[0]["model"] == "claude-haiku-4-5"
 
 
 def test_extract_price_single_page() -> None:

@@ -94,6 +94,26 @@ def render_banner(match: Match, brand: dict) -> str:
 <tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
 
 
+def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
+    """Bouw de CTA-knop over de headerfoto. Tekst/URL instelbaar, met defaults."""
+    text = content.header_cta_text or "Bekijk alle wedstrijden"
+    url = (
+        content.header_cta_url
+        or brand.get("matches_url")
+        or brand.get("base_tickets_url")
+        or content.main_cta_url
+    )
+    color = brand["primary_color"]
+    return (
+        '<table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation" '
+        f'style="margin:0 auto; background:{color}; border-radius:4px; border-collapse:separate;">'
+        '<tbody><tr><td class="hero-cta" style="padding:13px 24px; border-radius:4px;">'
+        f'<a href="{url}" target="_blank" style="color:#ffffff; font-family:Arial,Helvetica,sans-serif; '
+        'font-size:15px; font-weight:bold; text-decoration:none; white-space:nowrap; display:inline-block;">'
+        f"{text}</a></td></tr></tbody></table>"
+    )
+
+
 def render_newsletter(template: str, brand: dict, content: NewsletterContent) -> str:
     """Vul placeholders en banners in. Geeft de volledige HTML terug."""
     _require_brand_fields(brand)
@@ -104,6 +124,7 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
         "{{EMAIL_TITEL}}": f"{content.theme} | {brand['brand_name']}",
         "{{HEADER_TITEL}}": content.header_title or content.theme,
         "{{HEADER_SUBTITEL}}": content.header_subtitle or "",
+        "{{HEADER_CTA}}": _render_hero_cta(brand, content),
         "{{WEBSITE_URL}}": brand["website_url"],
         "{{HEADER_IMAGE_URL}}": brand["header_image_url"],
         "{{LOGO_URL}}": brand["logo_url"],

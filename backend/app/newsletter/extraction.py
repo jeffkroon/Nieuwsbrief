@@ -64,6 +64,21 @@ _PRICE_SYSTEM = (
     "prijs zichtbaar is. Verzin geen prijs."
 )
 
+_TONE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {"tone_of_voice": {"type": "string"}},
+    "required": ["tone_of_voice"],
+}
+
+_TONE_SYSTEM = (
+    "Je krijgt de tekstinhoud van een webpagina van een merk. Beschrijf in 3 tot 5 korte "
+    "bullets de tone of voice en schrijfstijl van dit merk: aanspreekvorm (je/u), register "
+    "(formeel/informeel), energie, typische woorden of zinswendingen, en wat je juist vermijdt. "
+    "Baseer je alleen op de tekst. Geef een bondige stijlgids terug die een tekstschrijver "
+    "kan volgen, niet de paginatekst zelf."
+)
+
 
 def html_to_text(raw_html: str, base_url: str, max_chars: int = MAX_PAGE_CHARS) -> str:
     """Strip HTML naar leesbare tekst; links worden 'tekst (absolute-url)'."""
@@ -126,6 +141,19 @@ def extract_matches(llm, raw_html: str, *, source_url: str, model: str = EXTRACT
     for m in matches:
         m["price"] = _normalize_price(m.get("price"))
     return matches
+
+
+def extract_tone(llm, raw_html: str, *, source_url: str, model: str = EXTRACT_MODEL) -> str:
+    """Leid de tone of voice / schrijfstijl van het merk af uit de paginatekst."""
+    text = html_to_text(raw_html, source_url)
+    response = llm.messages.create(
+        model=model,
+        max_tokens=600,
+        system=_TONE_SYSTEM,
+        output_config={"format": {"type": "json_schema", "schema": _TONE_SCHEMA}},
+        messages=[{"role": "user", "content": f"Pagina-inhoud:\n{text}"}],
+    )
+    return _parse_json(response).get("tone_of_voice", "") or ""
 
 
 def extract_price(llm, raw_html: str, *, source_url: str, model: str = EXTRACT_MODEL) -> str:
