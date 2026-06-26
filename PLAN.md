@@ -1,168 +1,114 @@
-# FTG Nieuwsbrief Automatisering: Masterplan
+# Nieuwsbrief-product: Masterplan
 
-**Doel:** Accountmanagers triggeren via Slack een geautomatiseerde nieuwsbrief-bouwer.
-Claude Code laadt brand-configuratie, scrapt vanafprijzen, vult HTML-templates in en
-zet de campagne klaar als **concept in Brevo**. Het team controleert en verstuurt
-handmatig vanuit de Brevo-interface.
+**Status:** architectuur vastgesteld 2026-06-26. Vervangt het oude plan (Slack +
+GitHub Actions + Claude Code CLI). Dat oude pad is verlaten.
 
-**MVP-domein:** voetbalreizenxl
-**Huidige status:** Documentatie gereed, bouw gestart
+**Doel:** een schaalbaar, multi-tenant product waarin een accountmanager per klant
+via een chat-interface in natuurlijke taal een nieuwsbrief laat opstellen. De
+backend bouwt de nieuwsbrief met Claude (tool-use) en templates, en zet die via de
+Brevo-API klaar als **concept**. Er wordt nooit automatisch verstuurd: een mens
+controleert en verstuurt vanuit Brevo.
+
+---
+
+## Kernbeslissingen (2026-06-26)
+
+| Beslissing | Keuze |
+|---|---|
+| Architectuur | FastAPI-backend + Claude API tool-use + Postgres (Supabase). Vervangt de oude CI-flow volledig. |
+| Tenant-model | 1 domein = 1 tenant. Geen apart merk-niveau (`voetbalreizenxl`, `voetbalticketshop`, `voetbaltrips` = 3 losse tenants). |
+| Brand-config | Per tenant opgeslagen als jsonb-kolom op `mail.tenants`. |
+| Brevo-toegang | Eigen Brevo-account per klant. API-key versleuteld opgeslagen per tenant. |
+| Interface | Web-chat als doel. Volgorde: eerst backend + API + tests, daarna web-chat, Slack optioneel later. |
+| Verzenden | Backend dwingt af: alleen concept aanmaken, nooit verzenden. |
 
 ---
 
 ## Architectuur
 
 ```
-Accountmanager
-  klikt shortcut in Slack
-    → invult formulier (domein, thema, wedstrijden)
-      → HTTP POST naar GitHub API (met GitHub PAT)
-        → GitHub Actions runner (ubuntu-latest)
-          → claude -p "$(cat SKILL.md) ..." --allowedTools "Read,Write,Bash,WebFetch"
-            → laadt brand config JSON
-            → scrapt vanafprijzen per wedstrijd (WebFetch)
-            → genereert intro-tekst (eigen taalmodel)
-            → vult HTML-templates in
-            → POST /v3/emailCampaigns naar Brevo
-              → campagne staat als CONCEPT in Brevo
-                → accountmanager controleert en verstuurt handmatig
+Accountmanager (web-chat)
+  typt in natuurlijke taal: "nieuwsbrief over thema X, wedstrijden Y"
+    -> FastAPI-backend
+        -> laadt tenant + brand-config uit Postgres (mail-schema)
+        -> Claude API (claude-opus-4-8) met tool-use:
+             - get_brand_config(tenant)
+             - fetch_match_price(url)        (vanafprijs ophalen)
+             - render_newsletter(input)      (HTML uit templates)
+             - create_brevo_draft(...)       (concept in Brevo, NOOIT verzenden)
+        -> slaat gesprek + concept op (mail.conversations, mail.messages, mail.newsletters)
+          -> accountmanager controleert het concept in Brevo en verstuurt handmatig
 ```
 
 ---
 
-## Bestandsstructuur (volledig)
+## Datamodel (schema `mail`)
 
-```
-Email Marketing/
-├── .claude/
-│   └── skills/
-│       └── nieuwsbrief-versturen/
-│           └── SKILL.md                    ← de hersenen van de automatisering
-├── docs/
-│   ├── brevo-api-reference.md              ← volledige Brevo campaign API docs
-│   ├── github-actions-setup.md             ← GitHub Actions setup + YAML
-│   └── slack-workflow-setup.md             ← Slack Workflow Builder handleiding
-├── templates/
-│   ├── nieuwsbrief-main.html               ← hoofdtemplate (nog bouwen)
-│   ├── nieuwsbrief-banner.html             ← bannertemplate per wedstrijd (nog bouwen)
-│   └── brand/
-│       ├── voetbalreizenxl.json            ← brand config (invullen)
-│       ├── voetbalticketshop.json          ← brand config (nog aanmaken)
-│       └── voetbaltrips.json               ← brand config (nog aanmaken)
-├── .env                                    ← API keys (nooit committen)
-├── CLAUDE.md
-└── PLAN.md                                 ← dit bestand
-```
+Zie `db/migrations/`. Na revisie 002:
 
----
-
-## Fasen
-
-### Fase 0: MVP — lokaal testen (geen GitHub/Slack)
-
-Doel: de volledige content-pipeline aantonen zonder infrastructuur.
-Één commando op de lokale machine, campagne verschijnt als concept in Brevo.
-
-**Checklist fase 0:**
-
-| Stap | Taak | Status |
-|---|---|---|
-| 0.1 | `BREVO_API_KEY` toevoegen aan `.env` | Te doen |
-| 0.2 | `templates/brand/voetbalreizenxl.json` volledig invullen | Te doen |
-| 0.3 | `templates/nieuwsbrief-banner.html` bouwen | Te doen |
-| 0.4 | `templates/nieuwsbrief-main.html` bouwen | Te doen |
-| 0.5 | `.claude/skills/nieuwsbrief-versturen/SKILL.md` gereed | Gereed |
-| 0.6 | Brevo lijst-ID opzoeken (Brevo: Contacts, Lists) | Te doen |
-| 0.7 | Lokale testrun uitvoeren | Te doen |
-| 0.8 | Concept controleren in Brevo en goedkeuren | Te doen |
-
-**Lokale testrun (uitvoeren vanuit `Email Marketing/`):**
-
-```bash
-set -a; source .env; set +a
-
-claude -p "$(cat .claude/skills/nieuwsbrief-versturen/SKILL.md)
-
-Voer deze skill nu uit met de volgende input:
-Domein: voetbalreizenxl
-Thema: Champions League finale week
-Wedstrijden: real-madrid-dortmund,barcelona-psg" \
-  --allowedTools "Read,Write,Bash,WebFetch" \
-  --max-turns 30
-```
-
-Verwacht resultaat: "Campagne aangemaakt als concept. ID: {id}. Controleer in Brevo."
-
----
-
-### Fase 1: GitHub Actions
-
-**Checklist fase 1:**
-
-| Stap | Taak | Tijdsinschatting |
-|---|---|---|
-| 1.1 | GitHub repo `nieuwsbrief-automation` aanmaken | 10 min |
-| 1.2 | Bestanden committen (templates, brand configs, SKILL.md) | 15 min |
-| 1.3 | GitHub Secrets instellen: `BREVO_API_KEY`, `ANTHROPIC_API_KEY` | 5 min |
-| 1.4 | `.github/workflows/nieuwsbrief.yml` committen | 10 min |
-| 1.5 | Handmatige test via GitHub UI (Actions, Run workflow) | 20 min |
-
-Volledige workflow YAML en setup-instructies: zie `docs/github-actions-setup.md`
-
----
-
-### Fase 2: Slack-koppeling
-
-**Checklist fase 2:**
-
-| Stap | Taak | Tijdsinschatting |
-|---|---|---|
-| 2.1 | Verifieer Slack Pro abonnement (vereist voor HTTP-stap) | 5 min |
-| 2.2 | GitHub fine-grained PAT aanmaken | 5 min |
-| 2.3 | Slack Workflow Builder inrichten | 30 min |
-| 2.4 | End-to-end test: Slack trigger, Actions log, Brevo concept | 30 min |
-
-Volledige Slack-instructies: zie `docs/slack-workflow-setup.md`
-
----
-
-### Fase 3: Overige domeinen
-
-| Stap | Taak |
+| Tabel | Doel |
 |---|---|
-| 3.1 | `templates/brand/voetbalticketshop.json` aanmaken |
-| 3.2 | `templates/brand/voetbaltrips.json` aanmaken |
-| 3.3 | Brevo lijst-ID per domein opzoeken en invullen |
-| 3.4 | End-to-end test per domein |
+| `mail.tenants` | Eén per domein. Bevat brand-config (jsonb) + Brevo-lijst-id. |
+| `mail.tenant_secrets` | Versleutelde secrets per tenant (o.a. Brevo API-key). |
+| `mail.conversations` | Chat-sessie waarin een nieuwsbrief wordt opgesteld. |
+| `mail.messages` | Berichten binnen een gesprek (incl. tool-calls in metadata). |
+| `mail.newsletters` | Gegenereerde nieuwsbrief + Brevo concept-referentie + status. |
+| `mail.audit_events` | Audit trail. |
+
+RLS staat aan op alle tabellen. De backend verbindt als de `postgres`-user en
+omzeilt RLS; de anon-key is geblokkeerd en het `mail`-schema wordt niet via
+PostgREST geexposed.
 
 ---
 
-## Brand config: verplichte velden
+## Canoniek brand-config-contract
 
-Elk `templates/brand/{domein}.json` heeft de volgende velden nodig.
-Zie `templates/brand/voetbalreizenxl.json` voor het volledige voorbeeld.
+Bron van waarheid is de jsonb in `mail.tenants.config`. Veldnamen volgen het
+bestaande bestand `clients/football-travel-group/templates/brand/voetbalreizenxl.json`:
 
 | Veld | Type | Beschrijving |
 |---|---|---|
 | `brand_name` | string | Weergavenaam afzender |
 | `brand_email` | string | Geverifieerd Brevo-afzenderadres |
-| `brand_adres` | string | Straat + huisnummer |
-| `brand_postcode_stad` | string | Postcode + stad |
-| `brand_telefoon` | string | Telefoonnummer |
-| `brand_kvk` | string | KvK-nummer |
-| `website_url` | string | Hoofddomein (https://) |
-| `base_tickets_url` | string | Basispad voor wedstrijd-URLs |
-| `primary_color` | string | Hex-kleur knoppen en accenten |
-| `footer_color` | string | Hex-kleur footer-balk |
-| `logo_url` | string | URL naar logo (Brevo CDN) |
-| `header_image_url` | string | URL naar header-afbeelding (Brevo CDN) |
-| `lijst_id` | integer | Brevo contactlijst-ID |
-| `facebook_url` | string | Facebook-pagina URL |
-| `instagram_url` | string | Instagram-profiel URL |
-| `youtube_url` | string | YouTube-kanaal URL |
-| `claude_prompt` | string | Instructie voor intro-tekst generatie |
-| `fallback_afbeelding_url` | string | Fallback als club niet in `club_afbeeldingen` |
-| `club_afbeeldingen` | object | Sleutel: club-slug, waarde: afbeeldings-URL |
+| `brand_adres`, `brand_postcode_stad`, `brand_telefoon`, `brand_kvk` | string | NAW + KvK |
+| `website_url`, `base_tickets_url` | string | Domein en basispad wedstrijd-URLs |
+| `primary_color`, `footer_color` | string | Hex-kleuren |
+| `logo_url`, `header_image_url`, `dummy_image_url` | string | Afbeeldings-URLs (Brevo CDN) |
+| `facebook_url`, `instagram_url`, `youtube_url` | string | Socials |
+| `claude_prompt` | string | Instructie voor intro-generatie (placeholders `{{thema}}`, `{{wedstrijden}}`) |
+| `club_images` | object | Sleutel: club-slug, waarde: afbeeldings-URL. Lege waarde valt terug op `dummy_image_url`. |
+
+Let op: het oude `SKILL.md` gebruikte afwijkende namen (`club_afbeeldingen`,
+`fallback_afbeelding_url`). Die zijn vervangen door `club_images` en
+`dummy_image_url`.
+
+---
+
+## Fasen
+
+### Fase 0: Datamodel (in uitvoering)
+- [x] `mail`-schema + tabellen (migratie 001)
+- [ ] Schema-revisie: tenant-model + secrets (migratie 002)
+- [ ] Seed voetbalreizenxl als tenant
+
+### Fase 1: Backend-fundament
+- [ ] DB-sessielaag + config (`DATABASE_URL` via pooler)
+- [ ] Secret-encryptie (master key in env)
+- [ ] Repository-laag per entiteit
+- [ ] CRUD-routes tenants + health, met tests (80%+)
+
+### Fase 2: Content-pipeline (Claude tool-use)
+- [ ] Tools: `get_brand_config`, `fetch_match_price`, `render_newsletter`, `create_brevo_draft`
+- [ ] `create_brevo_draft` dwingt concept af (nooit verzenden)
+- [ ] Conversation-orchestratie (Claude API, model claude-opus-4-8)
+- [ ] HTML-templates porten uit `clients/football-travel-group/templates/`
+
+### Fase 3: Web-chat interface
+- [ ] Chat-frontend gekoppeld aan de backend
+- [ ] Tenant-selectie + gespreksgeschiedenis
+
+### Fase 4: Uitrol overige tenants
+- [ ] voetbalticketshop, voetbaltrips als tenants + brand-config + Brevo-koppeling
 
 ---
 
@@ -170,18 +116,16 @@ Zie `templates/brand/voetbalreizenxl.json` voor het volledige voorbeeld.
 
 | Risico | Mitigatie |
 |---|---|
-| Prijsscraping breekt bij websitewijziging | SKILL.md heeft fallback "op aanvraag" |
-| SKILL.md in `-p` mode werkt anders | Volledige SKILL.md als prompt meegeven, niet via slash command |
-| Geen foutmelding naar Slack bij Actions-fout | Team monitort via GitHub Actions e-mailnotificaties |
-| GitHub PAT zichtbaar voor Slack admins | Fine-grained token: alleen 1 repo, alleen Actions write |
-| Slack Pro vereist | Verifieer voor start fase 2 |
-| `htmlContent` te groot | Max 1 MB per Brevo API; template + banners blijft ruim onder limiet |
+| Prijsscraping breekt bij websitewijziging | Tool valt terug op tekst "op aanvraag" |
+| Per ongeluk versturen | `create_brevo_draft` kan technisch alleen concepten aanmaken |
+| Brevo API-keys lekken | Versleuteld in `mail.tenant_secrets`, master key in env, nooit in logs |
+| `htmlContent` te groot | Max 1 MB per Brevo API; ruim onder limiet |
 
 ---
 
 ## Referenties
 
 - Brevo Campaign API: `docs/brevo-api-reference.md`
-- GitHub Actions setup: `docs/github-actions-setup.md`
-- Slack Workflow Builder: `docs/slack-workflow-setup.md`
-- Skill-logica: `.claude/skills/nieuwsbrief-versturen/SKILL.md`
+- Datamodel: `db/migrations/`
+- ORM-modellen: `backend/app/db/models.py`
+- API-schema's: `backend/app/schemas.py`

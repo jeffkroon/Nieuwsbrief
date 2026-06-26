@@ -10,7 +10,7 @@ Plaats hier de clubafbeeldingen voor de e-mailbanner.
 ## Werkwijze
 1. Afbeelding hier opslaan
 2. Afbeelding uploaden naar Brevo-beeldbibliotheek (Design > Bestanden)
-3. Brevo-URL kopiëren en invullen in `templates/brand/voetbalreizenxl.json` onder `club_images`
+3. Brevo-URL kopiëren en invullen in `clients/football-travel-group/templates/brand/voetbalreizenxl.json` onder `club_images`
 
 ## Sleutels in brand config
 De sleutel in `club_images` is de clubnaam in lowercase met koppeltekens:

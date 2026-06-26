@@ -14,7 +14,7 @@ from pathlib import Path
 
 # ── Paden ─────────────────────────────────────────────────────────────────────
 
-BASE        = Path(__file__).parent
+BASE        = Path(__file__).resolve().parent.parent
 TEMPLATE    = BASE / "templates" / "voetbalreizenxl-main.html"
 BRAND_JSON  = BASE / "templates" / "brand" / "voetbalreizenxl.json"
 ENV_FILE    = BASE / ".env"

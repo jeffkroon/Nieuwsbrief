@@ -13,5 +13,5 @@ Headerafbeeldingen bovenaan de nieuwsbrief, per campagnethema.
 3. URL invullen als `header_image_url` in het campagne-script, of als vaste waarde in `voetbalreizenxl.json`
 
 ## Huidige header
-De standaard headerafbeelding staat als `header_image_url` in `templates/brand/voetbalreizenxl.json`.
+De standaard headerafbeelding staat als `header_image_url` in `clients/football-travel-group/templates/brand/voetbalreizenxl.json`.
 Thema-specifieke headers kunnen per campagne worden overschreven in het generatiescript.
