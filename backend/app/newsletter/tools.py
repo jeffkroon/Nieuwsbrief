@@ -154,6 +154,8 @@ TOOL_DEFINITIONS = [
                             "url": {"type": "string", "description": "Bereikbare clubpagina-URL"},
                             "price": {"type": "string", "description": "Handmatige vanafprijs als de site er geen heeft"},
                             "image_url": {"type": "string", "description": "URL van de clubfoto uit list_images"},
+                            "stadium": {"type": "string", "description": "Naam van het stadion (klein lettertype in het blok)"},
+                            "city": {"type": "string", "description": "Naam van de stad (klein lettertype in het blok)"},
                         },
                         "required": ["name", "url"],
                     },
@@ -277,6 +279,7 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
             name=c["name"], url=c["url"],
             price=_resolve_price(ctx, llm, c["url"], c.get("price")),
             image_url=c.get("image_url"),
+            stadium=c.get("stadium"), city=c.get("city"),
         )
         for c in raw_clubs
     ]

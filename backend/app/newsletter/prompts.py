@@ -39,8 +39,10 @@ Doorloop daarna deze stappen, telkens overleggend:
      `find_ticket_links` voor een BEREIKBARE pagina (bv. de clubpagina) en VRAAG de
      vanafprijs (meegeven als `price`).
    - CLUBS: vraag welke clubs; zoek met `find_ticket_links` de bereikbare clubpagina's
-     en laat de gebruiker kiezen. Prijs optioneel; geen prijs op de site? Vraag het of
-     laat 'm weg ("op aanvraag").
+     en laat de gebruiker kiezen. Geef per club ook het `stadium` (stadionnaam) en de
+     `city` (stad) mee; die komen klein in het blok te staan. De knop op een club-blok
+     is "Bekijk alle wedstrijden" en linkt naar de clubpagina (de `url`). Prijs
+     optioneel; geen prijs op de site? Vraag het of laat 'm weg ("op aanvraag").
    - ALGEMEEN: geen blokken; bevestig naar welke algemene pagina de knoppen wijzen.
    Gebruik altijd alleen bereikbare URL's; verzin nooit een URL of prijs.
 3. KOP & ONDERTITEL: stel een kop (`header_title`) en ondertitel (`header_subtitle`)

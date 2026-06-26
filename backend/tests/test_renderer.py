@@ -145,9 +145,14 @@ def test_club_banner_renders() -> None:
     from app.newsletter.models import Club
     from app.newsletter.renderer import render_club_banner
 
-    banner = render_club_banner(Club(name="Bayern München", url="https://x/tickets/duitsland/bayern-munchen/", price="€ 349"), BRAND)
+    banner = render_club_banner(
+        Club(name="Bayern München", url="https://x/tickets/duitsland/bayern-munchen/",
+             price="€ 349", stadium="Allianz Arena", city="München"),
+        BRAND,
+    )
     assert "BAYERN MÜNCHEN" in banner
-    assert "Bekijk tickets" in banner
+    assert "Bekijk alle wedstrijden" in banner  # knoptekst
+    assert "Allianz Arena · München" in banner  # stadion + stad, klein lettertype
     assert "https://x/tickets/duitsland/bayern-munchen/" in banner
     assert "€ 349" in banner
 
@@ -160,7 +165,7 @@ def test_newsletter_with_clubs() -> None:
         matches=(), clubs=(Club(name="Ajax", url="https://x/ajax/"),),
     )
     html = render_newsletter(TEMPLATE, BRAND, content)
-    assert "AJAX" in html and "Bekijk tickets" in html
+    assert "AJAX" in html and "Bekijk alle wedstrijden" in html
 
 
 def test_hero_cta_default() -> None:

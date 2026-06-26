@@ -100,6 +100,13 @@ def render_club_banner(club: Club, brand: dict) -> str:
         price_va, price_amount = "", "op aanvraag"
     else:
         price_va, price_amount = "v.a.", club.price
+    venue = " · ".join(p for p in (club.stadium, club.city) if p)
+    venue_html = (
+        f'<p class="club-venue" style="margin:0 0 10px 0; font-family:Arial,Helvetica,sans-serif; '
+        f'font-size:11px; color:#888888; line-height:1.3;">{venue}</p>'
+        if venue
+        else ""
+    )
     return f"""
 <table cellspacing="0" cellpadding="0" border="0" role="presentation" width="584" align="center"
   class="banner-wrap"
@@ -113,7 +120,8 @@ def render_club_banner(club: Club, brand: dict) -> str:
   <td valign="middle" align="center" class="content-col"
     style="padding:18px 16px 18px 12px; text-align:center; vertical-align:middle; background-color:#ffffff; border-radius:0 4px 4px 0;">
     <p class="home-name"
-      style="margin:0 0 12px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:22px; font-weight:900; color:{_AWAY_COLOR}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{club.name.upper()}</p>
+      style="margin:0 0 6px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:22px; font-weight:900; color:{_AWAY_COLOR}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{club.name.upper()}</p>
+    {venue_html}
     <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
       style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">
     <tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">
@@ -124,7 +132,7 @@ def render_club_banner(club: Club, brand: dict) -> str:
       style="background:{color}; border-radius:4px; border-collapse:separate;">
     <tbody><tr><td class="cta-btn" style="padding:12px 18px; border-radius:4px;">
       <a href="{club.url}" target="_blank"
-        style="color:#ffffff; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">Bekijk tickets</a>
+        style="color:#ffffff; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">Bekijk alle wedstrijden</a>
     </td></tr></tbody></table>
   </td>
 </tr></tbody></table>
