@@ -186,6 +186,46 @@ def test_create_draft_happy_path(session, cipher) -> None:
     assert row.status == "ready" and row.brevo_campaign_id == 999
 
 
+def test_find_ticket_links(session, cipher) -> None:
+    tenant = _tenant(session)
+    llm = FakeLLM({"links": [{"label": "Bayern München", "url": "https://x/tickets/duitsland/bayern-munchen/"}]})
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, llm=llm,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>links</html>")),
+    )
+    result = execute_tool("find_ticket_links", {"query": "bayern"}, ctx)
+    assert result["count"] == 1
+    assert result["links"][0]["url"].endswith("/bayern-munchen/")
+
+
+def test_create_draft_uses_manual_price_when_site_has_none(session, cipher) -> None:
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    payload = {**DRAFT_INPUT, "matches": [{"home": "Bayern", "away": "Dortmund", "url": MATCH_URL, "price": "189,-"}]}
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": None}),  # site heeft geen prijs
+        brevo_factory=lambda key: FakeBrevo(key),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>clubpagina</html>")),
+    )
+    result = execute_tool("create_newsletter_draft", payload, ctx)
+    assert result["matches_used"][0]["price"] == "€ 189"  # handmatige prijs gebruikt
+
+
+def test_create_draft_site_price_wins_over_manual(session, cipher) -> None:
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    payload = {**DRAFT_INPUT, "matches": [{"home": "Chelsea", "away": "Arsenal", "url": MATCH_URL, "price": "1,-"}]}
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": "€ 299"}),  # site heeft wel een prijs
+        brevo_factory=lambda key: FakeBrevo(key),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>299,-</html>")),
+    )
+    result = execute_tool("create_newsletter_draft", payload, ctx)
+    assert result["matches_used"][0]["price"] == "€ 299"  # echte prijs wint
+
+
 def test_create_draft_rejects_nonexistent_match(session, cipher) -> None:
     tenant = _tenant(session)
     secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")

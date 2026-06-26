@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from app.newsletter.extraction import (
+    extract_links,
     extract_matches,
     extract_price,
     extract_tone,
@@ -67,6 +68,14 @@ def test_extract_matches_normalizes_prices() -> None:
     call = llm.messages.calls[0]
     assert call["model"] == "claude-haiku-4-5"
     assert call["output_config"]["format"]["type"] == "json_schema"
+
+
+def test_extract_links() -> None:
+    llm = FakeLLM(
+        {"links": [{"label": "Tickets Bayern München", "url": "https://x/tickets/duitsland/bayern-munchen/"}]}
+    )
+    links = extract_links(llm, "<html>...</html>", source_url="https://x/tickets/", query="bayern")
+    assert links[0]["url"].endswith("/bayern-munchen/")
 
 
 def test_extract_tone() -> None:

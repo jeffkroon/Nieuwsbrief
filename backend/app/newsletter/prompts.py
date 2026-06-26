@@ -26,9 +26,16 @@ Werkwijze:
    in die stijl, gecombineerd met de `claude_prompt` uit de brand-config.
 3. Roep `find_matches` aan om de ECHTE beschikbare wedstrijden van de klantensite
    op te halen (met thuisclub, uitclub, echte ticket-URL en prijs).
-4. Gebruik UITSLUITEND wedstrijden uit die lijst. Noemt de gebruiker een wedstrijd
-   die er niet bij staat, dan zeg je dat die niet beschikbaar is en bied je de
-   beschikbare wedstrijden als opties aan. Verzin nooit zelf een wedstrijd of URL.
+4. Gebruik bij voorkeur wedstrijden uit die lijst. Noemt de gebruiker een wedstrijd
+   die er niet bij staat:
+   - Waarschuw eerst dat die wedstrijd nog niet op de site staat en dat er geen
+     prijs beschikbaar is. Bied ook de wel beschikbare wedstrijden als opties aan.
+   - Wil de gebruiker tóch door met die wedstrijd, dan mag dat, mits:
+     a) je met `find_ticket_links` een BEREIKBARE pagina vindt om naar te linken
+        (bijvoorbeeld de clubpagina van de thuisclub). Verzin nooit zelf een URL.
+     b) je de gebruiker vraagt welke "vanaf prijs" bij die wedstrijd hoort, en die
+        meegeeft als `price` bij de wedstrijd.
+   Verzin nooit zelf een prijs of een niet-bestaande URL.
 5. Schrijf een enthousiaste intro in de tone of voice van de site (zie stap 2) en
    volgens de `claude_prompt`: twee korte alinea's, direct en sportief.
 6. Kies de foto's met `list_images`:

@@ -104,7 +104,7 @@ def _parse_json(response) -> dict:
         return {}
 
 
-def _normalize_price(value: str | None) -> str:
+def normalize_price(value: str | None) -> str:
     if not value:
         return PRICE_ON_REQUEST
     digits = re.search(r"([0-9][0-9.,]*)", value)
@@ -139,8 +139,46 @@ def extract_matches(llm, raw_html: str, *, source_url: str, model: str = EXTRACT
     )
     matches = _parse_json(response).get("matches", [])
     for m in matches:
-        m["price"] = _normalize_price(m.get("price"))
+        m["price"] = normalize_price(m.get("price"))
     return matches
+
+
+_LINKS_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "links": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"label": {"type": "string"}, "url": {"type": "string"}},
+                "required": ["label", "url"],
+            },
+        }
+    },
+    "required": ["links"],
+}
+
+_LINKS_SYSTEM = (
+    "Je krijgt de tekstinhoud van een ticket-website (links staan als 'tekst (url)'). "
+    "Geef de ticket-links terug die passen bij de zoekopdracht: club-, competitie- of "
+    "wedstrijdpagina's. Geef per link een label en de absolute URL, exact zoals in de tekst. "
+    "Verzin geen labels of URL's; geef alleen links die echt op de pagina staan."
+)
+
+
+def extract_links(llm, raw_html: str, *, source_url: str, query: str, model: str = EXTRACT_MODEL) -> list[dict]:
+    """Vind ticket-links (club/competitie/wedstrijd) op een pagina die bij de query passen."""
+    text = html_to_text(raw_html, source_url)
+    response = llm.messages.create(
+        model=model,
+        max_tokens=2000,
+        system=_LINKS_SYSTEM,
+        output_config={"format": {"type": "json_schema", "schema": _LINKS_SCHEMA}},
+        messages=[{"role": "user", "content": f"Zoekopdracht: {query}\n\nPagina-inhoud:\n{text}"}],
+    )
+    return _parse_json(response).get("links", [])
 
 
 def extract_tone(llm, raw_html: str, *, source_url: str, model: str = EXTRACT_MODEL) -> str:
@@ -166,4 +204,4 @@ def extract_price(llm, raw_html: str, *, source_url: str, model: str = EXTRACT_M
         output_config={"format": {"type": "json_schema", "schema": _PRICE_SCHEMA}},
         messages=[{"role": "user", "content": f"Pagina-inhoud:\n{text}"}],
     )
-    return _normalize_price(_parse_json(response).get("price"))
+    return normalize_price(_parse_json(response).get("price"))

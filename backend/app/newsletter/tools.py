@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Tenant
 from app.newsletter import extraction
-from app.newsletter.models import Match, NewsletterContent
+from app.newsletter.models import PRICE_ON_REQUEST, Match, NewsletterContent
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.templates import load_template
 from app.repositories import images as images_repo
@@ -90,6 +90,21 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "find_ticket_links",
+        "description": "Zoek bereikbare ticket-pagina's (club-, competitie- of wedstrijdpagina's) op "
+        "de klantensite die passen bij een zoekopdracht. Gebruik dit om een geldige link te vinden "
+        "voor een wedstrijd die nog niet als losse wedstrijd op de site staat (bijvoorbeeld de "
+        "clubpagina). Optioneel een specifieke pagina-URL om in te zoeken.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Bijvoorbeeld een clubnaam of competitie"},
+                "url": {"type": "string", "description": "Optionele pagina-URL om in te zoeken"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "create_newsletter_draft",
         "description": "Render de nieuwsbrief en maak hem aan als CONCEPT in Brevo. Verstuurt "
         "niets. Gebruik alleen wedstrijden (met hun echte url) uit find_matches. De link en "
@@ -118,7 +133,8 @@ TOOL_DEFINITIONS = [
                         "properties": {
                             "home": {"type": "string"},
                             "away": {"type": "string"},
-                            "url": {"type": "string", "description": "Echte ticket-URL uit find_matches"},
+                            "url": {"type": "string", "description": "Bereikbare ticket-URL (uit find_matches of find_ticket_links)"},
+                            "price": {"type": "string", "description": "Handmatige vanafprijs; ALLEEN gebruiken als de site geen prijs heeft en de gebruiker die heeft opgegeven"},
                             "image_url": {"type": "string", "description": "URL van de gematchte clubfoto uit list_images"},
                         },
                         "required": ["home", "away", "url"],
@@ -180,6 +196,20 @@ def _tool_analyze_website_tone(ctx: ToolContext, tool_input: dict) -> dict:
     return {"source_url": url, "tone_of_voice": extraction.extract_tone(_require_llm(ctx), html, source_url=url)}
 
 
+def _tool_find_ticket_links(ctx: ToolContext, tool_input: dict) -> dict:
+    brand = _load_tenant(ctx).config
+    url = tool_input.get("url") or brand.get("matches_url") or brand.get("website_url")
+    if not url:
+        raise ValueError("geen URL om ticket-links te zoeken")
+    status, html = extraction.fetch_page(url, ctx.http_client)
+    if status != 200:
+        raise ValueError(f"kon {url} niet ophalen (status {status})")
+    links = extraction.extract_links(
+        _require_llm(ctx), html, source_url=url, query=tool_input["query"]
+    )
+    return {"source_url": url, "count": len(links), "links": links}
+
+
 def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:
     brand = _load_tenant(ctx).config
     url = tool_input.get("url") or brand.get("matches_url") or brand.get("website_url")
@@ -205,6 +235,10 @@ def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]
                 "Gebruik find_matches om bestaande wedstrijden te krijgen."
             )
         price = extraction.extract_price(llm, html, source_url=url)
+        # Geen prijs op de site? Gebruik de handmatig opgegeven vanafprijs (door de
+        # gebruiker bevestigd). Staat er wel een echte prijs, dan wint die.
+        if price == PRICE_ON_REQUEST and m.get("price"):
+            price = extraction.normalize_price(m["price"])
         result.append(
             Match(home=m["home"], away=m["away"], url=url, price=price, image_url=m.get("image_url"))
         )
@@ -292,6 +326,7 @@ _DISPATCH: dict[str, Callable[[ToolContext, dict], dict]] = {
     "get_brand_config": _tool_get_brand_config,
     "list_images": _tool_list_images,
     "analyze_website_tone": _tool_analyze_website_tone,
+    "find_ticket_links": _tool_find_ticket_links,
     "find_matches": _tool_find_matches,
     "create_newsletter_draft": _tool_create_newsletter_draft,
 }
