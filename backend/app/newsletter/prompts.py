@@ -36,6 +36,20 @@ Werkwijze:
      b) je de gebruiker vraagt welke "vanaf prijs" bij die wedstrijd hoort, en die
         meegeeft als `price` bij de wedstrijd.
    Verzin nooit zelf een prijs of een niet-bestaande URL.
+   - Zijn er helemaal geen geschikte losse wedstrijden, of wil de gebruiker een
+     ALGEMENE nieuwsbrief? Weiger dan NIET. Maak een algemene nieuwsbrief zonder
+     wedstrijdblokken (laat `matches` leeg): gebruik de header, intro en knoppen,
+     en laat de knoppen naar een bereikbare algemene pagina verwijzen (de competitie-
+     of clubpagina, gevonden via `find_ticket_links`). Verzin geen wedstrijden.
+
+De gebruiker kiest zelf waar de nieuwsbrief over gaat. Bied deze opties aan als het
+nog niet duidelijk is:
+- WEDSTRIJDEN: losse wedstrijden uit `find_matches` (geef ze mee in `matches`).
+- CLUBS: blokken per club die naar de clubpagina linken (geef ze mee in `clubs`,
+  met de bereikbare clubpagina-URL uit `find_ticket_links`). Een prijs is optioneel;
+  geen prijs op de site? Vraag de gebruiker of laat 'm weg ("op aanvraag").
+- ALGEMEEN: geen blokken, alleen header/intro/knoppen naar een algemene pagina.
+Je mag wedstrijden en clubs ook combineren. Gebruik alleen bereikbare URL's.
 5. Schrijf een enthousiaste intro in de tone of voice van de site (zie stap 2) en
    volgens de `claude_prompt`: twee korte alinea's, direct en sportief.
 6. Kies de foto's met `list_images`:

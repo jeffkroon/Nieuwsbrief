@@ -114,9 +114,13 @@ def test_missing_brand_field_raises() -> None:
         render_newsletter(TEMPLATE, broken, _content((Match(home="A", away="B", url="https://site/a/"),)))
 
 
-def test_no_matches_raises() -> None:
-    with pytest.raises(ValueError, match="wedstrijd"):
-        render_newsletter(TEMPLATE, BRAND, _content(()))
+def test_no_matches_renders_general_newsletter() -> None:
+    # Zonder wedstrijden: geen fout, geen banners, wel header/intro/knoppen.
+    html = render_newsletter(TEMPLATE, BRAND, _content(()))
+    assert "Bestel tickets" not in html  # geen wedstrijdblokken
+    assert BANNER_MARKER not in html
+    assert "Bekijk alle wedstrijden" in html  # header-knop blijft
+    assert "Eerste alinea." in html
 
 
 def test_header_title_falls_back_to_theme() -> None:
@@ -135,6 +139,28 @@ def test_header_title_and_subtitle_used() -> None:
     html = render_newsletter(TEMPLATE, BRAND, content)
     assert "<h1>PREMIER LEAGUE TOPPERS</h1>" in html
     assert "Beleef het live" in html
+
+
+def test_club_banner_renders() -> None:
+    from app.newsletter.models import Club
+    from app.newsletter.renderer import render_club_banner
+
+    banner = render_club_banner(Club(name="Bayern München", url="https://x/tickets/duitsland/bayern-munchen/", price="€ 349"), BRAND)
+    assert "BAYERN MÜNCHEN" in banner
+    assert "Bekijk tickets" in banner
+    assert "https://x/tickets/duitsland/bayern-munchen/" in banner
+    assert "€ 349" in banner
+
+
+def test_newsletter_with_clubs() -> None:
+    from app.newsletter.models import Club
+    content = NewsletterContent(
+        theme="t", subject="s", intro_1="a", intro_2="b",
+        main_cta_text="c", main_cta_url="u", slot_cta_text="d", slot_cta_url="u",
+        matches=(), clubs=(Club(name="Ajax", url="https://x/ajax/"),),
+    )
+    html = render_newsletter(TEMPLATE, BRAND, content)
+    assert "AJAX" in html and "Bekijk tickets" in html
 
 
 def test_hero_cta_default() -> None:

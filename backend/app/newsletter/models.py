@@ -27,6 +27,16 @@ class Match:
 
 
 @dataclass(frozen=True)
+class Club:
+    """Eén club-blok in de nieuwsbrief (link naar de clubpagina i.p.v. een wedstrijd)."""
+
+    name: str
+    url: str
+    price: str = PRICE_ON_REQUEST
+    image_url: str | None = None
+
+
+@dataclass(frozen=True)
 class NewsletterContent:
     """Volledige door de gebruiker/Claude bepaalde inhoud van een nieuwsbrief."""
 
@@ -39,6 +49,7 @@ class NewsletterContent:
     slot_cta_text: str
     slot_cta_url: str
     matches: tuple[Match, ...]
+    clubs: tuple[Club, ...] = ()
     preview_text: str | None = None
     header_title: str | None = None
     header_subtitle: str | None = None

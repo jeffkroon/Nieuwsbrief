@@ -7,7 +7,7 @@ worden bewust niet vervangen.
 
 from __future__ import annotations
 
-from app.newsletter.models import PRICE_ON_REQUEST, Match, NewsletterContent
+from app.newsletter.models import PRICE_ON_REQUEST, Club, Match, NewsletterContent
 
 BANNER_MARKER = "<!-- ##BANNERS## -->"
 
@@ -92,6 +92,46 @@ def render_banner(match: Match, brand: dict) -> str:
 <tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
 
 
+def render_club_banner(club: Club, brand: dict) -> str:
+    """Bouw een club-blok: clubnaam, foto, prijs en een link naar de clubpagina."""
+    color = brand["primary_color"]
+    img_url = club.image_url or club_image_url(club.name, brand)
+    if club.price == PRICE_ON_REQUEST:
+        price_va, price_amount = "", "op aanvraag"
+    else:
+        price_va, price_amount = "v.a.", club.price
+    return f"""
+<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="584" align="center"
+  class="banner-wrap"
+  style="table-layout:fixed; width:584px; border:3px solid {color}; border-radius:6px; border-collapse:separate; background-color:#ffffff;">
+<tbody><tr>
+  <td width="220" class="img-col"
+    style="width:220px; overflow:hidden; padding:0; border-radius:4px 0 0 4px; vertical-align:middle; background-color:#ffffff;">
+    <img src="{img_url}" width="220" height="220" border="0" alt="{club.name}"
+      class="banner-img" style="display:block; width:220px; height:220px;">
+  </td>
+  <td valign="middle" align="center" class="content-col"
+    style="padding:18px 16px 18px 12px; text-align:center; vertical-align:middle; background-color:#ffffff; border-radius:0 4px 4px 0;">
+    <p class="home-name"
+      style="margin:0 0 12px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:22px; font-weight:900; color:{_AWAY_COLOR}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{club.name.upper()}</p>
+    <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
+      style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">
+    <tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">
+      <span class="price-va" style="display:block; font-family:Arial,sans-serif; font-size:11px; color:#666; line-height:1.4;">{price_va}</span>
+      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:#111; line-height:1.2;">{price_amount}</span>
+    </td></tr></tbody></table>
+    <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
+      style="background:{color}; border-radius:4px; border-collapse:separate;">
+    <tbody><tr><td class="cta-btn" style="padding:12px 18px; border-radius:4px;">
+      <a href="{club.url}" target="_blank"
+        style="color:#ffffff; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">Bekijk tickets</a>
+    </td></tr></tbody></table>
+  </td>
+</tr></tbody></table>
+<table cellspacing="0" cellpadding="0" border="0" width="100%" style="table-layout:fixed;">
+<tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
+
+
 def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
     """Bouw de CTA-knop over de headerfoto. Tekst/URL instelbaar, met defaults."""
     text = content.header_cta_text or "Bekijk alle wedstrijden"
@@ -113,10 +153,12 @@ def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
 
 
 def render_newsletter(template: str, brand: dict, content: NewsletterContent) -> str:
-    """Vul placeholders en banners in. Geeft de volledige HTML terug."""
+    """Vul placeholders en banners in. Geeft de volledige HTML terug.
+
+    Zonder wedstrijden levert dit een algemene nieuwsbrief op (alleen header, intro
+    en knoppen, geen wedstrijdblokken).
+    """
     _require_brand_fields(brand)
-    if not content.matches:
-        raise ValueError("nieuwsbrief heeft minstens één wedstrijd nodig")
 
     replacements = {
         "{{EMAIL_TITEL}}": f"{content.theme} | {brand['brand_name']}",
@@ -147,4 +189,5 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
         html = html.replace(placeholder, value)
 
     banners = "".join(render_banner(m, brand) for m in content.matches)
+    banners += "".join(render_club_banner(c, brand) for c in content.clubs)
     return html.replace(BANNER_MARKER, banners)

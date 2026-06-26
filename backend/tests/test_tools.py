@@ -226,6 +226,37 @@ def test_create_draft_site_price_wins_over_manual(session, cipher) -> None:
     assert result["matches_used"][0]["price"] == "€ 299"  # echte prijs wint
 
 
+def test_create_draft_with_clubs(session, cipher) -> None:
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["clubs"] = [{"name": "Bayern München", "url": MATCH_URL, "price": "349,-"}]
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": None}),  # geen prijs op clubpagina -> handmatig
+        brevo_factory=lambda key: FakeBrevo(key),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>clubpagina</html>")),
+    )
+    result = execute_tool("create_newsletter_draft", payload, ctx)
+    assert result["matches_used"] == []
+    assert result["clubs_used"][0]["name"] == "Bayern München"
+    assert result["clubs_used"][0]["price"] == "€ 349"
+
+
+def test_create_draft_general_no_matches(session, cipher) -> None:
+    # Algemene nieuwsbrief zonder wedstrijden: geen fout, gewoon een concept.
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        brevo_factory=lambda key: FakeBrevo(key),
+    )
+    result = execute_tool("create_newsletter_draft", payload, ctx)
+    assert result["status"] == "ready"
+    assert result["matches_used"] == []
+
+
 def test_create_draft_rejects_nonexistent_match(session, cipher) -> None:
     tenant = _tenant(session)
     secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")

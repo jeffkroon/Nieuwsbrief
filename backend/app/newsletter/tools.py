@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Tenant
 from app.newsletter import extraction
-from app.newsletter.models import PRICE_ON_REQUEST, Match, NewsletterContent
+from app.newsletter.models import PRICE_ON_REQUEST, Club, Match, NewsletterContent
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.templates import load_template
 from app.repositories import images as images_repo
@@ -128,6 +128,9 @@ TOOL_DEFINITIONS = [
                 "header_image_url": {"type": "string", "description": "URL van de gekozen bannerfoto uit list_images('banner')"},
                 "matches": {
                     "type": "array",
+                    "description": "Wedstrijdblokken. Mag leeg zijn voor een ALGEMENE nieuwsbrief "
+                    "(zonder losse wedstrijden); zorg dan dat de knoppen naar een bereikbare "
+                    "algemene/competitie-/clubpagina verwijzen.",
                     "items": {
                         "type": "object",
                         "properties": {
@@ -140,6 +143,21 @@ TOOL_DEFINITIONS = [
                         "required": ["home", "away", "url"],
                     },
                 },
+                "clubs": {
+                    "type": "array",
+                    "description": "Club-blokken (i.p.v. of naast wedstrijden): per club een naam en "
+                    "een bereikbare clubpagina-URL (uit find_ticket_links). Optioneel price/image_url.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "url": {"type": "string", "description": "Bereikbare clubpagina-URL"},
+                            "price": {"type": "string", "description": "Handmatige vanafprijs als de site er geen heeft"},
+                            "image_url": {"type": "string", "description": "URL van de clubfoto uit list_images"},
+                        },
+                        "required": ["name", "url"],
+                    },
+                },
             },
             "required": [
                 "subject",
@@ -150,7 +168,6 @@ TOOL_DEFINITIONS = [
                 "main_cta_url",
                 "slot_cta_text",
                 "slot_cta_url",
-                "matches",
             ],
         },
     },
@@ -222,27 +239,47 @@ def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:
     return {"source_url": url, "count": len(matches), "matches": matches}
 
 
-def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]:
-    """Valideer elke wedstrijd-URL (moet bestaan) en scrape de prijs live."""
-    llm = _require_llm(ctx)
-    result: list[Match] = []
-    for m in raw_matches:
-        url = m["url"]
-        status, html = extraction.fetch_page(url, ctx.http_client)
-        if status != 200:
-            raise ValueError(
-                f"wedstrijd-URL bestaat niet of is onbereikbaar: {url} (status {status}). "
-                "Gebruik find_matches om bestaande wedstrijden te krijgen."
-            )
-        price = extraction.extract_price(llm, html, source_url=url)
-        # Geen prijs op de site? Gebruik de handmatig opgegeven vanafprijs (door de
-        # gebruiker bevestigd). Staat er wel een echte prijs, dan wint die.
-        if price == PRICE_ON_REQUEST and m.get("price"):
-            price = extraction.normalize_price(m["price"])
-        result.append(
-            Match(home=m["home"], away=m["away"], url=url, price=price, image_url=m.get("image_url"))
+def _resolve_price(ctx: ToolContext, llm, url: str, manual: str | None) -> str:
+    """URL moet bereikbaar zijn (200). Scrape de prijs; val terug op handmatige prijs."""
+    status, html = extraction.fetch_page(url, ctx.http_client)
+    if status != 200:
+        raise ValueError(
+            f"URL bestaat niet of is onbereikbaar: {url} (status {status}). "
+            "Gebruik find_matches of find_ticket_links voor een geldige link."
         )
-    return result
+    price = extraction.extract_price(llm, html, source_url=url)
+    # Geen prijs op de site? Gebruik de handmatig opgegeven vanafprijs (echte prijs wint).
+    if price == PRICE_ON_REQUEST and manual:
+        price = extraction.normalize_price(manual)
+    return price
+
+
+def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]:
+    if not raw_matches:
+        return []
+    llm = _require_llm(ctx)
+    return [
+        Match(
+            home=m["home"], away=m["away"], url=m["url"],
+            price=_resolve_price(ctx, llm, m["url"], m.get("price")),
+            image_url=m.get("image_url"),
+        )
+        for m in raw_matches
+    ]
+
+
+def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
+    if not raw_clubs:
+        return []
+    llm = _require_llm(ctx)
+    return [
+        Club(
+            name=c["name"], url=c["url"],
+            price=_resolve_price(ctx, llm, c["url"], c.get("price")),
+            image_url=c.get("image_url"),
+        )
+        for c in raw_clubs
+    ]
 
 
 def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
@@ -255,7 +292,8 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
             "geen Brevo API-key ingesteld voor deze tenant (zet die via PUT /tenants/{id}/secrets)"
         )
 
-    matches = _validated_matches(ctx, tool_input["matches"])
+    matches = _validated_matches(ctx, tool_input.get("matches", []))
+    clubs = _validated_clubs(ctx, tool_input.get("clubs", []))
     content = NewsletterContent(
         theme=tool_input["theme"],
         subject=tool_input["subject"],
@@ -272,6 +310,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         slot_cta_url=tool_input["slot_cta_url"],
         preview_text=tool_input.get("preview_text"),
         matches=tuple(matches),
+        clubs=tuple(clubs),
     )
 
     template_name = brand.get("template", DEFAULT_TEMPLATE)
@@ -318,6 +357,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         "brevo_campaign_id": draft.campaign_id,
         "status": "ready",
         "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
+        "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
         "message": "Concept aangemaakt in Brevo. Niets verstuurd; controleer en verstuur handmatig.",
     }
 
