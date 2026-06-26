@@ -18,6 +18,7 @@ values (
     "brand_kvk": "76484211",
     "website_url": "https://www.voetbalreizenxl.nl",
     "base_tickets_url": "https://www.voetbalreizenxl.nl/tickets/",
+    "matches_url": "https://www.voetbalreizenxl.nl/tickets/premier-league/",
     "primary_color": "#FF7200",
     "footer_color": "#6a6a6b",
     "logo_url": "https://img.mailinblue.com/1912392/images/content_library/original/67e3dfe76fdd629320b258bf.png",

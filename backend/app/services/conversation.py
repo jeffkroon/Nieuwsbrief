@@ -48,6 +48,7 @@ def run_conversation_turn(
         session=session,
         tenant_id=conversation.tenant_id,
         cipher=cipher,
+        llm=client,
         conversation_id=conversation.id,
     )
 

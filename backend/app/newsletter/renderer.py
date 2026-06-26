@@ -48,10 +48,10 @@ def club_image_url(club: str, brand: dict) -> str:
 
 
 def render_banner(match: Match, brand: dict) -> str:
-    """Bouw het HTML-tabelblok voor één wedstrijd."""
+    """Bouw het HTML-tabelblok voor één wedstrijd. De link is de echte ticket-URL."""
     color = brand["primary_color"]
     img_url = club_image_url(match.home, brand)
-    link = f"{brand['base_tickets_url']}{match.slug}/"
+    link = match.url
     return f"""
 <table cellspacing="0" cellpadding="0" border="0" role="presentation" width="584" align="center"
   class="banner-wrap"

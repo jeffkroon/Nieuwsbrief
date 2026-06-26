@@ -65,7 +65,7 @@ def test_club_image_lookup_and_fallback() -> None:
 
 
 def test_render_banner_contains_match_data() -> None:
-    banner = render_banner(Match(home="Chelsea", away="Arsenal", slug="chelsea-arsenal", price="299,-"), BRAND)
+    banner = render_banner(Match(home="Chelsea", away="Arsenal", url="https://www.voetbalreizenxl.nl/tickets/chelsea-arsenal/", price="299,-"), BRAND)
     assert "CHELSEA" in banner
     assert "ARSENAL" in banner
     assert "299,-" in banner
@@ -74,7 +74,7 @@ def test_render_banner_contains_match_data() -> None:
 
 
 def test_render_newsletter_fills_placeholders() -> None:
-    content = _content((Match(home="Chelsea", away="Arsenal", slug="chelsea-arsenal", price="299,-"),))
+    content = _content((Match(home="Chelsea", away="Arsenal", url="https://www.voetbalreizenxl.nl/tickets/chelsea-arsenal/", price="299,-"),))
     html = render_newsletter(TEMPLATE, BRAND, content)
     assert "Kerst in Londen | VoetbalreizenXL" in html
     assert "Eerste alinea." in html and "Tweede alinea." in html
@@ -86,7 +86,7 @@ def test_render_newsletter_fills_placeholders() -> None:
 
 
 def test_render_newsletter_keeps_brevo_runtime_placeholders() -> None:
-    content = _content((Match(home="Chelsea", away="Arsenal", slug="chelsea-arsenal"),))
+    content = _content((Match(home="Chelsea", away="Arsenal", url="https://www.voetbalreizenxl.nl/tickets/chelsea-arsenal/"),))
     html = render_newsletter(TEMPLATE, BRAND, content)
     # Brevo vult deze zelf in bij verzending; mogen niet vervangen worden.
     assert "{{ contact.EMAIL }}" in html
@@ -95,22 +95,22 @@ def test_render_newsletter_keeps_brevo_runtime_placeholders() -> None:
 
 def test_render_multiple_banners() -> None:
     matches = (
-        Match(home="Chelsea", away="Arsenal", slug="a"),
-        Match(home="Tottenham", away="Everton", slug="b"),
+        Match(home="Chelsea", away="Arsenal", url="https://site/a/"),
+        Match(home="Tottenham", away="Everton", url="https://site/b/"),
     )
     html = render_newsletter(TEMPLATE, BRAND, _content(matches))
     assert html.count("Bestel tickets") == 2
 
 
 def test_default_price_is_on_request() -> None:
-    html = render_newsletter(TEMPLATE, BRAND, _content((Match(home="Chelsea", away="Arsenal", slug="a"),)))
+    html = render_newsletter(TEMPLATE, BRAND, _content((Match(home="Chelsea", away="Arsenal", url="https://site/a/"),)))
     assert PRICE_ON_REQUEST in html
 
 
 def test_missing_brand_field_raises() -> None:
     broken = {k: v for k, v in BRAND.items() if k != "logo_url"}
     with pytest.raises(ValueError, match="logo_url"):
-        render_newsletter(TEMPLATE, broken, _content((Match(home="A", away="B", slug="a"),)))
+        render_newsletter(TEMPLATE, broken, _content((Match(home="A", away="B", url="https://site/a/"),)))
 
 
 def test_no_matches_raises() -> None:

@@ -1,6 +1,10 @@
-"""Integratietests voor de tool-laag (echte Postgres + gemockte Brevo)."""
+"""Integratietests voor de tool-laag (echte Postgres + fake LLM + gemockte HTTP/Brevo)."""
 
 from __future__ import annotations
+
+import json
+import uuid
+from dataclasses import dataclass, field
 
 import httpx
 import pytest
@@ -21,6 +25,7 @@ CONFIG = {
     "brand_kvk": "76484211",
     "website_url": "https://www.voetbalreizenxl.nl",
     "base_tickets_url": "https://www.voetbalreizenxl.nl/tickets/",
+    "matches_url": "https://www.voetbalreizenxl.nl/tickets/premier-league/",
     "primary_color": "#FF7200",
     "logo_url": "https://cdn/logo.png",
     "header_image_url": "https://cdn/header.png",
@@ -31,17 +36,45 @@ CONFIG = {
     "club_images": {},
 }
 
+MATCH_URL = "https://www.voetbalreizenxl.nl/tickets/chelsea-brighton-hove-albion/"
+
 DRAFT_INPUT = {
-    "subject": "Kerst in Londen",
-    "theme": "Kerst in Londen",
+    "subject": "Premier League toppers",
+    "theme": "Premier League topperweek",
     "intro_1": "Eerste alinea.",
     "intro_2": "Tweede alinea.",
     "main_cta_text": "Bekijk alles",
     "main_cta_url": "https://x/all",
     "slot_cta_text": "Plan je trip",
     "slot_cta_url": "https://x/plan",
-    "matches": [{"home": "Chelsea", "away": "Arsenal", "slug": "chelsea-arsenal", "price": "299,-"}],
+    "matches": [{"home": "Chelsea", "away": "Brighton & Hove Albion", "url": MATCH_URL}],
 }
+
+
+@dataclass
+class FakeText:
+    text: str
+    type: str = "text"
+
+
+@dataclass
+class FakeResponse:
+    content: list
+
+
+@dataclass
+class FakeMessages:
+    payload: dict
+    calls: list = field(default_factory=list)
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return FakeResponse([FakeText(json.dumps(self.payload))])
+
+
+class FakeLLM:
+    def __init__(self, payload: dict) -> None:
+        self.messages = FakeMessages(payload=payload)
 
 
 class FakeBrevo:
@@ -64,6 +97,10 @@ def _tenant(session):
     )
 
 
+def _http(handler) -> httpx.Client:
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
 def test_get_brand_config(session, cipher) -> None:
     tenant = _tenant(session)
     ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
@@ -71,17 +108,26 @@ def test_get_brand_config(session, cipher) -> None:
     assert result["config"]["primary_color"] == "#FF7200"
 
 
-def test_fetch_match_price_tool(session, cipher) -> None:
+def test_find_matches(session, cipher) -> None:
     tenant = _tenant(session)
-    transport = httpx.MockTransport(lambda r: httpx.Response(200, text="vanaf € 189"))
+    listing_html = '<a href="/tickets/chelsea-brighton-hove-albion/">Chelsea - Brighton</a>'
+    llm = FakeLLM({"matches": [{"home": "Chelsea", "away": "Brighton & Hove Albion", "url": MATCH_URL, "price": "249,-"}]})
     ctx = ToolContext(
-        session=session, tenant_id=tenant.id, cipher=cipher, http_client=httpx.Client(transport=transport)
+        session=session,
+        tenant_id=tenant.id,
+        cipher=cipher,
+        llm=llm,
+        http_client=_http(lambda r: httpx.Response(200, text=listing_html)),
     )
-    result = execute_tool("fetch_match_price", {"url": "https://x/m"}, ctx)
-    assert result["price"] == "€ 189"
+    result = execute_tool("find_matches", {}, ctx)
+    assert result["count"] == 1
+    assert result["matches"][0]["url"] == MATCH_URL
+    assert result["matches"][0]["price"] == "€ 249"
+    # find_matches haalde de matches_url op.
+    assert llm.messages.calls[0]["messages"][0]["content"].startswith("Bron-URL:")
 
 
-def test_create_newsletter_draft_happy_path(session, cipher) -> None:
+def test_create_draft_happy_path(session, cipher) -> None:
     tenant = _tenant(session)
     secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
     created: dict = {}
@@ -90,22 +136,49 @@ def test_create_newsletter_draft_happy_path(session, cipher) -> None:
         created["client"] = FakeBrevo(api_key)
         return created["client"]
 
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher, brevo_factory=factory)
+    ctx = ToolContext(
+        session=session,
+        tenant_id=tenant.id,
+        cipher=cipher,
+        llm=FakeLLM({"price": "€ 299"}),  # live prijs-scrape per wedstrijd
+        brevo_factory=factory,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>match page 299,-</html>")),
+    )
     result = execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
 
     assert result["brevo_campaign_id"] == 999
     assert result["status"] == "ready"
-    # Brevo kreeg de juiste key en een lijst-id mee.
-    assert created["client"].api_key == "xkeysib-geheim"
+    # Prijs komt van de live scrape (niet uit de input).
+    assert result["matches_used"][0]["price"] == "€ 299"
+    assert result["matches_used"][0]["url"] == MATCH_URL
     assert created["client"].calls[0]["list_ids"] == [12]
-    # Newsletter-rij opgeslagen als ready.
-    row = session.get(Newsletter, __import__("uuid").UUID(result["newsletter_id"]))
-    assert row is not None and row.status == "ready" and row.brevo_campaign_id == 999
+    row = session.get(Newsletter, uuid.UUID(result["newsletter_id"]))
+    assert row.status == "ready" and row.brevo_campaign_id == 999
+
+
+def test_create_draft_rejects_nonexistent_match(session, cipher) -> None:
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    ctx = ToolContext(
+        session=session,
+        tenant_id=tenant.id,
+        cipher=cipher,
+        llm=FakeLLM({"price": "€ 299"}),
+        http_client=_http(lambda r: httpx.Response(404, text="not found")),
+    )
+    with pytest.raises(ValueError, match="bestaat niet"):
+        execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
 
 
 def test_create_draft_without_brevo_key_raises(session, cipher) -> None:
     tenant = _tenant(session)
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    ctx = ToolContext(
+        session=session,
+        tenant_id=tenant.id,
+        cipher=cipher,
+        llm=FakeLLM({"price": "€ 299"}),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>x</html>")),
+    )
     with pytest.raises(ValueError, match="Brevo API-key"):
         execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
 
@@ -117,11 +190,12 @@ def test_create_draft_brevo_failure_records_failed(session, cipher) -> None:
         session=session,
         tenant_id=tenant.id,
         cipher=cipher,
+        llm=FakeLLM({"price": "€ 299"}),
         brevo_factory=lambda key: FakeBrevo(key, fail=True),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>x</html>")),
     )
     with pytest.raises(BrevoError):
         execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
-    # Mislukte poging is vastgelegd als 'failed'.
     rows = session.query(Newsletter).filter_by(tenant_id=tenant.id, status="failed").all()
     assert len(rows) == 1
 

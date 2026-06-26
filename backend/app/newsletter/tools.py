@@ -1,11 +1,13 @@
 """Tool-laag voor de Claude-orchestratie.
 
 Definieert de tools die Claude tijdens een gesprek mag aanroepen, plus de
-dispatcher die ze uitvoert tegen de database, de renderer en Brevo. Alle
+dispatcher die ze uitvoert tegen de database, de site-extractie en Brevo. Alle
 neveneffecten (DB-writes, Brevo-call) gebeuren hier, niet in het taalmodel.
 
-create_newsletter_draft combineert renderen en het aanmaken van het Brevo-concept
-bewust in één tool: zo hoeft de 8 KB HTML nooit door het model heen.
+Site-agnostisch: `find_matches` laat het LLM de echte wedstrijden + prijzen + URL's
+van de klantensite halen. `create_newsletter_draft` valideert elke URL hard
+(moet bestaan) en scrapet de prijs live van die pagina, zodat link en prijs altijd
+echt zijn, ongeacht hoe de site is opgebouwd.
 """
 
 from __future__ import annotations
@@ -18,8 +20,8 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.db.models import Tenant
+from app.newsletter import extraction
 from app.newsletter.models import Match, NewsletterContent
-from app.newsletter.pricing import fetch_match_price
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.templates import load_template
 from app.repositories import newsletters as newsletters_repo
@@ -36,6 +38,7 @@ class ToolContext:
     session: Session
     tenant_id: uuid.UUID
     cipher: SecretCipher
+    llm: object | None = None  # Anthropic-client voor site-extractie
     conversation_id: uuid.UUID | None = None
     brevo_factory: Callable[[str], BrevoClient] = BrevoClient
     http_client: httpx.Client | None = None
@@ -44,24 +47,28 @@ class ToolContext:
 TOOL_DEFINITIONS = [
     {
         "name": "get_brand_config",
-        "description": "Haal de merk-configuratie (kleuren, afzender, socials, claude_prompt) "
-        "van de huidige tenant op. Roep dit altijd eerst aan.",
+        "description": "Haal de merk-configuratie (kleuren, afzender, socials, claude_prompt, "
+        "matches_url) van de huidige tenant op. Roep dit altijd eerst aan.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
-        "name": "fetch_match_price",
-        "description": "Haal de vanafprijs van een wedstrijdpagina op. Geeft 'op aanvraag' "
-        "terug als er geen prijs herkenbaar is.",
+        "name": "find_matches",
+        "description": "Haal de ECHTE, beschikbare wedstrijden van de klantensite op, met "
+        "thuisclub, uitclub, de echte ticket-URL en de vanafprijs. Gebruik UITSLUITEND "
+        "wedstrijden uit deze lijst. Optioneel een specifieke listing-URL meegeven; anders "
+        "wordt de matches_url uit de brand-config gebruikt.",
         "input_schema": {
             "type": "object",
-            "properties": {"url": {"type": "string", "description": "Volledige wedstrijd-URL"}},
-            "required": ["url"],
+            "properties": {
+                "url": {"type": "string", "description": "Optionele listing-/competitiepagina-URL"}
+            },
         },
     },
     {
         "name": "create_newsletter_draft",
-        "description": "Render de nieuwsbrief en maak hem aan als CONCEPT in Brevo. "
-        "Verstuurt niets. Roep dit als laatste aan met alle inhoud.",
+        "description": "Render de nieuwsbrief en maak hem aan als CONCEPT in Brevo. Verstuurt "
+        "niets. Gebruik alleen wedstrijden (met hun echte url) uit find_matches. De link en "
+        "prijs worden live van de site gevalideerd en gescrapet.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -81,10 +88,9 @@ TOOL_DEFINITIONS = [
                         "properties": {
                             "home": {"type": "string"},
                             "away": {"type": "string"},
-                            "slug": {"type": "string"},
-                            "price": {"type": "string"},
+                            "url": {"type": "string", "description": "Echte ticket-URL uit find_matches"},
                         },
-                        "required": ["home", "away", "slug"],
+                        "required": ["home", "away", "url"],
                     },
                 },
             },
@@ -111,13 +117,43 @@ def _load_tenant(ctx: ToolContext) -> Tenant:
     return tenant
 
 
+def _require_llm(ctx: ToolContext):
+    if ctx.llm is None:
+        raise ValueError("geen LLM beschikbaar voor site-extractie")
+    return ctx.llm
+
+
 def _tool_get_brand_config(ctx: ToolContext, _: dict) -> dict:
     return {"config": _load_tenant(ctx).config}
 
 
-def _tool_fetch_match_price(ctx: ToolContext, tool_input: dict) -> dict:
-    url = tool_input["url"]
-    return {"price": fetch_match_price(url, client=ctx.http_client)}
+def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:
+    brand = _load_tenant(ctx).config
+    url = tool_input.get("url") or brand.get("matches_url") or brand.get("website_url")
+    if not url:
+        raise ValueError("geen URL om wedstrijden te zoeken; zet 'matches_url' in de brand-config")
+    status, html = extraction.fetch_page(url, ctx.http_client)
+    if status != 200:
+        raise ValueError(f"kon {url} niet ophalen (status {status})")
+    matches = extraction.extract_matches(_require_llm(ctx), html, source_url=url)
+    return {"source_url": url, "count": len(matches), "matches": matches}
+
+
+def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]:
+    """Valideer elke wedstrijd-URL (moet bestaan) en scrape de prijs live."""
+    llm = _require_llm(ctx)
+    result: list[Match] = []
+    for m in raw_matches:
+        url = m["url"]
+        status, html = extraction.fetch_page(url, ctx.http_client)
+        if status != 200:
+            raise ValueError(
+                f"wedstrijd-URL bestaat niet of is onbereikbaar: {url} (status {status}). "
+                "Gebruik find_matches om bestaande wedstrijden te krijgen."
+            )
+        price = extraction.extract_price(llm, html, source_url=url)
+        result.append(Match(home=m["home"], away=m["away"], url=url, price=price))
+    return result
 
 
 def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
@@ -127,10 +163,10 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
     api_key = secrets_repo.get_tenant_secret(ctx.session, ctx.cipher, tenant.id, BREVO_SECRET_KIND)
     if not api_key:
         raise ValueError(
-            "geen Brevo API-key ingesteld voor deze tenant (zet die via "
-            "PUT /tenants/{id}/secrets)"
+            "geen Brevo API-key ingesteld voor deze tenant (zet die via PUT /tenants/{id}/secrets)"
         )
 
+    matches = _validated_matches(ctx, tool_input["matches"])
     content = NewsletterContent(
         theme=tool_input["theme"],
         subject=tool_input["subject"],
@@ -141,16 +177,13 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         slot_cta_text=tool_input["slot_cta_text"],
         slot_cta_url=tool_input["slot_cta_url"],
         preview_text=tool_input.get("preview_text"),
-        matches=tuple(
-            Match(home=m["home"], away=m["away"], slug=m["slug"], price=m.get("price", "op aanvraag"))
-            for m in tool_input["matches"]
-        ),
+        matches=tuple(matches),
     )
 
     template_name = brand.get("template", DEFAULT_TEMPLATE)
     html = render_newsletter(load_template(template_name), brand, content)
-
     list_ids = [tenant.brevo_list_id] if tenant.brevo_list_id else None
+
     client = ctx.brevo_factory(api_key)
     try:
         draft = client.create_draft(
@@ -190,13 +223,14 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         "newsletter_id": str(newsletter.id),
         "brevo_campaign_id": draft.campaign_id,
         "status": "ready",
+        "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
         "message": "Concept aangemaakt in Brevo. Niets verstuurd; controleer en verstuur handmatig.",
     }
 
 
 _DISPATCH: dict[str, Callable[[ToolContext, dict], dict]] = {
     "get_brand_config": _tool_get_brand_config,
-    "fetch_match_price": _tool_fetch_match_price,
+    "find_matches": _tool_find_matches,
     "create_newsletter_draft": _tool_create_newsletter_draft,
 }
 

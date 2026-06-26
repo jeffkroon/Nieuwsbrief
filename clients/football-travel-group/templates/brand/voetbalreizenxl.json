@@ -5,25 +5,18 @@
   "brand_postcode_stad": "1131 DH Volendam",
   "brand_telefoon": "+31 85 303 6791",
   "brand_kvk": "76484211",
-
   "website_url": "https://www.voetbalreizenxl.nl",
   "base_tickets_url": "https://www.voetbalreizenxl.nl/tickets/",
-
   "primary_color": "#FF7200",
   "footer_color": "#6a6a6b",
-
   "logo_url": "https://img.mailinblue.com/1912392/images/content_library/original/67e3dfe76fdd629320b258bf.png",
   "header_image_url": "https://img.mailinblue.com/1912392/images/content_library/original/6a33f375cc06a38604651bf4.png",
   "dummy_image_url": "https://img.mailinblue.com/1912392/images/content_library/original/6a3a77fcd96ea0808185e2c3.png",
-
   "lijst_id": 0,
-
   "facebook_url": "https://www.facebook.com/VoetbalreizenXL",
   "instagram_url": "https://www.instagram.com/voetbalreizenxl/",
   "youtube_url": "https://www.youtube.com/channel/UCpcwvlMVymT2rWQN5TsGJlw",
-
   "claude_prompt": "Schrijf een enthousiaste nieuwsbrief-intro over het thema {{thema}} voor voetbalfans die reizen naar wedstrijden: {{wedstrijden}}. Stijl: direct, sportief, geen emojis, geen em-dashes. Twee alinea's, maximaal 60 woorden per alinea. Nederlands.",
-
   "_club_images_instructie": "Sleutel = clubnaam lowercase met koppeltekens. Waarde = afbeeldings-URL. Formaat: 1:1 vierkant (aanbevolen 400x400px of groter). Alle lege waarden gebruiken dummy_image_url als fallback.",
   "club_images": {
     "chelsea": "",
@@ -46,5 +39,6 @@
     "wolves": "",
     "southampton": "",
     "ipswich": ""
-  }
+  },
+  "matches_url": "https://www.voetbalreizenxl.nl/tickets/premier-league/"
 }

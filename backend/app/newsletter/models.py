@@ -13,11 +13,15 @@ PRICE_ON_REQUEST = "op aanvraag"
 
 @dataclass(frozen=True)
 class Match:
-    """Eén wedstrijd-banner in de nieuwsbrief."""
+    """Eén wedstrijd-banner in de nieuwsbrief.
+
+    `url` is de volledige, echte ticket-URL op de klantensite (niet zelf opgebouwd
+    uit een slug): zo klopt de link altijd, ongeacht het URL-patroon van de site.
+    """
 
     home: str
     away: str
-    slug: str
+    url: str
     price: str = PRICE_ON_REQUEST
 
 
