@@ -5,33 +5,88 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nieuwsbrief-assistent</title>
 <style>
-  :root { --accent: #FF7200; --bg: #f4f5f7; --panel: #ffffff; --text: #1f2430; --muted: #6a6a6b; }
+  :root { --accent: #FF7200; --bg: #f4f5f7; --panel: #ffffff; --text: #1f2430; --muted: #6a6a6b; --border: #e3e5e9; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, Arial, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
-  header { background: var(--accent); color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header h1 { font-size: 18px; margin: 0; font-weight: 700; }
-  header select { margin-left: auto; padding: 7px 10px; border-radius: 6px; border: none; font-size: 14px; }
-  main { flex: 1; overflow-y: auto; padding: 20px; }
-  #chat { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  header { background: var(--accent); color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 700; }
+  header select { padding: 7px 10px; border-radius: 6px; border: none; font-size: 14px; }
+  .spacer { margin-left: auto; }
+  nav button { background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  nav button.active { background: #fff; color: var(--accent); font-weight: 700; }
+  main { flex: 1; overflow-y: auto; }
+  .view { display: none; height: 100%; }
+  .view.active { display: block; }
+
+  /* Chat */
+  #chat { max-width: 760px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
   .msg { padding: 11px 15px; border-radius: 14px; max-width: 80%; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; }
   .user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
-  .assistant { align-self: flex-start; background: var(--panel); border: 1px solid #e3e5e9; border-bottom-left-radius: 4px; }
+  .assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
   .system { align-self: center; color: var(--muted); font-size: 13px; font-style: italic; }
   .typing { align-self: flex-start; color: var(--muted); font-size: 14px; }
-  footer { background: var(--panel); border-top: 1px solid #e3e5e9; padding: 14px 20px; }
+  footer { background: var(--panel); border-top: 1px solid var(--border); padding: 14px 20px; }
   #composer { max-width: 760px; margin: 0 auto; display: flex; gap: 10px; }
   #input { flex: 1; padding: 12px 14px; border: 1px solid #cfd3da; border-radius: 10px; font-size: 15px; resize: none; font-family: inherit; }
   #send { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0 22px; font-size: 15px; font-weight: 700; cursor: pointer; }
   #send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Foto's */
+  #imagesView { max-width: 900px; margin: 0 auto; padding: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 18px; }
+  .card h2 { margin: 0 0 12px 0; font-size: 16px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row label { font-size: 13px; color: var(--muted); }
+  input[type=file], input[type=text], select.field { padding: 8px 10px; border: 1px solid #cfd3da; border-radius: 8px; font-size: 14px; }
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .btn.secondary { background: #eceff3; color: var(--text); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
+  .thumb { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #fafbfc; }
+  .thumb img { width: 100%; height: 110px; object-fit: cover; display: block; }
+  .thumb .meta { padding: 6px 8px; font-size: 12px; }
+  .thumb .name { font-weight: 600; word-break: break-all; }
+  .thumb button { margin-top: 4px; font-size: 11px; color: #c0392b; background: none; border: none; cursor: pointer; padding: 0; }
+  .hint { color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
   <header>
     <h1>Nieuwsbrief-assistent</h1>
     <select id="tenant" aria-label="Klant"></select>
+    <nav class="spacer">
+      <button id="navChat" class="active">Chat</button>
+      <button id="navImages">Foto's</button>
+    </nav>
   </header>
-  <main><div id="chat"></div></main>
-  <footer>
+
+  <main>
+    <div id="chatView" class="view active">
+      <div id="chat"></div>
+    </div>
+    <div id="imagesView" class="view">
+      <div class="card">
+        <h2>Foto's uploaden</h2>
+        <div class="row">
+          <label>Categorie</label>
+          <select id="uploadCategory" class="field"></select>
+          <input type="file" id="uploadFiles" multiple accept="image/*">
+          <input type="text" id="uploadDesc" placeholder="Omschrijving (optioneel)">
+          <button class="btn" id="uploadBtn">Upload</button>
+        </div>
+        <p class="hint">Tip: noem het bestand naar wat erop staat (bv. arsenal.jpg), dan matcht de assistent het automatisch.</p>
+        <p id="uploadStatus" class="hint"></p>
+      </div>
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0;">Foto's bekijken</h2>
+          <select id="viewCategory" class="field"></select>
+        </div>
+        <div id="imageGrid" class="grid"></div>
+      </div>
+    </div>
+  </main>
+
+  <footer id="chatFooter">
     <div id="composer">
       <textarea id="input" rows="2" placeholder="Beschrijf de nieuwsbrief die je wilt maken..."></textarea>
       <button id="send">Stuur</button>
@@ -39,11 +94,27 @@
   </footer>
 
 <script>
+const tenantSel = document.getElementById("tenant");
+let conversationId = null;
+
+// ---- view switching ----
+const views = { chat: document.getElementById("chatView"), images: document.getElementById("imagesView") };
+const navChat = document.getElementById("navChat"), navImages = document.getElementById("navImages");
+const chatFooter = document.getElementById("chatFooter");
+function showView(name) {
+  for (const k in views) views[k].classList.toggle("active", k === name);
+  navChat.classList.toggle("active", name === "chat");
+  navImages.classList.toggle("active", name === "images");
+  chatFooter.style.display = name === "chat" ? "block" : "none";
+  if (name === "images") loadCategories();
+}
+navChat.onclick = () => showView("chat");
+navImages.onclick = () => showView("images");
+
+// ---- chat ----
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
 const send = document.getElementById("send");
-const tenantSel = document.getElementById("tenant");
-let conversationId = null;
 
 function addMsg(role, text) {
   const el = document.createElement("div");
@@ -56,19 +127,15 @@ function addMsg(role, text) {
 
 async function loadTenants() {
   try {
-    const res = await fetch("/tenants");
-    const tenants = await res.json();
-    if (!tenants.length) { addMsg("system", "Geen klanten gevonden. Maak eerst een tenant aan."); return; }
+    const tenants = await (await fetch("/tenants")).json();
+    if (!tenants.length) { addMsg("system", "Geen klanten gevonden."); return; }
     for (const t of tenants) {
       const opt = document.createElement("option");
-      opt.value = t.id;
-      opt.textContent = t.name;
+      opt.value = t.id; opt.textContent = t.name;
       tenantSel.appendChild(opt);
     }
     addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
-  } catch (e) {
-    addMsg("system", "Kon klanten niet laden: " + e.message);
-  }
+  } catch (e) { addMsg("system", "Kon klanten niet laden: " + e.message); }
 }
 
 async function sendMessage() {
@@ -78,19 +145,14 @@ async function sendMessage() {
   addMsg("user", text);
   send.disabled = true; input.disabled = true;
   const typing = addMsg("typing", "Aan het werk... (dit kan even duren)");
-
   try {
     let res;
     if (!conversationId) {
-      res = await fetch("/conversations", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenant_id: tenantSel.value, message: text }),
-      });
+      res = await fetch("/conversations", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenant_id: tenantSel.value, message: text }) });
     } else {
-      res = await fetch(`/conversations/${conversationId}/messages`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
-      });
+      res = await fetch(`/conversations/${conversationId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }) });
     }
     typing.remove();
     if (!res.ok) {
@@ -101,23 +163,81 @@ async function sendMessage() {
       conversationId = data.conversation_id;
       addMsg("assistant", data.reply);
     }
-  } catch (e) {
-    typing.remove();
-    addMsg("system", "Netwerkfout: " + e.message);
-  } finally {
-    send.disabled = false; input.disabled = false; input.focus();
-  }
+  } catch (e) { typing.remove(); addMsg("system", "Netwerkfout: " + e.message); }
+  finally { send.disabled = false; input.disabled = false; input.focus(); }
 }
-
 send.addEventListener("click", sendMessage);
-input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
+input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
 tenantSel.addEventListener("change", () => {
   conversationId = null;
   addMsg("system", "Nieuwe klant gekozen, nieuw gesprek gestart.");
   addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
+  loadCategories();
 });
+
+// ---- images ----
+const uploadCategory = document.getElementById("uploadCategory");
+const viewCategory = document.getElementById("viewCategory");
+const imageGrid = document.getElementById("imageGrid");
+const uploadStatus = document.getElementById("uploadStatus");
+
+async function loadCategories() {
+  const tid = tenantSel.value;
+  if (!tid) return;
+  try {
+    const { categories } = await (await fetch(`/tenants/${tid}/image-categories`)).json();
+    for (const sel of [uploadCategory, viewCategory]) {
+      const cur = sel.value;
+      sel.innerHTML = "";
+      for (const c of categories) {
+        const o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o);
+      }
+      if (categories.includes(cur)) sel.value = cur;
+    }
+    loadImages();
+  } catch (e) { uploadStatus.textContent = "Kon categorieën niet laden: " + e.message; }
+}
+
+async function loadImages() {
+  const tid = tenantSel.value;
+  const cat = viewCategory.value;
+  if (!tid || !cat) { imageGrid.innerHTML = ""; return; }
+  const imgs = await (await fetch(`/tenants/${tid}/images?category=${encodeURIComponent(cat)}`)).json();
+  imageGrid.innerHTML = imgs.length ? "" : '<p class="hint">Nog geen foto's in deze categorie.</p>';
+  for (const im of imgs) {
+    const el = document.createElement("div");
+    el.className = "thumb";
+    el.innerHTML = `<img src="${im.url}" alt=""><div class="meta"><div class="name">${im.filename}</div>`
+      + `<button data-id="${im.id}">verwijderen</button></div>`;
+    el.querySelector("button").onclick = async () => {
+      await fetch(`/tenants/${tid}/images/${im.id}`, { method: "DELETE" });
+      loadImages();
+    };
+    imageGrid.appendChild(el);
+  }
+}
+viewCategory.addEventListener("change", loadImages);
+
+document.getElementById("uploadBtn").onclick = async () => {
+  const tid = tenantSel.value;
+  const files = document.getElementById("uploadFiles").files;
+  if (!files.length) { uploadStatus.textContent = "Kies eerst een of meer bestanden."; return; }
+  const fd = new FormData();
+  fd.append("category", uploadCategory.value);
+  const desc = document.getElementById("uploadDesc").value.trim();
+  for (const f of files) { fd.append("files", f); if (desc) fd.append("descriptions", desc); }
+  uploadStatus.textContent = "Uploaden...";
+  const res = await fetch(`/tenants/${tid}/images`, { method: "POST", body: fd });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    uploadStatus.textContent = "Fout (" + res.status + "): " + (err.detail || "onbekend");
+  } else {
+    const created = await res.json();
+    uploadStatus.textContent = `${created.length} foto('s) geüpload.`;
+    document.getElementById("uploadFiles").value = "";
+    if (viewCategory.value === uploadCategory.value) loadImages(); else { viewCategory.value = uploadCategory.value; loadImages(); }
+  }
+};
 
 loadTenants();
 </script>
