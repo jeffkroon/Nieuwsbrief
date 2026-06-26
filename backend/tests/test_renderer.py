@@ -164,22 +164,25 @@ def test_newsletter_with_clubs() -> None:
 
 
 def test_hero_cta_default() -> None:
-    html = render_newsletter(TEMPLATE, BRAND, _content((Match(home="A", away="B", url="https://site/a/"),)))
-    assert "Bekijk alle wedstrijden" in html
-    # Default-URL valt terug op base_tickets_url uit de brand.
-    assert "https://www.voetbalreizenxl.nl/tickets/" in html
+    from app.newsletter.renderer import _render_hero_cta
+    content = _content((Match(home="A", away="B", url="https://site/a/"),))  # main_cta_url = https://x/all
+    hero = _render_hero_cta(BRAND, content)
+    assert "Bekijk alle wedstrijden" in hero  # default tekst
+    assert 'href="https://x/all"' in hero  # link gelijk aan de hoofd-knop
 
 
-def test_hero_cta_custom_text_and_url() -> None:
+def test_hero_cta_text_custom_link_matches_main() -> None:
+    # Tekst is instelbaar; de link van de banner-knop is altijd gelijk aan main_cta_url.
     content = NewsletterContent(
         theme="t", subject="s", intro_1="a", intro_2="b",
-        main_cta_text="c", main_cta_url="u", slot_cta_text="d", slot_cta_url="u",
+        main_cta_text="c", main_cta_url="https://site/overzicht/", slot_cta_text="d", slot_cta_url="u",
         matches=(Match(home="A", away="B", url="https://site/a/"),),
-        header_cta_text="Pak je tickets", header_cta_url="https://site/overzicht/",
+        header_cta_text="Pak je tickets",
     )
-    html = render_newsletter(TEMPLATE, BRAND, content)
-    assert "Pak je tickets" in html
-    assert 'href="https://site/overzicht/"' in html
+    from app.newsletter.renderer import _render_hero_cta
+    hero = _render_hero_cta(BRAND, content)
+    assert "Pak je tickets" in hero
+    assert 'href="https://site/overzicht/"' in hero  # zelfde link als de hoofd-knop
 
 
 def test_price_has_no_double_euro() -> None:

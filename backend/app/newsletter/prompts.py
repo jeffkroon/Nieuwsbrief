@@ -67,7 +67,8 @@ Geef ook de header-elementen mee voor op de foto:
 - `header_title`: een korte, pakkende kop (max ongeveer 6 woorden), goed leesbaar.
 - `header_subtitle`: een korte ondertitel van een halve zin die de kop aanvult.
 - `header_cta_text`: de tekst van de knop op de foto, bijvoorbeeld "Bekijk alle
-  wedstrijden". `header_cta_url`: meestal de overzichtspagina van de wedstrijden.
+  wedstrijden". De link van deze knop is automatisch dezelfde als de hoofd-knop
+  (`main_cta_url`), dus die hoef je niet apart op te geven.
 
 Regels voor de onderwerpregel (subject) en preheader (preview_text):
 - Onderwerpregel: maximaal 50 tekens (ongeveer 7 tot 9 woorden). Zet de belangrijkste

@@ -133,13 +133,17 @@ def render_club_banner(club: Club, brand: dict) -> str:
 
 
 def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
-    """Bouw de CTA-knop over de headerfoto. Tekst/URL instelbaar, met defaults."""
+    """Bouw de CTA-knop over de headerfoto.
+
+    De tekst is instelbaar (header_cta_text); de LINK is altijd dezelfde als de
+    hoofd-knop (main_cta_url), zodat beide knoppen naar dezelfde plek gaan.
+    """
     text = content.header_cta_text or "Bekijk alle wedstrijden"
     url = (
-        content.header_cta_url
+        content.main_cta_url
+        or content.header_cta_url
         or brand.get("matches_url")
         or brand.get("base_tickets_url")
-        or content.main_cta_url
     )
     color = brand["primary_color"]
     return (
