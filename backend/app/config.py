@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
     images_bucket: str = "tenant-images"
+    # Optioneel wachtwoord-slot (HTTP Basic). Leeg = geen slot (lokaal/dev).
+    access_user: str = "dunion"
+    access_password: str | None = None
 
     @property
     def database_url(self) -> str:

@@ -36,3 +36,11 @@ services:
       - key: BREVO_API_KEY
         scope: RUN_TIME
         type: SECRET
+      # Wachtwoord-slot voor de publieke deploy (Basic Auth). Zonder ACCESS_PASSWORD
+      # staat de app open; zet 'm dus op de deploy.
+      - key: ACCESS_USER
+        scope: RUN_TIME
+        value: dunion
+      - key: ACCESS_PASSWORD
+        scope: RUN_TIME
+        type: SECRET

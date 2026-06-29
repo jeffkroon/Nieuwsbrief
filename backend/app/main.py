@@ -7,9 +7,18 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
+from app.config import get_settings
+from app.middleware import BasicAuthMiddleware
 from app.routes import conversations, health, images, tenants
 
 app = FastAPI(title="Nieuwsbrief-product", version="0.1.0")
+
+# Wachtwoord-slot alleen aanzetten als ACCESS_PASSWORD is gezet (bv. op de deploy).
+_settings = get_settings()
+if _settings.access_password:
+    app.add_middleware(
+        BasicAuthMiddleware, user=_settings.access_user, password=_settings.access_password
+    )
 
 app.include_router(health.router)
 app.include_router(tenants.router)
