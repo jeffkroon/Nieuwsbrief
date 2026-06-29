@@ -1,0 +1,13 @@
+[project]
+name = "mail-backend"
+version = "0.1.0"
+description = "Multi-tenant nieuwsbrief-product backend (FastAPI + Claude tool-use + Brevo concept)"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q --cov=app --cov-report=term-missing"
+
+[tool.coverage.run]
+omit = ["app/main.py"]

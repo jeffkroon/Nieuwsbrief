@@ -25,3 +25,10 @@ clients/*/newsletters/
 
 # Playwright en andere tool-caches
 .playwright-mcp/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+backend/.venv/

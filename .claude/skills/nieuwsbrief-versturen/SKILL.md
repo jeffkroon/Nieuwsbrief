@@ -15,7 +15,7 @@ Je ontvangt via de prompt:
 
 ## Stap 1: Brand config inladen
 
-Lees het bestand `templates/brand/{domein}.json`.
+Lees het bestand `clients/football-travel-group/templates/brand/{domein}.json`.
 
 Sla de volgende variabelen op voor gebruik in latere stappen:
 - `brand_name`, `brand_email`, `brand_adres`, `brand_postcode_stad`
@@ -72,7 +72,7 @@ Sla per wedstrijd op: `prijs`.
 
 ## Stap 4: Banners opbouwen
 
-Lees het bestand `templates/nieuwsbrief-banner.html`.
+Lees het bestand `clients/football-travel-group/templates/nieuwsbrief-banner.html`.
 
 Dit template bevat de volgende placeholders:
 - `{{primary_color}}` — accent- en knopkleur
@@ -107,7 +107,7 @@ Sla op als `intro_1` (eerste alinea) en `intro_2` (tweede alinea).
 
 ## Stap 6: Hoofdtemplate invullen
 
-Lees het bestand `templates/nieuwsbrief-main.html`.
+Lees het bestand `clients/football-travel-group/templates/nieuwsbrief-main.html`.
 
 Stel de campagne-specifieke waarden samen:
 - `email_titel` = `{thema} | {brand_name}`

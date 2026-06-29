@@ -11,26 +11,34 @@ Werkruimte voor e-mailmarketing van Dunion Online Marketing. Twee actieve projec
 ```
 Email Marketing/
 ├── .claude/
-│   └── commands/
-│       └── newsletter.md          ← /newsletter skill (Dunion LinkedIn-flow)
+│   ├── commands/
+│   │   └── newsletter.md          ← /newsletter skill (Dunion LinkedIn-flow)
+│   └── skills/
+│       └── nieuwsbrief-versturen/SKILL.md  ← FTG Brevo-flow
 ├── clients/
-│   └── dunion/
-│       ├── newsletter-config.json ← LinkedIn-URL, default_posts
-│       ├── newsletter-template.html
-│       └── newsletters/           ← gegenereerde HTML-bestanden
-├── templates/                     ← FTG-project: gedeelde templates
-│   ├── nieuwsbrief-main.html
-│   ├── nieuwsbrief-banner.html
-│   └── brand/
-│       ├── voetbalreizenxl.json
-│       ├── voetbalticketshop.json
-│       └── voetbaltrips.json
+│   ├── dunion/                    ← actief: LinkedIn-nieuwsbrief
+│   │   ├── newsletter-config.json ← LinkedIn-URL, default_posts
+│   │   ├── newsletter-template.html
+│   │   └── newsletters/           ← gegenereerde HTML (gitignored)
+│   ├── football-travel-group/     ← in bouw: Brevo-campagnes
+│   │   ├── templates/
+│   │   │   ├── voetbalreizenxl-main.html
+│   │   │   └── brand/voetbalreizenxl.json
+│   │   ├── images/{clubs,headers}/ ← club- en headerafbeeldingen
+│   │   ├── scripts/               ← demo-*.py (Brevo concept-campagnes)
+│   │   └── afbeeldingen/          ← test-assets
+│   └── intersport-theo-tol/       ← nieuw
+│       ├── context.md
+│       └── newsletters/           ← gegenereerde HTML (gitignored)
+├── docs/                          ← Brevo/GitHub Actions/Slack naslag
 ├── tools/
 │   └── fetch_linkedin_posts.py    ← Apify-scraper voor LinkedIn
 ├── .env                           ← API keys (niet committen)
 ├── CLAUDE.md                      ← dit bestand
 └── PLAN.md                        ← FTG automatisering bouwplan
 ```
+
+Klantmappen gebruiken `kebab-case` (geen spaties).
 
 ---
 
@@ -67,7 +75,10 @@ Genereert HTML-nieuwsbrief op basis van recente LinkedIn-posts.
 
 ## FTG-project: snel naslaan
 
-- Brand configs staan in `templates/brand/{domein}.json`
+- Alles staat onder `clients/football-travel-group/`
+- Brand configs: `clients/football-travel-group/templates/brand/{domein}.json`
+- Templates: `clients/football-travel-group/templates/`
+- Demo-scripts: `clients/football-travel-group/scripts/demo-*.py` (paden zijn relatief aan de FTG-map)
 - Skill voor lokale test: `.claude/skills/nieuwsbrief-versturen/SKILL.md`
 - Volledig bouwplan: `PLAN.md`
-- MVP-domein: **voetbalreizenxl** (brand config basis al aanwezig)
+- MVP-domein: **voetbalreizenxl** (brand config en main-template al aanwezig)

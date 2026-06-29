@@ -1,0 +1,46 @@
+# DigitalOcean App Platform spec voor de nieuwsbrief-backend.
+# Importeren: DO dashboard -> Apps -> Create -> "Import from App Spec", of:
+#   doctl apps create --spec .do/app.yaml
+# Zet daarna de SECRET-waarden (keys) in het DO dashboard; commit ze NOOIT.
+name: nieuwsbrief-product
+region: ams
+services:
+  - name: backend
+    github:
+      repo: jeffkroon/Nieuwsbrief
+      branch: main
+      deploy_on_push: true
+    source_dir: backend
+    dockerfile_path: backend/Dockerfile
+    http_port: 8080
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    health_check:
+      http_path: /health
+    envs:
+      - key: SUPABASE_CONNECTION_STRING
+        scope: RUN_TIME
+        type: SECRET
+      - key: SECRET_ENCRYPTION_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: SUPABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: BREVO_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      # Wachtwoord-slot voor de publieke deploy (Basic Auth). Zonder ACCESS_PASSWORD
+      # staat de app open; zet 'm dus op de deploy.
+      - key: ACCESS_USER
+        scope: RUN_TIME
+        value: dunion
+      - key: ACCESS_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
