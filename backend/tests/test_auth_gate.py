@@ -1,60 +1,106 @@
-"""Tests voor het wachtwoord-slot (Basic Auth middleware)."""
+"""Tests voor het wachtwoord-slot: sessie-cookie + login/logout-flow."""
 
 from __future__ import annotations
 
-import base64
-
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 from fastapi.testclient import TestClient
 
-from app.middleware import BasicAuthMiddleware, check_basic_auth
+from app.config import Settings, get_settings
+from app.main import app as real_app
+from app.middleware import (
+    COOKIE_NAME,
+    LoginAuthMiddleware,
+    make_session_token,
+    valid_session_token,
+)
+from app.routes import auth
+
+SECRET = "geheim123"
 
 
-def _basic(user: str, pw: str) -> str:
-    return "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()
+def test_session_token_roundtrip() -> None:
+    token = make_session_token(SECRET)
+    assert valid_session_token(token, SECRET) is True
+    assert valid_session_token(token, "ander-geheim") is False
+    assert valid_session_token(None, SECRET) is False
+    assert valid_session_token("rommel", SECRET) is False
 
 
-def test_check_basic_auth() -> None:
-    assert check_basic_auth(_basic("dunion", "geheim"), "dunion", "geheim") is True
-    assert check_basic_auth(_basic("dunion", "fout"), "dunion", "geheim") is False
-    assert check_basic_auth(None, "dunion", "geheim") is False
-    assert check_basic_auth("Bearer xyz", "dunion", "geheim") is False
+def test_expired_token_invalid() -> None:
+    token = make_session_token(SECRET)
+    assert valid_session_token(token, SECRET, max_age=-1) is False
 
 
-def _app() -> FastAPI:
+def _guarded_app() -> FastAPI:
     app = FastAPI()
-    app.add_middleware(BasicAuthMiddleware, user="dunion", password="geheim")
+    app.add_middleware(LoginAuthMiddleware, secret=SECRET)
 
     @app.get("/health")
     def health():
-        return {"status": "ok"}
+        return {"ok": True}
 
     @app.get("/secret")
     def secret():
-        return {"ok": True}
+        return PlainTextResponse("geheim")
 
     return app
 
 
-def test_health_is_exempt() -> None:
-    client = TestClient(_app())
-    assert client.get("/health").status_code == 200  # zonder login
+def test_health_exempt() -> None:
+    assert TestClient(_guarded_app()).get("/health").status_code == 200
 
 
-def test_protected_requires_auth() -> None:
-    client = TestClient(_app())
-    resp = client.get("/secret")
+def test_page_redirects_to_login_when_not_logged_in() -> None:
+    client = TestClient(_guarded_app())
+    resp = client.get("/secret", headers={"accept": "text/html"}, follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/login"
+
+
+def test_api_call_returns_401_when_not_logged_in() -> None:
+    client = TestClient(_guarded_app())
+    resp = client.get("/secret", headers={"accept": "application/json"})
     assert resp.status_code == 401
-    assert "Basic" in resp.headers.get("WWW-Authenticate", "")
 
 
-def test_protected_with_correct_login() -> None:
-    client = TestClient(_app())
-    resp = client.get("/secret", headers={"Authorization": _basic("dunion", "geheim")})
-    assert resp.status_code == 200
+def test_valid_cookie_grants_access() -> None:
+    client = TestClient(_guarded_app())
+    client.cookies.set(COOKIE_NAME, make_session_token(SECRET))
+    assert client.get("/secret", headers={"accept": "text/html"}).status_code == 200
 
 
-def test_protected_with_wrong_password() -> None:
-    client = TestClient(_app())
-    resp = client.get("/secret", headers={"Authorization": _basic("dunion", "fout")})
-    assert resp.status_code == 401
+# --- login-route flow (op de echte app, met overschreven settings) ---
+def _settings_with_password() -> Settings:
+    return Settings(
+        _env_file=None,
+        supabase_connection_string="postgresql://x",
+        secret_encryption_key="k",
+        access_user="dunion",
+        access_password=SECRET,
+    )
+
+
+def test_login_wrong_password_redirects_with_error() -> None:
+    real_app.dependency_overrides[get_settings] = _settings_with_password
+    try:
+        client = TestClient(real_app)
+        resp = client.post(
+            "/login", data={"username": "dunion", "password": "fout"}, follow_redirects=False
+        )
+        assert resp.status_code == 303 and resp.headers["location"] == "/login?error=1"
+    finally:
+        real_app.dependency_overrides.pop(get_settings, None)
+
+
+def test_login_correct_sets_cookie() -> None:
+    real_app.dependency_overrides[get_settings] = _settings_with_password
+    try:
+        client = TestClient(real_app)
+        resp = client.post(
+            "/login", data={"username": "dunion", "password": SECRET}, follow_redirects=False
+        )
+        assert resp.status_code == 303 and resp.headers["location"] == "/"
+        assert COOKIE_NAME in resp.cookies
+    finally:
+        real_app.dependency_overrides.pop(get_settings, None)
