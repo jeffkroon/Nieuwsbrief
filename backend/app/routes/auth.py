@@ -10,8 +10,12 @@ from fastapi.responses import FileResponse, RedirectResponse
 
 from app.config import Settings, get_settings
 from app.middleware import COOKIE_NAME, SESSION_MAX_AGE, make_session_token
+from app.ratelimit import SlidingWindowRateLimiter, client_ip
 
 router = APIRouter(tags=["auth"])
+
+# Max 5 loginpogingen per 5 minuten per IP (tegen brute-force).
+_login_limiter = SlidingWindowRateLimiter(max_hits=5, window_seconds=300)
 
 _LOGIN_HTML = Path(__file__).resolve().parent.parent / "static" / "login.html"
 
@@ -33,6 +37,8 @@ def login_submit(
 ) -> RedirectResponse:
     if not settings.access_password:
         return RedirectResponse("/", status_code=303)
+    if not _login_limiter.allow(client_ip(request)):
+        return RedirectResponse("/login?error=2", status_code=303)
     ok = pysecrets.compare_digest(username, settings.access_user) and pysecrets.compare_digest(
         password, settings.access_password
     )

@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 
 import anthropic
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.deps import get_anthropic_client, get_cipher, get_session
+from app.ratelimit import SlidingWindowRateLimiter, client_ip
 from app.repositories import conversations as repo
 from app.repositories import tenants as tenants_repo
 from app.schemas import ConversationReply, ConversationStart, MessageSend
@@ -16,6 +17,17 @@ from app.services.conversation import TurnReply, run_conversation_turn
 from app.services.crypto import SecretCipher
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+# Max 15 chat-beurten per minuut per IP (een beurt is duur: ~30-60s + LLM/Brevo-kosten).
+_chat_limiter = SlidingWindowRateLimiter(max_hits=15, window_seconds=60)
+
+
+def chat_rate_limit(request: Request) -> None:
+    if not _chat_limiter.allow(client_ip(request)):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Te veel berichten in korte tijd. Wacht even en probeer opnieuw.",
+        )
 
 
 def _run_turn(*, session, client, cipher, conversation, user_text) -> TurnReply:
@@ -46,6 +58,7 @@ def start_conversation(
     session: Session = Depends(get_session),
     cipher: SecretCipher = Depends(get_cipher),
     client=Depends(get_anthropic_client),
+    _: None = Depends(chat_rate_limit),
 ) -> ConversationReply:
     if tenants_repo.get_tenant(session, body.tenant_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="tenant niet gevonden")
@@ -67,6 +80,7 @@ def continue_conversation(
     session: Session = Depends(get_session),
     cipher: SecretCipher = Depends(get_cipher),
     client=Depends(get_anthropic_client),
+    _: None = Depends(chat_rate_limit),
 ) -> ConversationReply:
     conversation = repo.get_conversation(session, conversation_id)
     if conversation is None:

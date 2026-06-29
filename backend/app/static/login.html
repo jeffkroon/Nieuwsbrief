@@ -31,6 +31,7 @@
     <h1>Nieuwsbrief-assistent</h1>
     <p class="sub">Log in om verder te gaan</p>
     <div class="error" id="error">Onjuiste inloggegevens, probeer opnieuw.</div>
+    <div class="error" id="error-rate">Te veel pogingen. Wacht een paar minuten en probeer opnieuw.</div>
     <label for="username">Gebruiker</label>
     <input id="username" name="username" type="text" autocomplete="username" value="dunion" required>
     <label for="password">Wachtwoord</label>
@@ -38,7 +39,10 @@
     <button type="submit">Inloggen</button>
   </form>
 <script>
-  if (new URLSearchParams(location.search).get("error")) {
+  const err = new URLSearchParams(location.search).get("error");
+  if (err === "2") {
+    document.getElementById("error-rate").style.display = "block";
+  } else if (err) {
     document.getElementById("error").style.display = "block";
   }
 </script>
