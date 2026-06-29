@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inloggen — Nieuwsbrief-assistent</title>
+<style>
+  :root { --accent: #FF7200; --bg: #f4f5f7; --panel: #ffffff; --text: #1f2430; --muted: #6a6a6b; --border: #e3e5e9; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Arial, sans-serif; background: var(--bg); color: var(--text);
+         min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 36px 32px;
+          width: 100%; max-width: 380px; box-shadow: 0 10px 40px rgba(0,0,0,0.08); }
+  .brand { width: 48px; height: 48px; border-radius: 12px; background: var(--accent); display: flex;
+           align-items: center; justify-content: center; margin: 0 auto 18px; color: #fff; font-size: 24px; font-weight: 800; }
+  h1 { font-size: 20px; margin: 0 0 4px; text-align: center; }
+  p.sub { margin: 0 0 24px; text-align: center; color: var(--muted); font-size: 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  input { width: 100%; padding: 12px 14px; border: 1px solid #cfd3da; border-radius: 10px; font-size: 15px; margin-bottom: 16px; }
+  input:focus { outline: none; border-color: var(--accent); }
+  button { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 10px;
+           padding: 13px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  button:hover { filter: brightness(0.95); }
+  .error { background: #fdecea; color: #b3261e; border-radius: 8px; padding: 10px 12px; font-size: 13px;
+           margin-bottom: 16px; display: none; }
+</style>
+</head>
+<body>
+  <form class="card" method="POST" action="/login">
+    <div class="brand">N</div>
+    <h1>Nieuwsbrief-assistent</h1>
+    <p class="sub">Log in om verder te gaan</p>
+    <div class="error" id="error">Onjuiste inloggegevens, probeer opnieuw.</div>
+    <label for="username">Gebruiker</label>
+    <input id="username" name="username" type="text" autocomplete="username" value="dunion" required>
+    <label for="password">Wachtwoord</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
+    <button type="submit">Inloggen</button>
+  </form>
+<script>
+  if (new URLSearchParams(location.search).get("error")) {
+    document.getElementById("error").style.display = "block";
+  }
+</script>
+</body>
+</html>
