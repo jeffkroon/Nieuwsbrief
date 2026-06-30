@@ -158,15 +158,20 @@ class TemplatePreviewRequest(BaseModel):
 
 
 # --- Conversation turns (chat) --------------------------------------------
+# Max berichtlengte: ruim genoeg om een nieuwsbrief te beschrijven, maar voorkomt dat
+# iemand een enorme lap tekst plakt die elke tool-stap opnieuw (duur) wordt meegestuurd.
+MAX_MESSAGE_CHARS = 8000
+
+
 class ConversationStart(BaseModel):
     tenant_id: uuid.UUID
     channel: Channel = "web"
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     template_id: uuid.UUID | None = None  # gekozen layout; None = standaard van het bedrijf
 
 
 class MessageSend(BaseModel):
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     template_id: uuid.UUID | None = None
 
 
