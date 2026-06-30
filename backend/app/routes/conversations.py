@@ -71,7 +71,8 @@ def start_conversation(
         user_text=body.message, template_id=body.template_id,
     )
     return ConversationReply(
-        conversation_id=conversation.id, reply=turn.reply, stop_reason=turn.stop_reason
+        conversation_id=conversation.id, reply=turn.reply, stop_reason=turn.stop_reason,
+        preview_html=turn.preview_html,
     )
 
 
@@ -92,5 +93,6 @@ def continue_conversation(
         user_text=body.message, template_id=body.template_id,
     )
     return ConversationReply(
-        conversation_id=conversation.id, reply=turn.reply, stop_reason=turn.stop_reason
+        conversation_id=conversation.id, reply=turn.reply, stop_reason=turn.stop_reason,
+        preview_html=turn.preview_html,
     )

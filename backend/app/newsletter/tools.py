@@ -12,10 +12,11 @@ echt zijn, ongeacht hoe de site is opgebouwd.
 
 from __future__ import annotations
 
+import copy
 import re
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 from sqlalchemy.orm import Session
@@ -46,6 +47,9 @@ class ToolContext:
     brevo_factory: Callable[[str], BrevoClient] = BrevoClient
     http_client: httpx.Client | None = None
     template_id: uuid.UUID | None = None  # gekozen template in de chat; None = standaard
+    # Voorbeeld-HTML wordt hierin gezet door preview_newsletter, zodat de chat-laag het
+    # aan de frontend kan teruggeven (apart van het tekstantwoord van de assistent).
+    preview_holder: list[str] = field(default_factory=list)
 
 
 TOOL_DEFINITIONS = [
@@ -316,21 +320,31 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
     ]
 
 
-def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
-    if not tool_input.get("confirmed"):
-        raise ValueError(
-            "Nog geen toestemming om het concept aan te maken. Vat de nieuwsbrief samen, "
-            "vraag de gebruiker eerst om toestemming, en roep dit pas aan met confirmed=true."
-        )
+def _resolve_template_html(ctx: ToolContext, tenant, brand: dict) -> tuple[str, dict]:
+    """Kies de template-HTML: gekozen (ctx.template_id) > standaard > ingebouwd bestand.
+
+    Geeft de HTML terug plus een brand-dict waarin de stijl van de template is gezet.
+    """
+    chosen_tpl = None
+    if ctx.template_id is not None:
+        candidate = templates_repo.get_template(ctx.session, ctx.template_id)
+        if candidate is not None and candidate.tenant_id == tenant.id:
+            chosen_tpl = candidate
+    if chosen_tpl is None:
+        chosen_tpl = templates_repo.get_default_template(ctx.session, tenant.id)
+    if chosen_tpl is not None:
+        return chosen_tpl.html, {**brand, "styles": chosen_tpl.styles or {}}
+    return load_template(brand.get("template", DEFAULT_TEMPLATE)), brand
+
+
+def _build_newsletter(ctx: ToolContext, tool_input: dict):
+    """Valideer wedstrijden/clubs, bouw de content, kies de template en render de HTML.
+
+    Gedeeld door preview_newsletter (geen Brevo) en create_newsletter_draft (wel Brevo).
+    Geeft (tenant, brand, content, matches, clubs, html) terug.
+    """
     tenant = _load_tenant(ctx)
     brand = tenant.config
-
-    api_key = secrets_repo.get_tenant_secret(ctx.session, ctx.cipher, tenant.id, BREVO_SECRET_KIND)
-    if not api_key:
-        raise ValueError(
-            "geen Brevo API-key ingesteld voor deze tenant (zet die via PUT /tenants/{id}/secrets)"
-        )
-
     matches = _validated_matches(ctx, tool_input.get("matches", []))
     clubs = _validated_clubs(ctx, tool_input.get("clubs", []))
     content = NewsletterContent(
@@ -350,22 +364,38 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         matches=tuple(matches),
         clubs=tuple(clubs),
     )
-
-    # Template-keuze: de in de chat gekozen template (ctx.template_id), anders de
-    # standaard van dit bedrijf, anders de ingebouwde layout uit het bestand.
-    chosen_tpl = None
-    if ctx.template_id is not None:
-        candidate = templates_repo.get_template(ctx.session, ctx.template_id)
-        if candidate is not None and candidate.tenant_id == tenant.id:
-            chosen_tpl = candidate
-    if chosen_tpl is None:
-        chosen_tpl = templates_repo.get_default_template(ctx.session, tenant.id)
-    if chosen_tpl is not None:
-        template_html = chosen_tpl.html
-        brand = {**brand, "styles": chosen_tpl.styles or {}}
-    else:
-        template_html = load_template(brand.get("template", DEFAULT_TEMPLATE))
+    template_html, brand = _resolve_template_html(ctx, tenant, brand)
     html = render_newsletter(template_html, brand, content)
+    return tenant, brand, content, matches, clubs, html
+
+
+def _tool_preview_newsletter(ctx: ToolContext, tool_input: dict) -> dict:
+    _, _, content, matches, clubs, html = _build_newsletter(ctx, tool_input)
+    ctx.preview_holder.append(html)  # frontend toont dit in het voorbeeldpaneel
+    return {
+        "status": "preview",
+        "subject": content.subject,
+        "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
+        "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
+        "message": "Voorbeeld gerenderd en getoond in het paneel naast de chat. Vat kort samen "
+        "en vraag de gebruiker om toestemming voordat je create_newsletter_draft (confirmed=true) aanroept.",
+    }
+
+
+def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
+    if not tool_input.get("confirmed"):
+        raise ValueError(
+            "Nog geen toestemming om het concept aan te maken. Vat de nieuwsbrief samen, "
+            "vraag de gebruiker eerst om toestemming, en roep dit pas aan met confirmed=true."
+        )
+    tenant = _load_tenant(ctx)
+    api_key = secrets_repo.get_tenant_secret(ctx.session, ctx.cipher, tenant.id, BREVO_SECRET_KIND)
+    if not api_key:
+        raise ValueError(
+            "geen Brevo API-key ingesteld voor deze tenant (zet die via PUT /tenants/{id}/secrets)"
+        )
+
+    tenant, brand, content, matches, clubs, html = _build_newsletter(ctx, tool_input)
     list_ids = [tenant.brevo_list_id] if tenant.brevo_list_id else None
 
     client = ctx.brevo_factory(api_key)
@@ -419,8 +449,28 @@ _DISPATCH: dict[str, Callable[[ToolContext, dict], dict]] = {
     "analyze_website_tone": _tool_analyze_website_tone,
     "find_ticket_links": _tool_find_ticket_links,
     "find_matches": _tool_find_matches,
+    "preview_newsletter": _tool_preview_newsletter,
     "create_newsletter_draft": _tool_create_newsletter_draft,
 }
+
+
+# preview_newsletter heeft exact dezelfde velden als create_newsletter_draft, maar
+# zonder 'confirmed' (er gaat niets naar Brevo). We leiden de schema af zodat de twee
+# nooit uit elkaar lopen.
+_draft_def = next(t for t in TOOL_DEFINITIONS if t["name"] == "create_newsletter_draft")
+_preview_schema = copy.deepcopy(_draft_def["input_schema"])
+_preview_schema["properties"].pop("confirmed", None)
+TOOL_DEFINITIONS.append(
+    {
+        "name": "preview_newsletter",
+        "description": "Render een VOORBEELD van de nieuwsbrief en toon het direct aan de "
+        "gebruiker in het voorbeeldpaneel naast de chat. Maakt NIETS aan in Brevo. Roep dit "
+        "ALTIJD eerst aan en laat de gebruiker het voorbeeld zien, voordat je toestemming "
+        "vraagt voor create_newsletter_draft. Zelfde velden (zonder 'confirmed'); links en "
+        "prijzen worden net zo live gevalideerd en gescrapet.",
+        "input_schema": _preview_schema,
+    }
+)
 
 
 def execute_tool(name: str, tool_input: dict, ctx: ToolContext) -> dict:
