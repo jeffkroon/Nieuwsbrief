@@ -251,7 +251,8 @@ def render_cards(matches: tuple[Match, ...], clubs: tuple[Club, ...], brand: dic
             f"{left}{spacer}{right}"
             "</tr></tbody></table>"
         )
-    return gap.join(rows)
+    # Trailing gap zodat wat na de kaarten komt (bv. de slot-knop) niet te dicht aansluit.
+    return gap.join(rows) + gap
 
 
 def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:

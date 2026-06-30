@@ -306,6 +306,26 @@ def test_create_draft_uses_chosen_template(session, cipher) -> None:
     assert "#abcdef" in html  # met de stijl van die template
 
 
+def test_club_image_falls_back_to_club_name(session, cipher) -> None:
+    # Agent vergeet image_url: de backend vindt de foto alsnog via de clubnaam.
+    from app.repositories import images as images_repo
+
+    tenant = _tenant(session)
+    images_repo.create_image(
+        session, tenant_id=tenant.id, category="club", filename="inter-milan-dumfries.png",
+        description="Inter", storage_path="p/i.png", url="https://cdn/real-inter.png",
+    )
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["clubs"] = [{"name": "Inter Milan", "url": MATCH_URL}]  # GEEN image_url meegegeven
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, llm=FakeLLM({"price": None}),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>x</html>")),
+        preview_holder=[],
+    )
+    execute_tool("preview_newsletter", payload, ctx)
+    assert "https://cdn/real-inter.png" in ctx.preview_holder[0]  # foto via clubnaam gevonden
+
+
 def test_preview_newsletter_returns_html_without_brevo(session, cipher) -> None:
     # Preview rendert de HTML, vult preview_holder, en maakt GEEN Brevo-concept aan.
     tenant = _tenant(session)
