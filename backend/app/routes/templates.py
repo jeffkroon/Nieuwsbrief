@@ -13,6 +13,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.deps import get_session, require_admin
@@ -129,14 +130,21 @@ def create_template(
             status.HTTP_400_BAD_REQUEST,
             detail="template is ongeldig: " + "; ".join(errors),
         )
-    return repo.create_template(
-        session,
-        tenant_id=tenant_id,
-        name=body.name.strip(),
-        html=body.html,
-        styles=body.styles,
-        is_default=body.is_default,
-    )
+    try:
+        return repo.create_template(
+            session,
+            tenant_id=tenant_id,
+            name=body.name.strip(),
+            html=body.html,
+            styles=body.styles,
+            is_default=body.is_default,
+        )
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"Er bestaat al een template met de naam '{body.name.strip()}' voor dit bedrijf.",
+        ) from exc
 
 
 @router.put(
@@ -159,9 +167,16 @@ def update_template(
                 detail="template is ongeldig: " + "; ".join(errors),
             )
     name = body.name.strip() if body.name is not None else None
-    return repo.update_template(
-        session, template_id, name=name, html=body.html, styles=body.styles
-    )
+    try:
+        return repo.update_template(
+            session, template_id, name=name, html=body.html, styles=body.styles
+        )
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"Er bestaat al een template met de naam '{name}' voor dit bedrijf.",
+        ) from exc
 
 
 @router.delete(
