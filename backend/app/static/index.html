@@ -126,10 +126,11 @@
           <label>Accentkleur (randen) <input type="color" id="stAccent" value="#ff7200"></label>
         </div>
         <div class="row" style="margin-top:14px;">
-          <button class="btn" id="tmplPreview">Voorbeeld bekijken</button>
+          <button class="btn secondary" id="tmplPreview">Voorbeeld verversen</button>
           <button class="btn" id="tmplSaveStyles">Stijl opslaan</button>
           <span id="tmplStatus" class="hint"></span>
         </div>
+        <p class="hint" style="margin:10px 0 0;">Live voorbeeld, verandert direct mee met je kleuren en lettertype:</p>
         <iframe id="tmplPreviewFrame" class="preview-frame" title="Voorbeeld"></iframe>
       </div>
 
@@ -370,7 +371,8 @@ async function loadTemplates() {
     tmplSelect.appendChild(o);
   }
   const def = templatesCache.find(t => t.is_default) || templatesCache[0];
-  if (def) { tmplSelect.value = def.id; applyStyleInputs(def.styles || {}); }
+  if (def) { tmplSelect.value = def.id; applyStyleInputs(def.styles || {}); renderStylePreview(); }
+  else { previewFrame.srcdoc = ""; }
   renderAdminList();
 }
 
@@ -381,20 +383,25 @@ function selectedTemplate() {
 tmplSelect.addEventListener("change", () => {
   const t = selectedTemplate();
   applyStyleInputs(t ? (t.styles || {}) : {});
+  renderStylePreview();
 });
 
-document.getElementById("tmplPreview").onclick = async () => {
+async function renderStylePreview() {
   const tid = tenantSel.value;
   const t = selectedTemplate();
-  tmplStatus.textContent = "Voorbeeld laden...";
-  const body = { styles: readStyleInputs() };
-  if (t) body.template_id = t.id;
-  const res = await fetch(`/tenants/${tid}/templates/preview`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) { const e = await res.json().catch(() => ({})); tmplStatus.textContent = "Fout: " + (e.detail || res.status); return; }
-  previewFrame.srcdoc = await res.text();
-  tmplStatus.textContent = "";
-};
+  if (!tid || !t) { previewFrame.srcdoc = ""; return; }
+  const body = { template_id: t.id, styles: readStyleInputs() };
+  try {
+    const res = await fetch(`/tenants/${tid}/templates/preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); tmplStatus.textContent = "Voorbeeld: " + (e.detail || res.status); return; }
+    previewFrame.srcdoc = await res.text();
+    tmplStatus.textContent = "";
+  } catch (e) { tmplStatus.textContent = "Voorbeeld mislukt: " + e.message; }
+}
+let stylePreviewTimer = null;
+function scheduleStylePreview() { clearTimeout(stylePreviewTimer); stylePreviewTimer = setTimeout(renderStylePreview, 500); }
+document.getElementById("tmplPreview").onclick = renderStylePreview;
 
 document.getElementById("tmplSaveStyles").onclick = async () => {
   const tid = tenantSel.value;
@@ -455,6 +462,7 @@ function scheduleAdminPreview() {
 document.getElementById("newTmplHtml").addEventListener("input", scheduleAdminPreview);
 document.getElementById("adminPreview").onclick = renderAdminPreview;
 for (const k in STYLE_INPUTS) STYLE_INPUTS[k].addEventListener("input", () => {
+  scheduleStylePreview();
   if (isAdmin && document.getElementById("newTmplHtml").value.trim()) scheduleAdminPreview();
 });
 
