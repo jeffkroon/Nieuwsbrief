@@ -57,13 +57,13 @@ def test_create_and_list(client, session) -> None:
     assert [x["name"] for x in listed] == ["Basis"]
 
 
-def test_create_invalid_html_rejected(client, session) -> None:
+def test_create_without_marker_is_allowed(client, session) -> None:
+    # Een afwijkende layout zonder wedstrijdblokken (bv. kaart-/review-layout) mag.
     t = _tenant(session)
     resp = client.post(
-        f"/tenants/{t.id}/templates", json={"name": "Kapot", "html": "<html>geen marker</html>"}
+        f"/tenants/{t.id}/templates", json={"name": "Card", "html": "<html>geen marker</html>"}
     )
-    assert resp.status_code == 400
-    assert "BANNERS" in resp.json()["detail"]
+    assert resp.status_code == 201
 
 
 def test_validate_endpoint(client, session) -> None:

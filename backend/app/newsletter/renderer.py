@@ -7,10 +7,18 @@ worden bewust niet vervangen.
 
 from __future__ import annotations
 
+import re
+
 from app.newsletter.models import PRICE_ON_REQUEST, Club, Match, NewsletterContent
 from app.newsletter.styles import effective_styles, style_replacements
 
 BANNER_MARKER = "<!-- ##BANNERS## -->"
+
+# Onze interne placeholders zijn HOOFDLETTERS_MET_UNDERSCORE zonder spaties. Brevo-tags
+# ({{ contact.EMAIL }}, {{ unsubscribe }}) hebben spaties/kleine letters en matchen dus
+# niet: die blijven bewust staan. Hiermee strippen we alleen ongevulde eigen placeholders,
+# zodat elke template-structuur schoon rendert.
+_INTERNAL_PLACEHOLDER = re.compile(r"{{[A-Z0-9_]+}}")
 
 REQUIRED_BRAND_FIELDS = (
     "brand_name",
@@ -208,4 +216,7 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
 
     banners = "".join(render_banner(m, brand) for m in content.matches)
     banners += "".join(render_club_banner(c, brand) for c in content.clubs)
-    return html.replace(BANNER_MARKER, banners)
+    html = html.replace(BANNER_MARKER, banners)
+    # Ruim ongevulde eigen placeholders op (bv. als een template een veld weglaat of
+    # een onbekende toevoegt), zodat er nooit een rauwe {{IETS}} in de mail belandt.
+    return _INTERNAL_PLACEHOLDER.sub("", html)

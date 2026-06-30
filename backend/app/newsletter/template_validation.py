@@ -1,22 +1,21 @@
 """Validatie van een (door een admin) aangeleverde template-HTML.
 
-Hard verplicht is alleen de banner-marker: zonder die marker verdwijnen de
-wedstrijd-/clubblokken zonder waarschuwing. De rest is aanbevolen en levert een
-waarschuwing op, geen blokkade, zodat een admin bewust een afwijkende layout kan
-maken.
+Een admin mag elke layout opslaan: niets blokkeert. Ontbrekende placeholders
+leveren alleen een waarschuwing op, zodat een afwijkende layout (bv. een algemene
+nieuwsbrief of een kaart-/review-layout zonder wedstrijdblokken) gewoon kan.
 """
 
 from __future__ import annotations
 
 from app.newsletter.renderer import BANNER_MARKER
 
-# Zonder deze marker komen er geen wedstrijd-/clubblokken in de mail.
-REQUIRED: dict[str, str] = {
-    BANNER_MARKER: "plek voor de wedstrijd-/clubblokken",
-}
+# Niets is hard verplicht; een admin bepaalt zelf de layout.
+REQUIRED: dict[str, str] = {}
 
-# Aanbevolen placeholders: ontbreken levert een waarschuwing op.
+# Aanbevolen placeholders: ontbreken levert een waarschuwing op, geen blokkade.
 RECOMMENDED: dict[str, str] = {
+    BANNER_MARKER: "zonder deze marker komen er geen wedstrijd-/clubblokken in de mail "
+    "(prima voor een algemene of kaart-layout)",
     "{{ unsubscribe }}": "afmeldlink (wettelijk verplicht voor e-mail)",
     "{{ contact.EMAIL }}": "e-mailadres van de ontvanger",
     "{{HEADER_TITEL}}": "titel over de headerfoto",
