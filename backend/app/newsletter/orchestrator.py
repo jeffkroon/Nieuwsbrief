@@ -4,8 +4,10 @@ Draait de gespreks-loop: stuurt berichten naar Claude, voert tool-calls uit via
 de meegegeven dispatch-functie, en gaat door tot Claude klaar is. De Anthropic-
 client wordt geinjecteerd zodat tests een fake kunnen meegeven.
 
-Model claude-sonnet-4-6 met adaptive thinking en effort 'high': sterk genoeg voor
-deze tool-taak en ~40% goedkoper per token dan Opus. Geen budget_tokens (gebruik
+Model claude-sonnet-4-6 met adaptive thinking en effort 'medium': sterk genoeg voor
+deze tool-taak en ~40% goedkoper per token dan Opus. De harde garanties (link moet
+200 zijn, prijs live gescrapet, concept pas na toestemming) zitten in code, niet in
+de effort. Geen budget_tokens (gebruik
 adaptive thinking). De system-prompt + tools worden gecachet (prompt caching), zodat
 dat vaste deel niet elke loop-stap opnieuw vol wordt afgerekend.
 """
@@ -66,7 +68,7 @@ def run_agent_turn(
             model=model,
             max_tokens=MAX_OUTPUT_TOKENS,
             thinking={"type": "adaptive"},
-            output_config={"effort": "high"},
+            output_config={"effort": "medium"},
             system=cached_system,
             tools=tools,
             messages=convo,

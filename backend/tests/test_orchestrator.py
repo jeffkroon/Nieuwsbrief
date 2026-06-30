@@ -113,7 +113,7 @@ def test_request_uses_correct_model_and_thinking() -> None:
     first = client.messages.calls[0]
     assert first["model"] == DEFAULT_MODEL
     assert first["thinking"] == {"type": "adaptive"}
-    assert first["output_config"] == {"effort": "high"}
+    assert first["output_config"] == {"effort": "medium"}
 
 
 def test_system_prompt_is_cached() -> None:
