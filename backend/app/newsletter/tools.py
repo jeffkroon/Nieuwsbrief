@@ -276,6 +276,20 @@ def _resolve_image(ctx: ToolContext, value: str | None) -> str | None:
     return None
 
 
+def _resolve_image_for(ctx: ToolContext, explicit: str | None, *fallback_names: str) -> str | None:
+    """Resolve de foto via de expliciete verwijzing; lukt dat niet, probeer dan de
+    club-/teamnaam (zo blijft de juiste foto staan, ook als de agent de bestandsnaam
+    een keer weglaat of net iets anders schrijft)."""
+    url = _resolve_image(ctx, explicit)
+    if url:
+        return url
+    for name in fallback_names:
+        url = _resolve_image(ctx, name)
+        if url:
+            return url
+    return None
+
+
 def _resolve_price(ctx: ToolContext, llm, url: str, manual: str | None) -> str:
     """URL moet bereikbaar zijn (200). Scrape de prijs; val terug op handmatige prijs."""
     status, html = extraction.fetch_page(url, ctx.http_client)
@@ -299,7 +313,7 @@ def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]
         Match(
             home=m["home"], away=m["away"], url=m["url"],
             price=_resolve_price(ctx, llm, m["url"], m.get("price")),
-            image_url=_resolve_image(ctx, m.get("image_url")),
+            image_url=_resolve_image_for(ctx, m.get("image_url"), m["home"], m["away"]),
         )
         for m in raw_matches
     ]
@@ -313,7 +327,7 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
         Club(
             name=c["name"], url=c["url"],
             price=_resolve_price(ctx, llm, c["url"], c.get("price")),
-            image_url=_resolve_image(ctx, c.get("image_url")),
+            image_url=_resolve_image_for(ctx, c.get("image_url"), c["name"]),
             stadium=c.get("stadium"), city=c.get("city"),
         )
         for c in raw_clubs
