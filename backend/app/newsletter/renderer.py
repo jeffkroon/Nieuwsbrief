@@ -13,6 +13,7 @@ from app.newsletter.models import PRICE_ON_REQUEST, Club, Match, NewsletterConte
 from app.newsletter.styles import effective_styles, style_replacements
 
 BANNER_MARKER = "<!-- ##BANNERS## -->"
+CARD_MARKER = "<!-- ##CARDS## -->"
 
 # Onze interne placeholders zijn HOOFDLETTERS_MET_UNDERSCORE zonder spaties. Brevo-tags
 # ({{ contact.EMAIL }}, {{ unsubscribe }}) hebben spaties/kleine letters en matchen dus
@@ -153,6 +154,106 @@ def render_club_banner(club: Club, brand: dict) -> str:
 <tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
 
 
+def _card_cell(
+    *, title: str, subtitle: str, img_url: str, price: str, button_text: str, button_url: str, brand: dict
+) -> str:
+    """Eén kaart-cel (foto boven, naam, stadion/stad, prijs, knop) in de 2-koloms grid."""
+    st = effective_styles(brand)
+    if price == PRICE_ON_REQUEST:
+        price_va, price_amount = "", "op aanvraag"
+    else:
+        price_va, price_amount = "v.a.", price
+    subtitle_html = (
+        f'<p style="margin:0 0 10px 0; font-family:{st["font"]}; font-size:11px; '
+        f'color:#999999; line-height:1.4;">{subtitle}</p>'
+        if subtitle
+        else ""
+    )
+    va_html = (
+        f'<span style="display:block; font-family:{st["font"]}; font-size:10px; color:#888888; '
+        f'line-height:1.2; margin:0;">{price_va}</span>'
+        if price_va
+        else ""
+    )
+    return f"""<td class="card-cell" width="290" valign="top" style="width:290px; vertical-align:top;">
+  <table class="card" cellspacing="0" cellpadding="0" border="0" width="290"
+    style="width:290px; border:2px solid #e8e8e8; border-radius:6px; border-collapse:separate; background:#ffffff; vertical-align:top;">
+  <tbody>
+    <tr><td style="padding:0; line-height:0; font-size:0; border-radius:4px 4px 0 0; overflow:hidden;">
+      <img src="{img_url}" width="290" height="290" border="0" alt="{title}" class="card-img-el" style="display:block; width:290px; height:290px;">
+    </td></tr>
+    <tr><td style="padding:14px 14px 16px 14px;">
+      <p style="margin:0 0 3px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:18px; font-weight:900; color:{st["accent"]}; text-transform:uppercase; letter-spacing:1px; line-height:1.2;">{title.upper()}</p>
+      {subtitle_html}
+      {va_html}
+      <span style="display:block; font-family:{st["font"]}; font-size:22px; font-weight:bold; color:#1a3a6e; line-height:1.1; margin:0 0 6px 0;">{price_amount}</span>
+      <table cellspacing="0" cellpadding="0" border="0" width="100%" style="border-radius:4px; border-collapse:separate; background:{st["button_bg"]};">
+      <tbody><tr><td align="center" style="padding:10px; border-radius:4px;">
+        <a href="{button_url}" target="_blank" style="color:{st["button_text"]}; font-family:{st["font"]}; font-size:13px; font-weight:bold; text-decoration:none; white-space:nowrap;">{button_text}</a>
+      </td></tr></tbody></table>
+    </td></tr>
+  </tbody></table>
+</td>"""
+
+
+def _empty_card_cell() -> str:
+    """Lege cel om een oneven laatste kaart links uit te lijnen op 290px."""
+    return '<td class="card-cell" width="290" style="width:290px;">&nbsp;</td>'
+
+
+def render_cards(matches: tuple[Match, ...], clubs: tuple[Club, ...], brand: dict) -> str:
+    """Render wedstrijden en clubs als een responsive 2-koloms kaart-grid.
+
+    Wedstrijden worden 'HOME' met ondertitel 'vs AWAY'; clubs worden de clubnaam met
+    stadion/stad. Lege invoer geeft een lege string terug.
+    """
+    cells: list[str] = []
+    for m in matches:
+        cells.append(
+            _card_cell(
+                title=m.home,
+                subtitle=f"vs {m.away}",
+                img_url=m.image_url or club_image_url(m.home, brand),
+                price=m.price,
+                button_text="Bestel tickets",
+                button_url=m.url,
+                brand=brand,
+            )
+        )
+    for c in clubs:
+        venue = " &bull; ".join(p for p in (c.stadium, c.city) if p)
+        cells.append(
+            _card_cell(
+                title=c.name,
+                subtitle=venue,
+                img_url=c.image_url or club_image_url(c.name, brand),
+                price=c.price,
+                button_text="Bekijk alle wedstrijden",
+                button_url=c.url,
+                brand=brand,
+            )
+        )
+    if not cells:
+        return ""
+
+    spacer = '<td class="card-spacer" width="10" style="width:10px; font-size:0; line-height:0;">&nbsp;</td>'
+    gap = (
+        '<table cellspacing="0" cellpadding="0" border="0" width="100%"><tbody><tr>'
+        '<td height="14" style="font-size:14px; line-height:14px;">&nbsp;</td></tr></tbody></table>'
+    )
+    rows: list[str] = []
+    for i in range(0, len(cells), 2):
+        left = cells[i]
+        right = cells[i + 1] if i + 1 < len(cells) else _empty_card_cell()
+        rows.append(
+            '<table class="card-outer" cellspacing="0" cellpadding="0" border="0" width="590" align="center" '
+            'style="width:590px; table-layout:fixed; border-collapse:collapse;"><tbody><tr>'
+            f"{left}{spacer}{right}"
+            "</tr></tbody></table>"
+        )
+    return gap.join(rows)
+
+
 def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
     """Bouw de CTA-knop over de headerfoto.
 
@@ -217,6 +318,9 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
     banners = "".join(render_banner(m, brand) for m in content.matches)
     banners += "".join(render_club_banner(c, brand) for c in content.clubs)
     html = html.replace(BANNER_MARKER, banners)
+    # Kaart-stijl blok (alternatief voor banners): een template gebruikt het ene OF het
+    # andere; de marker die er niet is, is gewoon een no-op.
+    html = html.replace(CARD_MARKER, render_cards(content.matches, content.clubs, brand))
     # Ruim ongevulde eigen placeholders op (bv. als een template een veld weglaat of
     # een onbekende toevoegt), zodat er nooit een rauwe {{IETS}} in de mail belandt.
     return _INTERNAL_PLACEHOLDER.sub("", html)

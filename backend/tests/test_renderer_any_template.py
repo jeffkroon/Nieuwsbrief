@@ -54,6 +54,30 @@ def test_brevo_runtime_tags_survive() -> None:
     assert "{{ unsubscribe }}" in out
 
 
+def test_card_marker_renders_cards() -> None:
+    from app.newsletter.models import Club
+    from app.newsletter.renderer import render_cards
+
+    template = "<html>{{INTRO_1}} <!-- ##CARDS## --></html>"
+    clubs = (
+        Club(name="Inter Milan", url="https://x.nl/tickets/italie/inter-milan/", price="op aanvraag",
+             image_url="https://cdn/inter.png", stadium="Giuseppe Meazza", city="Milaan"),
+    )
+    content = NewsletterContent(
+        theme="T", subject="S", intro_1="i1", intro_2="i2", main_cta_text="m",
+        main_cta_url="https://x", slot_cta_text="s", slot_cta_url="https://x",
+        matches=(), clubs=clubs,
+    )
+    out = render_newsletter(template, BRAND, content)
+    assert "INTER MILAN" in out
+    assert "https://cdn/inter.png" in out  # echte foto, geen dummy
+    assert "/tickets/italie/inter-milan/" in out  # juiste link
+    assert "Giuseppe Meazza" in out and "Milaan" in out
+    assert "<!-- ##CARDS## -->" not in out  # marker vervangen
+    # Losse helper geeft lege string bij geen items.
+    assert render_cards((), (), BRAND) == ""
+
+
 def test_template_without_banner_marker_degrades() -> None:
     # Geen marker en met wedstrijden: geen blokken, geen fout, schone output.
     template = "<html>{{INTRO_1}} geen marker hier</html>"
