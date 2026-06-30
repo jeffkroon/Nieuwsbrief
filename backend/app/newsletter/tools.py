@@ -45,6 +45,7 @@ class ToolContext:
     conversation_id: uuid.UUID | None = None
     brevo_factory: Callable[[str], BrevoClient] = BrevoClient
     http_client: httpx.Client | None = None
+    template_id: uuid.UUID | None = None  # gekozen template in de chat; None = standaard
 
 
 TOOL_DEFINITIONS = [
@@ -350,12 +351,18 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         clubs=tuple(clubs),
     )
 
-    # Voorkeur: de standaard-template van dit bedrijf uit de DB (incl. eigen
-    # kleuren/lettertype). Geen template? Dan de ingebouwde layout uit het bestand.
-    default_tpl = templates_repo.get_default_template(ctx.session, tenant.id)
-    if default_tpl is not None:
-        template_html = default_tpl.html
-        brand = {**brand, "styles": default_tpl.styles or {}}
+    # Template-keuze: de in de chat gekozen template (ctx.template_id), anders de
+    # standaard van dit bedrijf, anders de ingebouwde layout uit het bestand.
+    chosen_tpl = None
+    if ctx.template_id is not None:
+        candidate = templates_repo.get_template(ctx.session, ctx.template_id)
+        if candidate is not None and candidate.tenant_id == tenant.id:
+            chosen_tpl = candidate
+    if chosen_tpl is None:
+        chosen_tpl = templates_repo.get_default_template(ctx.session, tenant.id)
+    if chosen_tpl is not None:
+        template_html = chosen_tpl.html
+        brand = {**brand, "styles": chosen_tpl.styles or {}}
     else:
         template_html = load_template(brand.get("template", DEFAULT_TEMPLATE))
     html = render_newsletter(template_html, brand, content)

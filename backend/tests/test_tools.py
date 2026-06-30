@@ -274,6 +274,38 @@ def test_create_draft_with_clubs(session, cipher) -> None:
     assert result["clubs_used"][0]["price"] == "€ 349"
 
 
+def test_create_draft_uses_chosen_template(session, cipher) -> None:
+    # Een in de chat gekozen template (ctx.template_id) wint van de standaard.
+    from app.repositories import templates as templates_repo
+
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    # Standaard-template + een tweede, gekozen template met herkenbare inhoud.
+    templates_repo.create_template(session, tenant_id=tenant.id, name="Standaard",
+                                   html="<html>STANDAARD {{INTRO_1}} <!-- ##BANNERS## --></html>")
+    chosen = templates_repo.create_template(
+        session, tenant_id=tenant.id, name="Speciaal",
+        html="<html>SPECIAAL {{INTRO_1}} {{STYLE_BUTTON_BG}} <!-- ##BANNERS## --></html>",
+        styles={"button_bg": "#abcdef"})
+
+    captured: dict = {}
+
+    def factory(key):
+        client = FakeBrevo(key)
+        captured["client"] = client
+        return client
+
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        brevo_factory=factory, template_id=chosen.id,
+    )
+    execute_tool("create_newsletter_draft", payload, ctx)
+    html = captured["client"].calls[0]["html"]
+    assert "SPECIAAL" in html and "STANDAARD" not in html  # gekozen layout gebruikt
+    assert "#abcdef" in html  # met de stijl van die template
+
+
 def test_create_draft_general_no_matches(session, cipher) -> None:
     # Algemene nieuwsbrief zonder wedstrijden: geen fout, gewoon een concept.
     tenant = _tenant(session)

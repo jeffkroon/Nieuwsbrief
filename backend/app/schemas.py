@@ -162,10 +162,12 @@ class ConversationStart(BaseModel):
     tenant_id: uuid.UUID
     channel: Channel = "web"
     message: str = Field(min_length=1)
+    template_id: uuid.UUID | None = None  # gekozen layout; None = standaard van het bedrijf
 
 
 class MessageSend(BaseModel):
     message: str = Field(min_length=1)
+    template_id: uuid.UUID | None = None
 
 
 class ConversationReply(BaseModel):

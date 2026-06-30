@@ -6,6 +6,7 @@ draait één agent-beurt met de tools van deze tenant, en bewaart het antwoord.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -34,6 +35,7 @@ def run_conversation_turn(
     cipher: SecretCipher,
     conversation: Conversation,
     user_text: str,
+    template_id: uuid.UUID | None = None,
 ) -> TurnReply:
     repo.add_message(session, conversation.id, "user", user_text)
 
@@ -50,6 +52,7 @@ def run_conversation_turn(
         cipher=cipher,
         llm=client,
         conversation_id=conversation.id,
+        template_id=template_id,
     )
 
     result = run_agent_turn(
