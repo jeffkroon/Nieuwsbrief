@@ -70,9 +70,9 @@ def test_chat_rate_limit_dependency() -> None:
         return Request(scope)
 
     req = fake_request("8.8.8.8")
-    for _ in range(15):
+    for _ in range(conv._chat_limiter.max_hits):
         conv.chat_rate_limit(req)  # mag
     with pytest.raises(HTTPException) as exc:
-        conv.chat_rate_limit(req)  # 16e -> geblokkeerd
+        conv.chat_rate_limit(req)  # één over de limiet -> geblokkeerd
     assert exc.value.status_code == 429
     conv._chat_limiter.reset()

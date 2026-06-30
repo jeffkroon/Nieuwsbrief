@@ -102,6 +102,18 @@ def test_start_conversation_simple(client, session, fake_anthropic) -> None:
     assert uuid.UUID(body["conversation_id"])
 
 
+def test_message_too_long_is_rejected(client, session) -> None:
+    # Een enorme lap tekst wordt geweigerd (voorkomt dure input-spam).
+    from app.schemas import MAX_MESSAGE_CHARS
+
+    tenant = _tenant(session)
+    resp = client.post(
+        "/conversations",
+        json={"tenant_id": str(tenant.id), "message": "x" * (MAX_MESSAGE_CHARS + 1)},
+    )
+    assert resp.status_code == 422  # puur validatie aan de grens, geen agent-call
+
+
 def test_start_conversation_runs_tool(client, session, fake_anthropic) -> None:
     tenant = _tenant(session)
     fake_anthropic(

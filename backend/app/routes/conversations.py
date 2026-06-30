@@ -18,8 +18,8 @@ from app.services.crypto import SecretCipher
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
-# Max 15 chat-beurten per minuut per IP (een beurt is duur: ~30-60s + LLM/Brevo-kosten).
-_chat_limiter = SlidingWindowRateLimiter(max_hits=15, window_seconds=60)
+# Max 10 chat-beurten per minuut per IP (een beurt is duur: meerdere LLM-calls + Brevo).
+_chat_limiter = SlidingWindowRateLimiter(max_hits=10, window_seconds=60)
 
 
 def chat_rate_limit(request: Request) -> None:
