@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import FileResponse, RedirectResponse
 
 from app.config import Settings, get_settings
+from app.deps import current_role
 from app.middleware import COOKIE_NAME, SESSION_MAX_AGE, make_session_token
 from app.ratelimit import SlidingWindowRateLimiter, client_ip
 
@@ -18,6 +19,19 @@ router = APIRouter(tags=["auth"])
 _login_limiter = SlidingWindowRateLimiter(max_hits=5, window_seconds=300)
 
 _LOGIN_HTML = Path(__file__).resolve().parent.parent / "static" / "login.html"
+
+
+def _authenticate(username: str, password: str, settings: Settings) -> str | None:
+    """Bepaal de rol op basis van de inloggegevens, of None bij fout wachtwoord."""
+    if settings.admin_password and pysecrets.compare_digest(
+        username, settings.admin_user
+    ) and pysecrets.compare_digest(password, settings.admin_password):
+        return "admin"
+    if settings.access_password and pysecrets.compare_digest(
+        username, settings.access_user
+    ) and pysecrets.compare_digest(password, settings.access_password):
+        return "company"
+    return None
 
 
 @router.get("/login", include_in_schema=False, response_model=None)
@@ -39,21 +53,25 @@ def login_submit(
         return RedirectResponse("/", status_code=303)
     if not _login_limiter.allow(client_ip(request)):
         return RedirectResponse("/login?error=2", status_code=303)
-    ok = pysecrets.compare_digest(username, settings.access_user) and pysecrets.compare_digest(
-        password, settings.access_password
-    )
-    if not ok:
+    role = _authenticate(username, password, settings)
+    if role is None:
         return RedirectResponse("/login?error=1", status_code=303)
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
         COOKIE_NAME,
-        make_session_token(settings.access_password),
+        make_session_token(settings.access_password, role),
         max_age=SESSION_MAX_AGE,
         httponly=True,
         samesite="lax",
         secure=request.url.scheme == "https",
     )
     return response
+
+
+@router.get("/me", include_in_schema=False)
+def me(role: str = Depends(current_role)) -> dict:
+    """Welke rol heeft de huidige sessie? Gebruikt de frontend om admin-UI te tonen."""
+    return {"role": role, "is_admin": role == "admin"}
 
 
 @router.get("/logout", include_in_schema=False)

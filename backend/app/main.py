@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from app.config import get_settings
 from app.middleware import LoginAuthMiddleware
-from app.routes import auth, conversations, health, images, tenants
+from app.routes import auth, conversations, health, images, templates, tenants
 
 app = FastAPI(title="Nieuwsbrief-product", version="0.1.0")
 
@@ -23,6 +23,7 @@ app.include_router(auth.router)
 app.include_router(tenants.router)
 app.include_router(conversations.router)
 app.include_router(images.router)
+app.include_router(templates.router)
 
 _INDEX_HTML = Path(__file__).resolve().parent / "static" / "index.html"
 

@@ -18,26 +18,35 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 COOKIE_NAME = "nb_session"
 SESSION_MAX_AGE = 7 * 24 * 3600  # 7 dagen
 EXEMPT_PATHS = {"/health", "/login", "/logout"}
+DEFAULT_ROLE = "company"
 
 
-def make_session_token(secret: str) -> str:
-    payload = str(int(time.time()))
+def make_session_token(secret: str, role: str = DEFAULT_ROLE) -> str:
+    payload = f"{role}:{int(time.time())}"
     sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{sig}"
 
 
-def valid_session_token(token: str | None, secret: str, max_age: int = SESSION_MAX_AGE) -> bool:
+def session_role(token: str | None, secret: str, max_age: int = SESSION_MAX_AGE) -> str | None:
+    """Geef de rol uit een geldig token terug, of None bij ongeldig/verlopen."""
     if not token or "." not in token:
-        return False
-    payload, _, sig = token.partition(".")
+        return None
+    payload, _, sig = token.rpartition(".")
     expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(sig, expected):
-        return False
+        return None
+    role, _, issued_raw = payload.rpartition(":")
     try:
-        issued = int(payload)
+        issued = int(issued_raw)
     except ValueError:
-        return False
-    return (time.time() - issued) < max_age
+        return None
+    if (time.time() - issued) >= max_age:
+        return None
+    return role or DEFAULT_ROLE
+
+
+def valid_session_token(token: str | None, secret: str, max_age: int = SESSION_MAX_AGE) -> bool:
+    return session_role(token, secret, max_age) is not None
 
 
 class LoginAuthMiddleware(BaseHTTPMiddleware):

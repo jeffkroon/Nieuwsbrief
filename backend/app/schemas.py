@@ -99,6 +99,64 @@ class ImageCategoriesRead(BaseModel):
     categories: list[str]
 
 
+# --- Templates -------------------------------------------------------------
+# De HTML (layout) wordt door Dunion-admins beheerd; `styles` (kleuren/lettertype)
+# mag een bedrijf zelf aanpassen via TemplateStyleUpdate.
+class TemplateCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    html: str = Field(min_length=1)
+    styles: dict = Field(default_factory=dict)
+    is_default: bool = False
+
+
+class TemplateUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=120)
+    html: str | None = None
+    styles: dict | None = None
+
+
+class TemplateStyleUpdate(BaseModel):
+    styles: dict = Field(default_factory=dict)
+
+
+class TemplateRead(_ORMModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    name: str
+    html: str
+    styles: dict
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class TemplateSummary(_ORMModel):
+    """Lijst-weergave zonder de zware HTML-payload."""
+
+    id: uuid.UUID
+    name: str
+    styles: dict
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class TemplateValidation(BaseModel):
+    ok: bool
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class TemplateValidateRequest(BaseModel):
+    html: str = Field(min_length=1)
+
+
+class TemplatePreviewRequest(BaseModel):
+    template_id: uuid.UUID | None = None
+    html: str | None = None
+    styles: dict = Field(default_factory=dict)
+
+
 # --- Conversation turns (chat) --------------------------------------------
 class ConversationStart(BaseModel):
     tenant_id: uuid.UUID

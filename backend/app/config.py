@@ -27,9 +27,13 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
     images_bucket: str = "tenant-images"
-    # Optioneel wachtwoord-slot (HTTP Basic). Leeg = geen slot (lokaal/dev).
+    # Optioneel wachtwoord-slot (sessie-cookie). Leeg = geen slot (lokaal/dev).
     access_user: str = "dunion"
     access_password: str | None = None
+    # Apart admin-wachtwoord: hiermee inloggen geeft de 'admin'-rol (Dunion), die
+    # template-layouts mag beheren. Leeg = geen aparte admin (alleen 'company').
+    admin_user: str = "dunion"
+    admin_password: str | None = None
 
     @property
     def database_url(self) -> str:

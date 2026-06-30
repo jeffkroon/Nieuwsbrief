@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Integer,
@@ -182,6 +183,30 @@ class Image(Base):
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class Template(Base):
+    """Een nieuwsbrief-layout per bedrijf.
+
+    De HTML (layout) wordt door Dunion-admins beheerd; `styles` (kleuren/lettertype)
+    mag een bedrijf zelf aanpassen. Eén template per tenant kan `is_default` zijn.
+    """
+
+    __tablename__ = "templates"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="templates_tenant_id_name_key"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    html: Mapped[str] = mapped_column(Text, nullable=False)
+    styles: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
 class AuditEvent(Base):
