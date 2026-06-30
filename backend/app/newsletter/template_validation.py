@@ -25,6 +25,10 @@ RECOMMENDED: dict[str, str] = {
     "{{HOOFD_CTA_TEKST}}": "tekst van de hoofdknop",
     "{{LOGO_URL}}": "logo",
     "{{BRAND_NAME}}": "bedrijfsnaam in de footer",
+    # Stijl-placeholders: zonder deze doet de kleuren-/lettertype-builder niets op die plekken.
+    "{{STYLE_FONT}}": "lettertype uit de stijl-builder (anders is het lettertype niet instelbaar)",
+    "{{STYLE_TEXT_COLOR}}": "tekstkleur uit de stijl-builder (anders is de tekstkleur niet instelbaar)",
+    "{{STYLE_BUTTON_BG}}": "knopkleur uit de stijl-builder (anders is de knopkleur niet instelbaar)",
 }
 
 
