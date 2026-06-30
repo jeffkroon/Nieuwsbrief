@@ -7,15 +7,13 @@ nieuwsbrief of een kaart-/review-layout zonder wedstrijdblokken) gewoon kan.
 
 from __future__ import annotations
 
-from app.newsletter.renderer import BANNER_MARKER
+from app.newsletter.renderer import BANNER_MARKER, CARD_MARKER
 
 # Niets is hard verplicht; een admin bepaalt zelf de layout.
 REQUIRED: dict[str, str] = {}
 
 # Aanbevolen placeholders: ontbreken levert een waarschuwing op, geen blokkade.
 RECOMMENDED: dict[str, str] = {
-    BANNER_MARKER: "zonder deze marker komen er geen wedstrijd-/clubblokken in de mail "
-    "(prima voor een algemene of kaart-layout)",
     "{{ unsubscribe }}": "afmeldlink (wettelijk verplicht voor e-mail)",
     "{{ contact.EMAIL }}": "e-mailadres van de ontvanger",
     "{{HEADER_TITEL}}": "titel over de headerfoto",
@@ -45,4 +43,10 @@ def validate_template_html(html: str) -> tuple[list[str], list[str]]:
         for marker, desc in RECOMMENDED.items()
         if marker not in text
     ]
+    # Een blok-marker (banners OF kaarten) is nodig om wedstrijden/clubs te tonen.
+    if BANNER_MARKER not in text and CARD_MARKER not in text:
+        warnings.append(
+            f"geen blok-marker: zonder {BANNER_MARKER} of {CARD_MARKER} komen er geen "
+            "wedstrijd-/clubblokken in de mail (prima voor een puur algemene nieuwsbrief)"
+        )
     return errors, warnings
