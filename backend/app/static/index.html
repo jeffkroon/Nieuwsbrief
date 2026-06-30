@@ -53,7 +53,8 @@
   .style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
   .style-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
   .style-grid input[type=color] { width: 100%; height: 38px; border: 1px solid #cfd3da; border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
-  #tmplPreviewFrame { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; background: #fff; }
+  .preview-frame { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; background: #fff; }
+  .preview-frame.mini { height: 360px; }
   .tmpl-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
   .tmpl-item .badge { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
   .tmpl-item button { font-size: 12px; color: #c0392b; background: none; border: none; cursor: pointer; }
@@ -125,11 +126,12 @@
           <label>Accentkleur (randen) <input type="color" id="stAccent" value="#ff7200"></label>
         </div>
         <div class="row" style="margin-top:14px;">
-          <button class="btn" id="tmplPreview">Voorbeeld bekijken</button>
+          <button class="btn secondary" id="tmplPreview">Voorbeeld verversen</button>
           <button class="btn" id="tmplSaveStyles">Stijl opslaan</button>
           <span id="tmplStatus" class="hint"></span>
         </div>
-        <iframe id="tmplPreviewFrame" title="Voorbeeld"></iframe>
+        <p class="hint" style="margin:10px 0 0;">Live voorbeeld, verandert direct mee met je kleuren en lettertype:</p>
+        <iframe id="tmplPreviewFrame" class="preview-frame" title="Voorbeeld"></iframe>
       </div>
 
       <div class="card" id="adminCard" style="display:none;">
@@ -141,9 +143,12 @@
         <textarea id="newTmplHtml" rows="10" placeholder="Plak hier de HTML van de layout (met {{ }}-placeholders en de &lt;!-- ##BANNERS## --&gt; marker)" style="width:100%; font-family:monospace; font-size:12px; padding:10px; border:1px solid #cfd3da; border-radius:8px;"></textarea>
         <div class="row" style="margin-top:10px;">
           <button class="btn secondary" id="tmplValidate">Valideer</button>
+          <button class="btn secondary" id="adminPreview">Voorbeeld verversen</button>
           <button class="btn" id="tmplCreate">Toevoegen</button>
           <span id="adminStatus" class="hint"></span>
         </div>
+        <p class="hint" style="margin:10px 0 0;">Live voorbeeld (ververst automatisch terwijl je typt):</p>
+        <iframe id="adminPreviewFrame" class="preview-frame mini" title="Voorbeeld layout"></iframe>
         <div id="tmplList" style="margin-top:14px;"></div>
       </div>
     </div>
@@ -366,7 +371,8 @@ async function loadTemplates() {
     tmplSelect.appendChild(o);
   }
   const def = templatesCache.find(t => t.is_default) || templatesCache[0];
-  if (def) { tmplSelect.value = def.id; applyStyleInputs(def.styles || {}); }
+  if (def) { tmplSelect.value = def.id; applyStyleInputs(def.styles || {}); renderStylePreview(); }
+  else { previewFrame.srcdoc = ""; }
   renderAdminList();
 }
 
@@ -377,20 +383,25 @@ function selectedTemplate() {
 tmplSelect.addEventListener("change", () => {
   const t = selectedTemplate();
   applyStyleInputs(t ? (t.styles || {}) : {});
+  renderStylePreview();
 });
 
-document.getElementById("tmplPreview").onclick = async () => {
+async function renderStylePreview() {
   const tid = tenantSel.value;
   const t = selectedTemplate();
-  tmplStatus.textContent = "Voorbeeld laden...";
-  const body = { styles: readStyleInputs() };
-  if (t) body.template_id = t.id;
-  const res = await fetch(`/tenants/${tid}/templates/preview`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) { const e = await res.json().catch(() => ({})); tmplStatus.textContent = "Fout: " + (e.detail || res.status); return; }
-  previewFrame.srcdoc = await res.text();
-  tmplStatus.textContent = "";
-};
+  if (!tid || !t) { previewFrame.srcdoc = ""; return; }
+  const body = { template_id: t.id, styles: readStyleInputs() };
+  try {
+    const res = await fetch(`/tenants/${tid}/templates/preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); tmplStatus.textContent = "Voorbeeld: " + (e.detail || res.status); return; }
+    previewFrame.srcdoc = await res.text();
+    tmplStatus.textContent = "";
+  } catch (e) { tmplStatus.textContent = "Voorbeeld mislukt: " + e.message; }
+}
+let stylePreviewTimer = null;
+function scheduleStylePreview() { clearTimeout(stylePreviewTimer); stylePreviewTimer = setTimeout(renderStylePreview, 500); }
+document.getElementById("tmplPreview").onclick = renderStylePreview;
 
 document.getElementById("tmplSaveStyles").onclick = async () => {
   const tid = tenantSel.value;
@@ -430,9 +441,38 @@ function renderAdminList() {
   }
 }
 
+const adminPreviewFrame = document.getElementById("adminPreviewFrame");
+async function renderAdminPreview() {
+  const html = document.getElementById("newTmplHtml").value.trim();
+  if (!html) { adminPreviewFrame.srcdoc = ""; return; }
+  try {
+    const res = await fetch(`/tenants/${tenantSel.value}/templates/preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html, styles: readStyleInputs() }) });
+    adminPreviewFrame.srcdoc = res.ok
+      ? await res.text()
+      : `<p style="font-family:sans-serif;color:#c0392b;padding:12px;">Kan voorbeeld niet maken (${res.status}).</p>`;
+  } catch (e) { adminPreviewFrame.srcdoc = `<p style="font-family:sans-serif;padding:12px;">Voorbeeld mislukt.</p>`; }
+}
+let adminPreviewTimer = null;
+function scheduleAdminPreview() {
+  clearTimeout(adminPreviewTimer);
+  adminPreviewTimer = setTimeout(renderAdminPreview, 700);
+}
+document.getElementById("newTmplHtml").addEventListener("input", scheduleAdminPreview);
+document.getElementById("adminPreview").onclick = renderAdminPreview;
+for (const k in STYLE_INPUTS) STYLE_INPUTS[k].addEventListener("input", () => {
+  scheduleStylePreview();
+  if (isAdmin && document.getElementById("newTmplHtml").value.trim()) scheduleAdminPreview();
+});
+
 document.getElementById("tmplStarter").onclick = async () => {
   const res = await fetch(`/tenants/${tenantSel.value}/templates/starter`);
-  if (res.ok) { document.getElementById("newTmplHtml").value = (await res.json()).html; adminStatus.textContent = "Standaard layout geladen, pas aan en sla op."; }
+  if (res.ok) {
+    document.getElementById("newTmplHtml").value = (await res.json()).html;
+    adminStatus.textContent = "Standaard layout geladen, pas aan en sla op.";
+    renderAdminPreview();
+  }
 };
 
 document.getElementById("tmplValidate").onclick = async () => {
