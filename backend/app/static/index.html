@@ -53,7 +53,8 @@
   .style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
   .style-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
   .style-grid input[type=color] { width: 100%; height: 38px; border: 1px solid #cfd3da; border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
-  #tmplPreviewFrame { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; background: #fff; }
+  .preview-frame { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; background: #fff; }
+  .preview-frame.mini { height: 360px; }
   .tmpl-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
   .tmpl-item .badge { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
   .tmpl-item button { font-size: 12px; color: #c0392b; background: none; border: none; cursor: pointer; }
@@ -129,7 +130,7 @@
           <button class="btn" id="tmplSaveStyles">Stijl opslaan</button>
           <span id="tmplStatus" class="hint"></span>
         </div>
-        <iframe id="tmplPreviewFrame" title="Voorbeeld"></iframe>
+        <iframe id="tmplPreviewFrame" class="preview-frame" title="Voorbeeld"></iframe>
       </div>
 
       <div class="card" id="adminCard" style="display:none;">
@@ -141,9 +142,12 @@
         <textarea id="newTmplHtml" rows="10" placeholder="Plak hier de HTML van de layout (met {{ }}-placeholders en de &lt;!-- ##BANNERS## --&gt; marker)" style="width:100%; font-family:monospace; font-size:12px; padding:10px; border:1px solid #cfd3da; border-radius:8px;"></textarea>
         <div class="row" style="margin-top:10px;">
           <button class="btn secondary" id="tmplValidate">Valideer</button>
+          <button class="btn secondary" id="adminPreview">Voorbeeld verversen</button>
           <button class="btn" id="tmplCreate">Toevoegen</button>
           <span id="adminStatus" class="hint"></span>
         </div>
+        <p class="hint" style="margin:10px 0 0;">Live voorbeeld (ververst automatisch terwijl je typt):</p>
+        <iframe id="adminPreviewFrame" class="preview-frame mini" title="Voorbeeld layout"></iframe>
         <div id="tmplList" style="margin-top:14px;"></div>
       </div>
     </div>
@@ -430,9 +434,37 @@ function renderAdminList() {
   }
 }
 
+const adminPreviewFrame = document.getElementById("adminPreviewFrame");
+async function renderAdminPreview() {
+  const html = document.getElementById("newTmplHtml").value.trim();
+  if (!html) { adminPreviewFrame.srcdoc = ""; return; }
+  try {
+    const res = await fetch(`/tenants/${tenantSel.value}/templates/preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html, styles: readStyleInputs() }) });
+    adminPreviewFrame.srcdoc = res.ok
+      ? await res.text()
+      : `<p style="font-family:sans-serif;color:#c0392b;padding:12px;">Kan voorbeeld niet maken (${res.status}).</p>`;
+  } catch (e) { adminPreviewFrame.srcdoc = `<p style="font-family:sans-serif;padding:12px;">Voorbeeld mislukt.</p>`; }
+}
+let adminPreviewTimer = null;
+function scheduleAdminPreview() {
+  clearTimeout(adminPreviewTimer);
+  adminPreviewTimer = setTimeout(renderAdminPreview, 700);
+}
+document.getElementById("newTmplHtml").addEventListener("input", scheduleAdminPreview);
+document.getElementById("adminPreview").onclick = renderAdminPreview;
+for (const k in STYLE_INPUTS) STYLE_INPUTS[k].addEventListener("input", () => {
+  if (isAdmin && document.getElementById("newTmplHtml").value.trim()) scheduleAdminPreview();
+});
+
 document.getElementById("tmplStarter").onclick = async () => {
   const res = await fetch(`/tenants/${tenantSel.value}/templates/starter`);
-  if (res.ok) { document.getElementById("newTmplHtml").value = (await res.json()).html; adminStatus.textContent = "Standaard layout geladen, pas aan en sla op."; }
+  if (res.ok) {
+    document.getElementById("newTmplHtml").value = (await res.json()).html;
+    adminStatus.textContent = "Standaard layout geladen, pas aan en sla op.";
+    renderAdminPreview();
+  }
 };
 
 document.getElementById("tmplValidate").onclick = async () => {
