@@ -4,8 +4,10 @@ Draait de gespreks-loop: stuurt berichten naar Claude, voert tool-calls uit via
 de meegegeven dispatch-functie, en gaat door tot Claude klaar is. De Anthropic-
 client wordt geinjecteerd zodat tests een fake kunnen meegeven.
 
-Model claude-opus-4-8 met adaptive thinking en effort 'high', conform de
-Anthropic-richtlijnen. Geen budget_tokens (verwijderd op dit model).
+Model claude-sonnet-4-6 met adaptive thinking en effort 'high': sterk genoeg voor
+deze tool-taak en ~40% goedkoper per token dan Opus. Geen budget_tokens (gebruik
+adaptive thinking). De system-prompt + tools worden gecachet (prompt caching), zodat
+dat vaste deel niet elke loop-stap opnieuw vol wordt afgerekend.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-DEFAULT_MODEL = "claude-opus-4-8"
+DEFAULT_MODEL = "claude-sonnet-4-6"
 MAX_OUTPUT_TOKENS = 16000
 MAX_ITERATIONS = 12
 
@@ -54,6 +56,10 @@ def run_agent_turn(
 ) -> ConversationResult:
     """Voer één agent-beurt uit tot Claude stopt of een limiet bereikt is."""
     convo: list[dict] = list(messages)
+    # Cache de system-prompt (rendert na de tools, dus dit cachet tools + system samen).
+    # Dat vaste prefix wordt elke loop-stap en elke beurt opnieuw verstuurd; gecachet
+    # kost het daarna ~10% i.p.v. de volle prijs.
+    cached_system = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
 
     for iteration in range(1, max_iterations + 1):
         response = client.messages.create(
@@ -61,7 +67,7 @@ def run_agent_turn(
             max_tokens=MAX_OUTPUT_TOKENS,
             thinking={"type": "adaptive"},
             output_config={"effort": "high"},
-            system=system,
+            system=cached_system,
             tools=tools,
             messages=convo,
         )

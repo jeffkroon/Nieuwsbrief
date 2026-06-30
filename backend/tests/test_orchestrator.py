@@ -116,6 +116,15 @@ def test_request_uses_correct_model_and_thinking() -> None:
     assert first["output_config"] == {"effort": "high"}
 
 
+def test_system_prompt_is_cached() -> None:
+    # De system-prompt moet als cache_control-blok meegaan (prompt caching), zodat het
+    # vaste prefix niet elke call vol wordt afgerekend.
+    client, _ = _run([FakeResponse([FakeText("ok")], "end_turn")])
+    system = client.messages.calls[0]["system"]
+    assert isinstance(system, list)
+    assert system[0]["cache_control"] == {"type": "ephemeral"}
+
+
 def test_pause_turn_continues() -> None:
     responses = [
         FakeResponse([], "pause_turn"),
