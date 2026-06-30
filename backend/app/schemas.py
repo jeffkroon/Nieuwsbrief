@@ -174,6 +174,7 @@ class ConversationReply(BaseModel):
     conversation_id: uuid.UUID
     reply: str
     stop_reason: str
+    preview_html: str | None = None  # voorbeeld-HTML voor het paneel naast de chat
 
 
 # --- Message --------------------------------------------------------------

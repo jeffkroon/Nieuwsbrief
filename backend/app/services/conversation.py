@@ -26,6 +26,7 @@ _REPLAYABLE_ROLES = {"user", "assistant"}
 class TurnReply:
     reply: str
     stop_reason: str
+    preview_html: str | None = None  # voorbeeld-HTML als de assistent preview_newsletter draaide
 
 
 def run_conversation_turn(
@@ -64,4 +65,7 @@ def run_conversation_turn(
     )
 
     repo.add_message(session, conversation.id, "assistant", result.final_text)
-    return TurnReply(reply=result.final_text, stop_reason=result.stop_reason)
+    preview_html = ctx.preview_holder[-1] if ctx.preview_holder else None
+    return TurnReply(
+        reply=result.final_text, stop_reason=result.stop_reason, preview_html=preview_html
+    )

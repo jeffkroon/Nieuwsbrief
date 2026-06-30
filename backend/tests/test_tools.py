@@ -306,6 +306,32 @@ def test_create_draft_uses_chosen_template(session, cipher) -> None:
     assert "#abcdef" in html  # met de stijl van die template
 
 
+def test_preview_newsletter_returns_html_without_brevo(session, cipher) -> None:
+    # Preview rendert de HTML, vult preview_holder, en maakt GEEN Brevo-concept aan.
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["header_title"] = "TOPVOETBAL"
+    holder: list[str] = []
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        brevo_factory=lambda key: FakeBrevo(key), preview_holder=holder,
+    )
+    result = execute_tool("preview_newsletter", payload, ctx)
+    assert result["status"] == "preview"
+    assert "newsletter_id" not in result  # niets opgeslagen
+    assert len(holder) == 1
+    assert "TOPVOETBAL" in holder[0]  # de kop staat in de gerenderde HTML
+
+
+def test_preview_does_not_require_confirmation(session, cipher) -> None:
+    # Anders dan create_newsletter_draft heeft preview geen 'confirmed' nodig.
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k not in ("matches", "confirmed")}
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    result = execute_tool("preview_newsletter", payload, ctx)
+    assert result["status"] == "preview"
+
+
 def test_create_draft_general_no_matches(session, cipher) -> None:
     # Algemene nieuwsbrief zonder wedstrijden: geen fout, gewoon een concept.
     tenant = _tenant(session)
