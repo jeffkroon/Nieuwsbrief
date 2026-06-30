@@ -8,6 +8,7 @@ worden bewust niet vervangen.
 from __future__ import annotations
 
 from app.newsletter.models import PRICE_ON_REQUEST, Club, Match, NewsletterContent
+from app.newsletter.styles import effective_styles, style_replacements
 
 BANNER_MARKER = "<!-- ##BANNERS## -->"
 
@@ -47,7 +48,9 @@ def club_image_url(club: str, brand: dict) -> str:
 
 def render_banner(match: Match, brand: dict) -> str:
     """Bouw het HTML-tabelblok voor één wedstrijd. De link is de echte ticket-URL."""
-    color = brand["primary_color"]
+    st = effective_styles(brand)
+    color = st["accent"]
+    btn_bg, btn_text = st["button_bg"], st["button_text"]
     img_url = match.image_url or club_image_url(match.home, brand)
     link = match.url
     # De prijs bevat al een euroteken (bv "€ 249"); geen extra € toevoegen.
@@ -81,10 +84,10 @@ def render_banner(match: Match, brand: dict) -> str:
       <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:#111; line-height:1.2;">{price_amount}</span>
     </td></tr></tbody></table>
     <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
-      style="background:{color}; border-radius:4px; border-collapse:separate;">
+      style="background:{btn_bg}; border-radius:4px; border-collapse:separate;">
     <tbody><tr><td class="cta-btn" style="padding:12px 18px; border-radius:4px;">
       <a href="{link}" target="_blank"
-        style="color:#ffffff; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">Bestel tickets</a>
+        style="color:{btn_text}; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">Bestel tickets</a>
     </td></tr></tbody></table>
   </td>
 </tr></tbody></table>
@@ -94,7 +97,9 @@ def render_banner(match: Match, brand: dict) -> str:
 
 def render_club_banner(club: Club, brand: dict) -> str:
     """Bouw een club-blok: clubnaam, foto, prijs en een link naar de clubpagina."""
-    color = brand["primary_color"]
+    st = effective_styles(brand)
+    color = st["accent"]
+    btn_bg, btn_text = st["button_bg"], st["button_text"]
     img_url = club.image_url or club_image_url(club.name, brand)
     if club.price == PRICE_ON_REQUEST:
         price_va, price_amount = "", "op aanvraag"
@@ -129,10 +134,10 @@ def render_club_banner(club: Club, brand: dict) -> str:
       <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:#111; line-height:1.2;">{price_amount}</span>
     </td></tr></tbody></table>
     <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
-      style="background:{color}; border-radius:4px; border-collapse:separate;">
+      style="background:{btn_bg}; border-radius:4px; border-collapse:separate;">
     <tbody><tr><td class="cta-btn" style="padding:12px 18px; border-radius:4px;">
       <a href="{club.url}" target="_blank"
-        style="color:#ffffff; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">Bekijk alle wedstrijden</a>
+        style="color:{btn_text}; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">Bekijk alle wedstrijden</a>
     </td></tr></tbody></table>
   </td>
 </tr></tbody></table>
@@ -153,12 +158,12 @@ def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
         or brand.get("matches_url")
         or brand.get("base_tickets_url")
     )
-    color = brand["primary_color"]
+    st = effective_styles(brand)
     return (
         '<table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation" '
-        f'style="margin:0 auto; background:{color}; border-radius:4px; border-collapse:separate;">'
+        f'style="margin:0 auto; background:{st["button_bg"]}; border-radius:4px; border-collapse:separate;">'
         '<tbody><tr><td class="hero-cta" style="padding:13px 24px; border-radius:4px;">'
-        f'<a href="{url}" target="_blank" style="color:#ffffff; font-family:Arial,Helvetica,sans-serif; '
+        f'<a href="{url}" target="_blank" style="color:{st["button_text"]}; font-family:{st["font"]}; '
         'font-size:15px; font-weight:bold; text-decoration:none; white-space:nowrap; display:inline-block;">'
         f"{text}</a></td></tr></tbody></table>"
     )
@@ -195,6 +200,7 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
         "{{HOOFD_CTA_URL}}": content.main_cta_url,
         "{{SLOT_CTA_TEKST}}": content.slot_cta_text,
         "{{SLOT_CTA_URL}}": content.slot_cta_url,
+        **style_replacements(brand),
     }
     html = template
     for placeholder, value in replacements.items():

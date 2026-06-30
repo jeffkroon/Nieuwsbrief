@@ -28,6 +28,7 @@ from app.newsletter.templates import load_template
 from app.repositories import images as images_repo
 from app.repositories import newsletters as newsletters_repo
 from app.repositories import secrets as secrets_repo
+from app.repositories import templates as templates_repo
 from app.services.brevo import BrevoClient, BrevoError
 from app.services.crypto import SecretCipher
 
@@ -349,8 +350,15 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         clubs=tuple(clubs),
     )
 
-    template_name = brand.get("template", DEFAULT_TEMPLATE)
-    html = render_newsletter(load_template(template_name), brand, content)
+    # Voorkeur: de standaard-template van dit bedrijf uit de DB (incl. eigen
+    # kleuren/lettertype). Geen template? Dan de ingebouwde layout uit het bestand.
+    default_tpl = templates_repo.get_default_template(ctx.session, tenant.id)
+    if default_tpl is not None:
+        template_html = default_tpl.html
+        brand = {**brand, "styles": default_tpl.styles or {}}
+    else:
+        template_html = load_template(brand.get("template", DEFAULT_TEMPLATE))
+    html = render_newsletter(template_html, brand, content)
     list_ids = [tenant.brevo_list_id] if tenant.brevo_list_id else None
 
     client = ctx.brevo_factory(api_key)

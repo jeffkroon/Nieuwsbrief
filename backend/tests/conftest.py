@@ -18,6 +18,7 @@ MAIL_TABLES = (
     "mail.messages",
     "mail.newsletters",
     "mail.conversations",
+    "mail.templates",
     "mail.audit_events",
     "mail.tenants",
 )

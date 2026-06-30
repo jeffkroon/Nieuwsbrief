@@ -47,6 +47,16 @@
   .thumb .name { font-weight: 600; word-break: break-all; }
   .thumb button { margin-top: 4px; font-size: 11px; color: #c0392b; background: none; border: none; cursor: pointer; padding: 0; }
   .hint { color: var(--muted); font-size: 13px; }
+
+  /* Templates */
+  #templatesView { max-width: 900px; margin: 0 auto; padding: 20px; }
+  .style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .style-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+  .style-grid input[type=color] { width: 100%; height: 38px; border: 1px solid #cfd3da; border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
+  #tmplPreviewFrame { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; background: #fff; }
+  .tmpl-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .tmpl-item .badge { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+  .tmpl-item button { font-size: 12px; color: #c0392b; background: none; border: none; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -56,6 +66,7 @@
     <nav class="spacer">
       <button id="navChat" class="active">Chat</button>
       <button id="navImages">Foto's</button>
+      <button id="navTemplates">Templates</button>
       <a href="/logout" style="color:#fff; font-size:13px; text-decoration:underline; align-self:center; margin-left:6px;">Uitloggen</a>
     </nav>
   </header>
@@ -85,6 +96,57 @@
         <div id="imageGrid" class="grid"></div>
       </div>
     </div>
+
+    <div id="templatesView" class="view">
+      <div class="card">
+        <h2>Mijn nieuwsbriefstijl</h2>
+        <p class="hint">Kies een template en pas de kleuren en het lettertype aan. De opmaak (layout) wordt door Dunion beheerd.</p>
+        <div class="row" style="margin-bottom:12px;">
+          <label>Template</label>
+          <select id="tmplSelect" class="field"></select>
+          <button class="btn secondary" id="tmplSetDefault">Als standaard instellen</button>
+        </div>
+        <div class="style-grid">
+          <label>Lettertype
+            <select id="stFont" class="field">
+              <option value="arial">Arial</option>
+              <option value="helvetica">Helvetica</option>
+              <option value="verdana">Verdana</option>
+              <option value="tahoma">Tahoma</option>
+              <option value="trebuchet">Trebuchet MS</option>
+              <option value="georgia">Georgia</option>
+              <option value="times">Times New Roman</option>
+              <option value="courier">Courier New</option>
+            </select>
+          </label>
+          <label>Tekstkleur <input type="color" id="stText" value="#3b3f44"></label>
+          <label>Knopkleur <input type="color" id="stButtonBg" value="#ff7200"></label>
+          <label>Knop-tekstkleur <input type="color" id="stButtonText" value="#ffffff"></label>
+          <label>Accentkleur (randen) <input type="color" id="stAccent" value="#ff7200"></label>
+        </div>
+        <div class="row" style="margin-top:14px;">
+          <button class="btn" id="tmplPreview">Voorbeeld bekijken</button>
+          <button class="btn" id="tmplSaveStyles">Stijl opslaan</button>
+          <span id="tmplStatus" class="hint"></span>
+        </div>
+        <iframe id="tmplPreviewFrame" title="Voorbeeld"></iframe>
+      </div>
+
+      <div class="card" id="adminCard" style="display:none;">
+        <h2>Layouts beheren <span class="hint">(alleen Dunion)</span></h2>
+        <div class="row" style="margin-bottom:10px;">
+          <input type="text" id="newTmplName" placeholder="Naam van de template" class="field" style="flex:1;">
+          <button class="btn secondary" id="tmplStarter">Begin met standaard layout</button>
+        </div>
+        <textarea id="newTmplHtml" rows="10" placeholder="Plak hier de HTML van de layout (met {{ }}-placeholders en de &lt;!-- ##BANNERS## --&gt; marker)" style="width:100%; font-family:monospace; font-size:12px; padding:10px; border:1px solid #cfd3da; border-radius:8px;"></textarea>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn secondary" id="tmplValidate">Valideer</button>
+          <button class="btn" id="tmplCreate">Toevoegen</button>
+          <span id="adminStatus" class="hint"></span>
+        </div>
+        <div id="tmplList" style="margin-top:14px;"></div>
+      </div>
+    </div>
   </main>
 
   <footer id="chatFooter">
@@ -99,18 +161,25 @@ const tenantSel = document.getElementById("tenant");
 let conversationId = null;
 
 // ---- view switching ----
-const views = { chat: document.getElementById("chatView"), images: document.getElementById("imagesView") };
-const navChat = document.getElementById("navChat"), navImages = document.getElementById("navImages");
+const views = {
+  chat: document.getElementById("chatView"),
+  images: document.getElementById("imagesView"),
+  templates: document.getElementById("templatesView"),
+};
+const navButtons = {
+  chat: document.getElementById("navChat"),
+  images: document.getElementById("navImages"),
+  templates: document.getElementById("navTemplates"),
+};
 const chatFooter = document.getElementById("chatFooter");
 function showView(name) {
   for (const k in views) views[k].classList.toggle("active", k === name);
-  navChat.classList.toggle("active", name === "chat");
-  navImages.classList.toggle("active", name === "images");
+  for (const k in navButtons) navButtons[k].classList.toggle("active", k === name);
   chatFooter.style.display = name === "chat" ? "block" : "none";
   if (name === "images") loadCategories();
+  if (name === "templates") loadTemplates();
 }
-navChat.onclick = () => showView("chat");
-navImages.onclick = () => showView("images");
+for (const k in navButtons) navButtons[k].onclick = () => showView(k);
 
 // ---- chat ----
 const chat = document.getElementById("chat");
@@ -174,6 +243,7 @@ tenantSel.addEventListener("change", () => {
   addMsg("system", "Nieuwe klant gekozen, nieuw gesprek gestart.");
   addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
   loadCategories();
+  if (views.templates.classList.contains("active")) loadTemplates();
 });
 
 // ---- images ----
@@ -240,6 +310,154 @@ document.getElementById("uploadBtn").onclick = async () => {
   }
 };
 
+// ---- templates ----
+let isAdmin = false;
+let templatesCache = [];
+const tmplSelect = document.getElementById("tmplSelect");
+const tmplStatus = document.getElementById("tmplStatus");
+const adminStatus = document.getElementById("adminStatus");
+const previewFrame = document.getElementById("tmplPreviewFrame");
+const STYLE_INPUTS = {
+  font_family: document.getElementById("stFont"),
+  text_color: document.getElementById("stText"),
+  button_bg: document.getElementById("stButtonBg"),
+  button_text: document.getElementById("stButtonText"),
+  accent: document.getElementById("stAccent"),
+};
+const STYLE_DEFAULTS = { font_family: "arial", text_color: "#3b3f44", button_bg: "#ff7200", button_text: "#ffffff", accent: "#ff7200" };
+
+async function loadRole() {
+  try {
+    const me = await (await fetch("/me")).json();
+    isAdmin = !!me.is_admin;
+  } catch (e) { isAdmin = false; }
+  document.getElementById("adminCard").style.display = isAdmin ? "block" : "none";
+}
+
+function readStyleInputs() {
+  return {
+    font_family: STYLE_INPUTS.font_family.value,
+    text_color: STYLE_INPUTS.text_color.value,
+    button_bg: STYLE_INPUTS.button_bg.value,
+    button_text: STYLE_INPUTS.button_text.value,
+    accent: STYLE_INPUTS.accent.value,
+  };
+}
+
+function applyStyleInputs(styles) {
+  for (const k in STYLE_INPUTS) STYLE_INPUTS[k].value = styles[k] || STYLE_DEFAULTS[k];
+}
+
+async function loadTemplates() {
+  const tid = tenantSel.value;
+  if (!tid) return;
+  tmplStatus.textContent = "";
+  try {
+    templatesCache = await (await fetch(`/tenants/${tid}/templates`)).json();
+  } catch (e) { tmplStatus.textContent = "Kon templates niet laden: " + e.message; return; }
+  tmplSelect.innerHTML = "";
+  if (!templatesCache.length) {
+    const o = document.createElement("option"); o.textContent = "(nog geen template)"; o.value = "";
+    tmplSelect.appendChild(o);
+  }
+  for (const t of templatesCache) {
+    const o = document.createElement("option");
+    o.value = t.id; o.textContent = t.name + (t.is_default ? " (standaard)" : "");
+    tmplSelect.appendChild(o);
+  }
+  const def = templatesCache.find(t => t.is_default) || templatesCache[0];
+  if (def) { tmplSelect.value = def.id; applyStyleInputs(def.styles || {}); }
+  renderAdminList();
+}
+
+function selectedTemplate() {
+  return templatesCache.find(t => t.id === tmplSelect.value) || null;
+}
+
+tmplSelect.addEventListener("change", () => {
+  const t = selectedTemplate();
+  applyStyleInputs(t ? (t.styles || {}) : {});
+});
+
+document.getElementById("tmplPreview").onclick = async () => {
+  const tid = tenantSel.value;
+  const t = selectedTemplate();
+  tmplStatus.textContent = "Voorbeeld laden...";
+  const body = { styles: readStyleInputs() };
+  if (t) body.template_id = t.id;
+  const res = await fetch(`/tenants/${tid}/templates/preview`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); tmplStatus.textContent = "Fout: " + (e.detail || res.status); return; }
+  previewFrame.srcdoc = await res.text();
+  tmplStatus.textContent = "";
+};
+
+document.getElementById("tmplSaveStyles").onclick = async () => {
+  const tid = tenantSel.value;
+  const t = selectedTemplate();
+  if (!t) { tmplStatus.textContent = "Geen template gekozen om op te slaan."; return; }
+  const res = await fetch(`/tenants/${tid}/templates/${t.id}/styles`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ styles: readStyleInputs() }) });
+  tmplStatus.textContent = res.ok ? "Stijl opgeslagen." : "Opslaan mislukt.";
+  if (res.ok) loadTemplates();
+};
+
+document.getElementById("tmplSetDefault").onclick = async () => {
+  const tid = tenantSel.value;
+  const t = selectedTemplate();
+  if (!t) return;
+  const res = await fetch(`/tenants/${tid}/templates/${t.id}/default`, { method: "POST" });
+  tmplStatus.textContent = res.ok ? "Standaard ingesteld." : "Mislukt.";
+  if (res.ok) loadTemplates();
+};
+
+// ---- admin: layouts beheren ----
+function renderAdminList() {
+  const list = document.getElementById("tmplList");
+  if (!isAdmin) { list.innerHTML = ""; return; }
+  list.innerHTML = templatesCache.length ? "" : `<p class="hint">Nog geen templates.</p>`;
+  for (const t of templatesCache) {
+    const el = document.createElement("div");
+    el.className = "tmpl-item";
+    el.innerHTML = `<span>${t.name}</span>` + (t.is_default ? `<span class="badge">standaard</span>` : "")
+      + `<span style="margin-left:auto;"></span><button data-id="${t.id}">verwijderen</button>`;
+    el.querySelector("button").onclick = async () => {
+      if (!confirm(`Template "${t.name}" verwijderen?`)) return;
+      await fetch(`/tenants/${tenantSel.value}/templates/${t.id}`, { method: "DELETE" });
+      loadTemplates();
+    };
+    list.appendChild(el);
+  }
+}
+
+document.getElementById("tmplStarter").onclick = async () => {
+  const res = await fetch(`/tenants/${tenantSel.value}/templates/starter`);
+  if (res.ok) { document.getElementById("newTmplHtml").value = (await res.json()).html; adminStatus.textContent = "Standaard layout geladen, pas aan en sla op."; }
+};
+
+document.getElementById("tmplValidate").onclick = async () => {
+  const html = document.getElementById("newTmplHtml").value;
+  const res = await fetch(`/tenants/${tenantSel.value}/templates/validate`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ html }) });
+  const v = await res.json();
+  adminStatus.textContent = v.ok
+    ? (v.warnings.length ? "OK, maar let op: " + v.warnings.join("; ") : "OK, geen problemen.")
+    : "Fout: " + v.errors.join("; ");
+};
+
+document.getElementById("tmplCreate").onclick = async () => {
+  const name = document.getElementById("newTmplName").value.trim();
+  const html = document.getElementById("newTmplHtml").value;
+  if (!name || !html) { adminStatus.textContent = "Geef een naam en HTML op."; return; }
+  const res = await fetch(`/tenants/${tenantSel.value}/templates`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, html }) });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); adminStatus.textContent = "Fout: " + (e.detail || res.status); return; }
+  adminStatus.textContent = "Template toegevoegd.";
+  document.getElementById("newTmplName").value = ""; document.getElementById("newTmplHtml").value = "";
+  loadTemplates();
+};
+
+loadRole();
 loadTenants();
 </script>
 </body>
