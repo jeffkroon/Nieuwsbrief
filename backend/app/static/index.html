@@ -64,6 +64,7 @@
   <header>
     <h1>Nieuwsbrief-assistent</h1>
     <select id="tenant" aria-label="Klant"></select>
+    <select id="chatTemplate" aria-label="Template" title="Welke template de assistent gebruikt"></select>
     <nav class="spacer">
       <button id="navChat" class="active">Chat</button>
       <button id="navImages">Foto's</button>
@@ -163,7 +164,27 @@
 
 <script>
 const tenantSel = document.getElementById("tenant");
+const chatTemplate = document.getElementById("chatTemplate");
 let conversationId = null;
+
+async function loadChatTemplates() {
+  const tid = tenantSel.value;
+  if (!tid) return;
+  let list = [];
+  try { list = await (await fetch(`/tenants/${tid}/templates`)).json(); } catch (e) { list = []; }
+  chatTemplate.innerHTML = "";
+  if (!list.length) {
+    const o = document.createElement("option"); o.value = ""; o.textContent = "Standaard layout"; chatTemplate.appendChild(o);
+    return;
+  }
+  for (const t of list) {
+    const o = document.createElement("option");
+    o.value = t.id; o.textContent = "Template: " + t.name + (t.is_default ? " (standaard)" : "");
+    chatTemplate.appendChild(o);
+  }
+  const def = list.find(t => t.is_default) || list[0];
+  if (def) chatTemplate.value = def.id;
+}
 
 // ---- view switching ----
 const views = {
@@ -210,6 +231,7 @@ async function loadTenants() {
       tenantSel.appendChild(opt);
     }
     addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
+    loadChatTemplates();
   } catch (e) { addMsg("system", "Kon klanten niet laden: " + e.message); }
 }
 
@@ -222,12 +244,13 @@ async function sendMessage() {
   const typing = addMsg("typing", "Aan het werk... (dit kan even duren)");
   try {
     let res;
+    const templateId = chatTemplate.value || null;
     if (!conversationId) {
       res = await fetch("/conversations", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenant_id: tenantSel.value, message: text }) });
+        body: JSON.stringify({ tenant_id: tenantSel.value, message: text, template_id: templateId }) });
     } else {
       res = await fetch(`/conversations/${conversationId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }) });
+        body: JSON.stringify({ message: text, template_id: templateId }) });
     }
     typing.remove();
     if (!res.ok) {
@@ -248,6 +271,7 @@ tenantSel.addEventListener("change", () => {
   addMsg("system", "Nieuwe klant gekozen, nieuw gesprek gestart.");
   addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
   loadCategories();
+  loadChatTemplates();
   if (views.templates.classList.contains("active")) loadTemplates();
 });
 
@@ -374,6 +398,7 @@ async function loadTemplates() {
   if (def) { tmplSelect.value = def.id; applyStyleInputs(def.styles || {}); renderStylePreview(); }
   else { previewFrame.srcdoc = ""; }
   renderAdminList();
+  loadChatTemplates();
 }
 
 function selectedTemplate() {

@@ -30,11 +30,12 @@ def chat_rate_limit(request: Request) -> None:
         )
 
 
-def _run_turn(*, session, client, cipher, conversation, user_text) -> TurnReply:
+def _run_turn(*, session, client, cipher, conversation, user_text, template_id=None) -> TurnReply:
     """Draai een gespreksbeurt en vertaal bekende fouten naar nette meldingen."""
     try:
         return run_conversation_turn(
-            session=session, client=client, cipher=cipher, conversation=conversation, user_text=user_text
+            session=session, client=client, cipher=cipher, conversation=conversation,
+            user_text=user_text, template_id=template_id,
         )
     except anthropic.APIStatusError as exc:
         text = str(getattr(exc, "message", "") or exc)
@@ -66,7 +67,8 @@ def start_conversation(
         session, tenant_id=body.tenant_id, channel=body.channel
     )
     turn = _run_turn(
-        session=session, client=client, cipher=cipher, conversation=conversation, user_text=body.message
+        session=session, client=client, cipher=cipher, conversation=conversation,
+        user_text=body.message, template_id=body.template_id,
     )
     return ConversationReply(
         conversation_id=conversation.id, reply=turn.reply, stop_reason=turn.stop_reason
@@ -86,7 +88,8 @@ def continue_conversation(
     if conversation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="gesprek niet gevonden")
     turn = _run_turn(
-        session=session, client=client, cipher=cipher, conversation=conversation, user_text=body.message
+        session=session, client=client, cipher=cipher, conversation=conversation,
+        user_text=body.message, template_id=body.template_id,
     )
     return ConversationReply(
         conversation_id=conversation.id, reply=turn.reply, stop_reason=turn.stop_reason
