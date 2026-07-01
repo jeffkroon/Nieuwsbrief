@@ -146,6 +146,7 @@ TOOL_DEFINITIONS = [
                             "url": {"type": "string", "description": "Bereikbare ticket-URL (uit find_matches of find_ticket_links)"},
                             "price": {"type": "string", "description": "Handmatige vanafprijs; ALLEEN gebruiken als de site geen prijs heeft en de gebruiker die heeft opgegeven"},
                             "image_url": {"type": "string", "description": "BESTANDSNAAM van de gematchte foto uit list_images (niet de volledige URL)"},
+                            "label": {"type": "string", "description": "Optioneel kort badge-label op de kaart, bv. 'NIEUW' of 'TOPPER'. Alleen zetten als de gebruiker erom vraagt of het duidelijk klopt."},
                         },
                         "required": ["home", "away", "url"],
                     },
@@ -163,6 +164,7 @@ TOOL_DEFINITIONS = [
                             "image_url": {"type": "string", "description": "BESTANDSNAAM van de clubfoto uit list_images (niet de volledige URL)"},
                             "stadium": {"type": "string", "description": "Naam van het stadion (klein lettertype in het blok)"},
                             "city": {"type": "string", "description": "Naam van de stad (klein lettertype in het blok)"},
+                            "label": {"type": "string", "description": "Optioneel kort badge-label op de kaart, bv. 'VROEGBOEKKORTING' of 'NIEUW'. Alleen zetten als de gebruiker erom vraagt of het duidelijk klopt."},
                         },
                         "required": ["name", "url"],
                     },
@@ -314,6 +316,7 @@ def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]
             home=m["home"], away=m["away"], url=m["url"],
             price=_resolve_price(ctx, llm, m["url"], m.get("price")),
             image_url=_resolve_image_for(ctx, m.get("image_url"), m["home"], m["away"]),
+            label=m.get("label"),
         )
         for m in raw_matches
     ]
@@ -328,7 +331,7 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
             name=c["name"], url=c["url"],
             price=_resolve_price(ctx, llm, c["url"], c.get("price")),
             image_url=_resolve_image_for(ctx, c.get("image_url"), c["name"]),
-            stadium=c.get("stadium"), city=c.get("city"),
+            stadium=c.get("stadium"), city=c.get("city"), label=c.get("label"),
         )
         for c in raw_clubs
     ]
