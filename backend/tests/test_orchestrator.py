@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 import pytest
 
@@ -43,6 +44,8 @@ class FakeMessages:
 class FakeAnthropic:
     def __init__(self, responses: list) -> None:
         self.messages = FakeMessages(responses=list(responses))
+        # De orchestrator gebruikt de beta-endpoint (context editing); zelfde fake.
+        self.beta = SimpleNamespace(messages=self.messages)
 
 
 TOOLS = [{"name": "get_brand_config", "description": "x", "input_schema": {"type": "object"}}]
@@ -114,6 +117,14 @@ def test_request_uses_correct_model_and_thinking() -> None:
     assert first["model"] == DEFAULT_MODEL
     assert first["thinking"] == {"type": "adaptive"}
     assert first["output_config"] == {"effort": "medium"}
+
+
+def test_context_editing_enabled() -> None:
+    # Oude tool-resultaten worden opgeruimd bij lange gesprekken (context editing).
+    client, _ = _run([FakeResponse([FakeText("ok")], "end_turn")])
+    first = client.messages.calls[0]
+    assert "context-management-2025-06-27" in first["betas"]
+    assert first["context_management"]["edits"][0]["type"] == "clear_tool_uses_20250919"
 
 
 def test_system_prompt_is_cached() -> None:
