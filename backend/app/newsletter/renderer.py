@@ -37,10 +37,6 @@ REQUIRED_BRAND_FIELDS = (
     "youtube_url",
 )
 
-# Decoratieve kleuren in de banner (niet merk-specifiek geconfigureerd).
-_HOME_COLOR = "#00AEEF"
-_AWAY_COLOR = "#1a3a6e"
-
 
 def _require_brand_fields(brand: dict) -> None:
     missing = [f for f in REQUIRED_BRAND_FIELDS if not brand.get(f)]
@@ -58,8 +54,9 @@ def club_image_url(club: str, brand: dict) -> str:
 def render_banner(match: Match, brand: dict) -> str:
     """Bouw het HTML-tabelblok voor één wedstrijd. De link is de echte ticket-URL."""
     st = effective_styles(brand)
-    color = st["accent"]
+    color = st["block_border"]
     btn_bg, btn_text = st["button_bg"], st["button_text"]
+    home_c, away_c, price_c = st["home_color"], st["away_color"], st["price_color"]
     img_url = match.image_url or club_image_url(match.home, brand)
     link = match.url
     # De prijs bevat al een euroteken (bv "€ 249"); geen extra € toevoegen.
@@ -81,16 +78,16 @@ def render_banner(match: Match, brand: dict) -> str:
   <td valign="middle" align="center" class="content-col"
     style="padding:18px 16px 18px 12px; text-align:center; vertical-align:middle; background-color:#ffffff; border-radius:0 4px 4px 0;">
     <p class="home-name"
-      style="margin:0 0 4px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:20px; font-weight:900; color:{_HOME_COLOR}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{match.home.upper()}</p>
+      style="margin:0 0 4px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:20px; font-weight:900; color:{home_c}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{match.home.upper()}</p>
     <p class="vs-line"
       style="margin:0 0 4px 0; font-family:Arial,sans-serif; font-size:11px; color:#aaaaaa; letter-spacing:2px;">&#8212; VS &#8212;</p>
     <p class="away-name"
-      style="margin:0 0 12px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:20px; font-weight:900; color:{_AWAY_COLOR}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{match.away.upper()}</p>
+      style="margin:0 0 12px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:20px; font-weight:900; color:{away_c}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{match.away.upper()}</p>
     <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
       style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">
     <tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">
       <span class="price-va" style="display:block; font-family:Arial,sans-serif; font-size:11px; color:#666; line-height:1.4;">{price_va}</span>
-      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:#111; line-height:1.2;">{price_amount}</span>
+      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:{price_c}; line-height:1.2;">{price_amount}</span>
     </td></tr></tbody></table>
     <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
       style="background:{btn_bg}; border-radius:4px; border-collapse:separate;">
@@ -107,8 +104,9 @@ def render_banner(match: Match, brand: dict) -> str:
 def render_club_banner(club: Club, brand: dict) -> str:
     """Bouw een club-blok: clubnaam, foto, prijs en een link naar de clubpagina."""
     st = effective_styles(brand)
-    color = st["accent"]
+    color = st["block_border"]
     btn_bg, btn_text = st["button_bg"], st["button_text"]
+    away_c, price_c = st["away_color"], st["price_color"]
     img_url = club.image_url or club_image_url(club.name, brand)
     if club.price == PRICE_ON_REQUEST:
         price_va, price_amount = "", "op aanvraag"
@@ -134,13 +132,13 @@ def render_club_banner(club: Club, brand: dict) -> str:
   <td valign="middle" align="center" class="content-col"
     style="padding:18px 16px 18px 12px; text-align:center; vertical-align:middle; background-color:#ffffff; border-radius:0 4px 4px 0;">
     <p class="home-name"
-      style="margin:0 0 6px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:22px; font-weight:900; color:{_AWAY_COLOR}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{club.name.upper()}</p>
+      style="margin:0 0 6px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:22px; font-weight:900; color:{away_c}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{club.name.upper()}</p>
     {venue_html}
     <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
       style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">
     <tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">
       <span class="price-va" style="display:block; font-family:Arial,sans-serif; font-size:11px; color:#666; line-height:1.4;">{price_va}</span>
-      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:#111; line-height:1.2;">{price_amount}</span>
+      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:{price_c}; line-height:1.2;">{price_amount}</span>
     </td></tr></tbody></table>
     <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
       style="background:{btn_bg}; border-radius:4px; border-collapse:separate;">
@@ -167,7 +165,7 @@ def _card_cell(
     label_html = (
         f'<span style="display:inline-block; font-family:{st["font"]}; font-size:9px; '
         'font-weight:bold; padding:3px 7px; border-radius:3px; letter-spacing:0.5px; '
-        f'margin-bottom:6px; background:#1a3a6e; color:#ffffff;">{label.upper()}</span><br>'
+        f'margin-bottom:6px; background:{st["badge_bg"]}; color:#ffffff;">{label.upper()}</span><br>'
         if label
         else ""
     )
@@ -185,7 +183,7 @@ def _card_cell(
     )
     return f"""<td class="card-cell" width="290" valign="top" style="width:290px; vertical-align:top;">
   <table class="card" cellspacing="0" cellpadding="0" border="0" width="290"
-    style="width:290px; border:2px solid #e8e8e8; border-radius:6px; border-collapse:separate; background:#ffffff; vertical-align:top;">
+    style="width:290px; border:2px solid {st["card_border"]}; border-radius:6px; border-collapse:separate; background:{st["card_bg"]}; vertical-align:top;">
   <tbody>
     <tr><td style="padding:0; line-height:0; font-size:0; border-radius:4px 4px 0 0; overflow:hidden;">
       <img src="{img_url}" width="290" height="290" border="0" alt="{title}" class="card-img-el" style="display:block; width:290px; height:290px;">
@@ -194,7 +192,7 @@ def _card_cell(
       {label_html}<p style="margin:0 0 3px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:18px; font-weight:900; color:{st["accent"]}; text-transform:uppercase; letter-spacing:1px; line-height:1.2;">{title.upper()}</p>
       {subtitle_html}
       {va_html}
-      <span style="display:block; font-family:{st["font"]}; font-size:22px; font-weight:bold; color:#1a3a6e; line-height:1.1; margin:0 0 6px 0;">{price_amount}</span>
+      <span style="display:block; font-family:{st["font"]}; font-size:22px; font-weight:bold; color:{st["price_color"]}; line-height:1.1; margin:0 0 6px 0;">{price_amount}</span>
       <table cellspacing="0" cellpadding="0" border="0" width="100%" style="border-radius:4px; border-collapse:separate; background:{st["button_bg"]};">
       <tbody><tr><td align="center" style="padding:10px; border-radius:4px;">
         <a href="{button_url}" target="_blank" style="color:{st["button_text"]}; font-family:{st["font"]}; font-size:13px; font-weight:bold; text-decoration:none; white-space:nowrap;">{button_text}</a>

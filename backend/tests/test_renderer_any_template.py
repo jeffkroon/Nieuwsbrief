@@ -93,6 +93,27 @@ def test_card_label_renders_as_badge_and_accent_colors_name() -> None:
     assert "#abcdef" in out  # accent kleurt de clubnaam
 
 
+def test_all_custom_block_and_card_colors_apply() -> None:
+    from app.newsletter.models import Club, Match
+    from app.newsletter.renderer import render_banner, render_cards
+
+    brand = {**BRAND, "styles": {
+        "home_color": "#111111", "away_color": "#222222", "price_color": "#333333",
+        "block_border": "#444444", "card_border": "#555555", "card_bg": "#666666",
+        "badge_bg": "#777777", "accent": "#888888",
+    }}
+    banner = render_banner(Match("Ajax", "Feyenoord", "https://x", "€ 10"), brand)
+    assert all(c in banner for c in ("#111111", "#222222", "#333333", "#444444"))
+
+    cards = render_cards(
+        (),
+        (Club(name="PSV", url="https://x", price="€ 20", image_url="https://c/p.png",
+              stadium="Philips", city="Eindhoven", label="NIEUW"),),
+        brand,
+    )
+    assert all(c in cards for c in ("#555555", "#666666", "#333333", "#777777", "#888888"))
+
+
 def test_template_without_banner_marker_degrades() -> None:
     # Geen marker en met wedstrijden: geen blokken, geen fout, schone output.
     template = "<html>{{INTRO_1}} geen marker hier</html>"

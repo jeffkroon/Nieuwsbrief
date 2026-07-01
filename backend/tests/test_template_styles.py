@@ -44,13 +44,18 @@ def test_sanitize_handles_none() -> None:
     assert sanitize_styles(None) == {}
 
 
-def test_effective_styles_defaults_match_brand_primary() -> None:
+def test_effective_styles_defaults() -> None:
     st = effective_styles(BRAND)
     assert st["button_bg"] == "#FF7200"  # valt terug op primaire merkkleur
     assert st["accent"] == "#FF7200"
-    assert st["heading"] == "#FF7200"
+    assert st["block_border"] == "#FF7200"  # merkkleur
     assert st["button_text"] == "#ffffff"
-    assert st["text"] == "#3b3f44"
+    assert st["text_color"] == "#3b3f44"
+    assert st["heading_color"] == "#ffffff"
+    assert st["page_bg"] == "#ffffff"
+    assert st["footer_bg"] == "#6a6a6b"
+    assert st["home_color"] == "#00AEEF"
+    assert st["price_color"] == "#1a3a6e"
     assert st["font"] == DEFAULT_FONT_STACK
 
 

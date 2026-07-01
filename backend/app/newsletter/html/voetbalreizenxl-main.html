@@ -14,7 +14,7 @@ img { outline:none; text-decoration:none; -ms-interpolation-mode:bicubic; }
 a img { border:none; }
 table { border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt; }
 p, h1, h2, h3 { margin:0; }
-a { color:#0092ff; text-decoration:underline; }
+a { color:{{STYLE_LINK_COLOR}}; text-decoration:underline; }
 a[x-apple-data-detectors] { color:inherit !important; text-decoration:inherit !important; }
 @media (max-width: 600px) {
   .main-wrap    { width:100% !important; }
@@ -37,9 +37,9 @@ a[x-apple-data-detectors] { color:inherit !important; text-decoration:inherit !i
   .main-cta     { width:100% !important; }
 }
 </style></head>
-<body link="#0092ff" style="background-color:#ffffff; margin:0; padding:0;" text="#3b3f44" yahoo="fix">
+<body link="{{STYLE_LINK_COLOR}}" style="background-color:{{STYLE_PAGE_BG}}; margin:0; padding:0;" text="#3b3f44" yahoo="fix">
 
-<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="100%" style="background-color:#ffffff; width:100%;">
+<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="100%" style="background-color:{{STYLE_PAGE_BG}}; width:100%;">
 <tbody><tr><td align="center">
 <table cellspacing="0" cellpadding="0" border="0" role="presentation" width="590" align="center" class="main-wrap" style="table-layout:fixed; width:590px; background-color:#ffffff;">
 <tbody><tr><td style="background-color:#ffffff;">
@@ -60,7 +60,7 @@ a[x-apple-data-detectors] { color:inherit !important; text-decoration:inherit !i
     <tbody><tr><td class="hero-cell" valign="bottom" align="center"
       style="height:300px; padding:32px 28px; background-image:linear-gradient(to bottom, rgba(0,0,0,0) 35%, rgba(0,0,0,0.65) 100%);">
       <a href="{{WEBSITE_URL}}" target="_blank" style="text-decoration:none;">
-        <h1 class="hero-title" style="margin:0 0 8px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:36px; line-height:1.05; color:#ffffff; text-transform:uppercase; letter-spacing:1px; text-shadow:0 2px 8px rgba(0,0,0,0.7);">{{HEADER_TITEL}}</h1>
+        <h1 class="hero-title" style="margin:0 0 8px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:36px; line-height:1.05; color:{{STYLE_HEADING_COLOR}}; text-transform:uppercase; letter-spacing:1px; text-shadow:0 2px 8px rgba(0,0,0,0.7);">{{HEADER_TITEL}}</h1>
       </a>
       <p class="hero-subtitle" style="margin:0 0 16px 0; font-family:{{STYLE_FONT}}; font-size:16px; line-height:1.4; color:#ffffff; text-shadow:0 1px 5px rgba(0,0,0,0.7);">{{HEADER_SUBTITEL}}</p>
       {{HEADER_CTA}}
@@ -125,11 +125,11 @@ a[x-apple-data-detectors] { color:inherit !important; text-decoration:inherit !i
 
 
 <!-- FOOTER -->
-<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="100%" style="table-layout:fixed; background-color:#6a6a6b;">
+<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="100%" style="table-layout:fixed; background-color:{{STYLE_FOOTER_BG}};">
 <tbody><tr><td style="padding:20px;">
   <p style="margin:0 0 14px 0; text-align:center; font-family:{{STYLE_FONT}};">
-    <strong><span style="font-size:16px; color:#ffffff;">{{BRAND_NAME}}</span></strong><br>
-    <span style="font-size:12px; color:#ffffff;">
+    <strong><span style="font-size:16px; color:{{STYLE_FOOTER_TEXT}};">{{BRAND_NAME}}</span></strong><br>
+    <span style="font-size:12px; color:{{STYLE_FOOTER_TEXT}};">
       {{BRAND_ADRES}}<br>{{BRAND_POSTCODE_STAD}}<br>
       E-mail: {{BRAND_EMAIL}}<br>
       Tel: {{BRAND_TELEFOON}}<br>

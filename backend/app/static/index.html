@@ -61,7 +61,8 @@
 
   /* Templates */
   #templatesView { max-width: 900px; margin: 0 auto; padding: 20px; }
-  .style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .style-head { font-size: 13px; font-weight: 700; color: var(--text); margin: 16px 0 6px; }
+  .style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
   .style-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
   .style-grid input[type=color] { width: 100%; height: 38px; border: 1px solid #cfd3da; border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
   .preview-frame { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; background: #fff; }
@@ -133,6 +134,7 @@
           <select id="tmplSelect" class="field"></select>
           <button class="btn secondary" id="tmplSetDefault">Als standaard instellen</button>
         </div>
+        <h3 class="style-head">Tekst & knoppen</h3>
         <div class="style-grid">
           <label>Lettertype
             <select id="stFont" class="field">
@@ -147,9 +149,30 @@
             </select>
           </label>
           <label>Tekstkleur <input type="color" id="stText" value="#3b3f44"></label>
+          <label>Kopkleur (op foto) <input type="color" id="stHeading" value="#ffffff"></label>
+          <label>Linkkleur <input type="color" id="stLink" value="#0092ff"></label>
           <label>Knopkleur <input type="color" id="stButtonBg" value="#ff7200"></label>
           <label>Knop-tekstkleur <input type="color" id="stButtonText" value="#ffffff"></label>
-          <label>Accentkleur (randen) <input type="color" id="stAccent" value="#ff7200"></label>
+        </div>
+        <h3 class="style-head">Kaarten & prijs</h3>
+        <div class="style-grid">
+          <label>Naam op kaart (accent) <input type="color" id="stAccent" value="#ff7200"></label>
+          <label>Kaartrand <input type="color" id="stCardBorder" value="#e8e8e8"></label>
+          <label>Kaart-achtergrond <input type="color" id="stCardBg" value="#ffffff"></label>
+          <label>Prijskleur <input type="color" id="stPrice" value="#1a3a6e"></label>
+          <label>Badge-kleur (label) <input type="color" id="stBadge" value="#1a3a6e"></label>
+        </div>
+        <h3 class="style-head">Wedstrijdblokken</h3>
+        <div class="style-grid">
+          <label>Thuisclub-naam <input type="color" id="stHome" value="#00aeef"></label>
+          <label>Uitclub-/clubnaam <input type="color" id="stAway" value="#1a3a6e"></label>
+          <label>Rand van het blok <input type="color" id="stBlockBorder" value="#ff7200"></label>
+        </div>
+        <h3 class="style-head">Achtergrond & footer</h3>
+        <div class="style-grid">
+          <label>E-mail-achtergrond <input type="color" id="stPageBg" value="#ffffff"></label>
+          <label>Footer-achtergrond <input type="color" id="stFooterBg" value="#6a6a6b"></label>
+          <label>Footer-tekst <input type="color" id="stFooterText" value="#ffffff"></label>
         </div>
         <div class="row" style="margin-top:14px;">
           <button class="btn secondary" id="tmplPreview">Voorbeeld verversen</button>
@@ -407,11 +430,29 @@ const previewFrame = document.getElementById("tmplPreviewFrame");
 const STYLE_INPUTS = {
   font_family: document.getElementById("stFont"),
   text_color: document.getElementById("stText"),
+  heading_color: document.getElementById("stHeading"),
+  link_color: document.getElementById("stLink"),
   button_bg: document.getElementById("stButtonBg"),
   button_text: document.getElementById("stButtonText"),
   accent: document.getElementById("stAccent"),
+  card_border: document.getElementById("stCardBorder"),
+  card_bg: document.getElementById("stCardBg"),
+  price_color: document.getElementById("stPrice"),
+  badge_bg: document.getElementById("stBadge"),
+  home_color: document.getElementById("stHome"),
+  away_color: document.getElementById("stAway"),
+  block_border: document.getElementById("stBlockBorder"),
+  page_bg: document.getElementById("stPageBg"),
+  footer_bg: document.getElementById("stFooterBg"),
+  footer_text: document.getElementById("stFooterText"),
 };
-const STYLE_DEFAULTS = { font_family: "arial", text_color: "#3b3f44", button_bg: "#ff7200", button_text: "#ffffff", accent: "#ff7200" };
+const STYLE_DEFAULTS = {
+  font_family: "arial", text_color: "#3b3f44", heading_color: "#ffffff", link_color: "#0092ff",
+  button_bg: "#ff7200", button_text: "#ffffff", accent: "#ff7200",
+  card_border: "#e8e8e8", card_bg: "#ffffff", price_color: "#1a3a6e", badge_bg: "#1a3a6e",
+  home_color: "#00aeef", away_color: "#1a3a6e", block_border: "#ff7200",
+  page_bg: "#ffffff", footer_bg: "#6a6a6b", footer_text: "#ffffff",
+};
 
 async function loadRole() {
   try {
@@ -422,13 +463,9 @@ async function loadRole() {
 }
 
 function readStyleInputs() {
-  return {
-    font_family: STYLE_INPUTS.font_family.value,
-    text_color: STYLE_INPUTS.text_color.value,
-    button_bg: STYLE_INPUTS.button_bg.value,
-    button_text: STYLE_INPUTS.button_text.value,
-    accent: STYLE_INPUTS.accent.value,
-  };
+  const out = {};
+  for (const k in STYLE_INPUTS) out[k] = STYLE_INPUTS[k].value;
+  return out;
 }
 
 function applyStyleInputs(styles) {
