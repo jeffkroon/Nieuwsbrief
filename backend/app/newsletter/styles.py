@@ -29,12 +29,30 @@ DEFAULT_FONT_STACK = EMAIL_SAFE_FONTS[DEFAULT_FONT_KEY]
 
 # Defaults voor de kleuren. Komen overeen met de oude vaste template, zodat de
 # render byte-identiek blijft als een bedrijf niets aanpast. Een ontbrekende
-# kleur valt terug op de primaire merkkleur (zie effective_styles).
-DEFAULT_TEXT_COLOR = "#3b3f44"
-DEFAULT_BUTTON_TEXT = "#ffffff"
+# kleur valt terug op de default hieronder (of de primaire merkkleur).
 DEFAULT_PRIMARY = "#FF7200"
+DEFAULT_FOOTER_BG = "#6a6a6b"
 
-COLOR_KEYS = ("text_color", "heading_color", "button_bg", "button_text", "accent")
+# Alle instelbare kleuren met hun default. `None` = valt terug op de primaire merkkleur.
+_COLOR_DEFAULTS: dict[str, str | None] = {
+    "text_color": "#3b3f44",     # introtekst
+    "heading_color": "#ffffff",  # kop op de headerfoto
+    "link_color": "#0092ff",     # links in de tekst
+    "page_bg": "#ffffff",        # e-mail-achtergrond
+    "button_bg": None,           # knoppen -> merkkleur
+    "button_text": "#ffffff",    # knop-tekst
+    "accent": None,              # wedstrijd-/clubnaam op de kaart -> merkkleur
+    "block_border": None,        # rand van het wedstrijdblok -> merkkleur
+    "card_border": "#e8e8e8",    # rand van een kaart
+    "card_bg": "#ffffff",        # achtergrond van een kaart
+    "price_color": "#1a3a6e",    # prijsbedrag
+    "badge_bg": "#1a3a6e",       # achtergrond van het badge-label
+    "home_color": "#00AEEF",     # thuisclubnaam (wedstrijdblok)
+    "away_color": "#1a3a6e",     # uitclub-/clubnaam (wedstrijdblok)
+    "footer_bg": DEFAULT_FOOTER_BG,  # footer-balk
+    "footer_text": "#ffffff",    # footer-tekst
+}
+COLOR_KEYS = tuple(_COLOR_DEFAULTS)
 FONT_KEY = "font_family"
 
 _HEX = re.compile(r"^#[0-9a-fA-F]{3,8}$")
@@ -66,25 +84,40 @@ def effective_styles(brand: dict) -> dict:
     """
     styles = brand.get("styles") or {}
     primary = brand.get("primary_color") or DEFAULT_PRIMARY
+    brand_footer = brand.get("footer_color")
     font_key = styles.get(FONT_KEY)
-    return {
-        "font": EMAIL_SAFE_FONTS.get(font_key, DEFAULT_FONT_STACK),
-        "text": styles.get("text_color") or DEFAULT_TEXT_COLOR,
-        "heading": styles.get("heading_color") or primary,
-        "button_bg": styles.get("button_bg") or primary,
-        "button_text": styles.get("button_text") or DEFAULT_BUTTON_TEXT,
-        "accent": styles.get("accent") or primary,
-    }
+
+    def pick(key: str) -> str:
+        default = _COLOR_DEFAULTS[key]
+        if default is None:
+            default = primary
+        return styles.get(key) or default
+
+    result = {key: pick(key) for key in COLOR_KEYS}
+    result["font"] = EMAIL_SAFE_FONTS.get(font_key, DEFAULT_FONT_STACK)
+    # Footer valt terug op de merk-footerkleur als er geen eigen keuze is.
+    if not styles.get("footer_bg") and brand_footer:
+        result["footer_bg"] = brand_footer
+    return result
+
+
+# Welke stijlwaarden als {{STYLE_*}}-token in de layout-HTML beschikbaar zijn.
+# (De kaart-/blok-kleuren worden in code toegepast, niet via tokens.)
+_TEMPLATE_TOKENS = {
+    "{{STYLE_FONT}}": "font",
+    "{{STYLE_TEXT_COLOR}}": "text_color",
+    "{{STYLE_HEADING_COLOR}}": "heading_color",
+    "{{STYLE_LINK_COLOR}}": "link_color",
+    "{{STYLE_PAGE_BG}}": "page_bg",
+    "{{STYLE_BUTTON_BG}}": "button_bg",
+    "{{STYLE_BUTTON_TEXT}}": "button_text",
+    "{{STYLE_ACCENT}}": "accent",
+    "{{STYLE_FOOTER_BG}}": "footer_bg",
+    "{{STYLE_FOOTER_TEXT}}": "footer_text",
+}
 
 
 def style_replacements(brand: dict) -> dict[str, str]:
     """Placeholder->waarde map voor de {{STYLE_*}}-tokens in de layout-HTML."""
     st = effective_styles(brand)
-    return {
-        "{{STYLE_FONT}}": st["font"],
-        "{{STYLE_TEXT_COLOR}}": st["text"],
-        "{{STYLE_HEADING_COLOR}}": st["heading"],
-        "{{STYLE_BUTTON_BG}}": st["button_bg"],
-        "{{STYLE_BUTTON_TEXT}}": st["button_text"],
-        "{{STYLE_ACCENT}}": st["accent"],
-    }
+    return {token: st[key] for token, key in _TEMPLATE_TOKENS.items()}
