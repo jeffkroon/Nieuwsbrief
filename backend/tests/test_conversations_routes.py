@@ -29,6 +29,8 @@ CONFIG = {
     "instagram_url": "https://ig/x",
     "youtube_url": "https://yt/x",
     "club_images": {},
+    # Gecachte tone -> conversatie-service scrapet niet (geen netwerk in tests).
+    "tone_of_voice": "Informeel, sportief, enthousiast.",
 }
 
 

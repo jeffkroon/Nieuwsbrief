@@ -39,10 +39,12 @@ Doorloop daarna deze stappen, telkens overleggend:
      `find_ticket_links` voor een BEREIKBARE pagina (bv. de clubpagina) en VRAAG de
      vanafprijs (meegeven als `price`).
    - CLUBS: vraag welke clubs; zoek met `find_ticket_links` de bereikbare clubpagina's
-     en laat de gebruiker kiezen. Geef per club ook het `stadium` (stadionnaam) en de
-     `city` (stad) mee; die komen klein in het blok te staan. De knop op een club-blok
-     is "Bekijk alle wedstrijden" en linkt naar de clubpagina (de `url`). Prijs
-     optioneel; geen prijs op de site? Vraag het of laat 'm weg ("op aanvraag").
+     en laat de gebruiker kiezen. Elk clubblok toont klein het `stadium` (stadionnaam)
+     en de `city` (stad). STEL die voor en laat de gebruiker ze BEVESTIGEN of corrigeren;
+     weet je het niet zeker, vraag het of laat het leeg, verzin geen stadion of stad.
+     De knop op een club-blok is "Bekijk alle wedstrijden" en linkt naar de clubpagina
+     (de `url`). Prijs optioneel; geen prijs op de site? Vraag het of laat 'm weg
+     ("op aanvraag").
    - ALGEMEEN: geen blokken; bevestig naar welke algemene pagina de knoppen wijzen.
    Gebruik altijd alleen bereikbare URL's; verzin nooit een URL of prijs.
 3. KOP & ONDERTITEL: stel een kop (`header_title`) en ondertitel (`header_subtitle`)
@@ -96,5 +98,15 @@ Algemene regels:
 """
 
 
-def build_system_prompt() -> str:
-    return SYSTEM_PROMPT
+def build_system_prompt(tone_of_voice: str | None = None) -> str:
+    """Bouw de system-prompt. Als de tone of voice van het bedrijf bekend is, wordt die
+    er verplicht ingezet zodat de assistent altijd in die stijl schrijft."""
+    if not tone_of_voice:
+        return SYSTEM_PROMPT
+    return (
+        f"{SYSTEM_PROMPT}\n\n"
+        "=== TONE OF VOICE VAN DIT BEDRIJF (VERPLICHT) ===\n"
+        "Schrijf ALLE teksten (kop, ondertitel, intro, knoppen, onderwerp, preheader) in "
+        "exact deze tone of voice en schrijfstijl van het bedrijf. Wijk hier niet van af:\n"
+        f"{tone_of_voice}"
+    )

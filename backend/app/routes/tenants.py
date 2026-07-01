@@ -7,11 +7,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.deps import get_cipher, get_session
+from app.deps import get_anthropic_client, get_cipher, get_session
 from app.repositories import secrets as secrets_repo
 from app.repositories import tenants as repo
 from app.schemas import TenantCreate, TenantRead, TenantSecretSet, TenantUpdate
 from app.services.crypto import SecretCipher
+from app.services.tone import analyze_and_store_tone, get_cached_tone
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
@@ -53,6 +54,34 @@ def delete_tenant(tenant_id: uuid.UUID, session: Session = Depends(get_session))
     if not repo.delete_tenant(session, tenant_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="tenant niet gevonden")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{tenant_id}/tone")
+def get_tone(tenant_id: uuid.UUID, session: Session = Depends(get_session)) -> dict:
+    """De (gecachte) tone of voice van het bedrijf; None als die er nog niet is."""
+    tenant = repo.get_tenant(session, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="tenant niet gevonden")
+    return {"tone_of_voice": get_cached_tone(tenant)}
+
+
+@router.post("/{tenant_id}/tone/refresh")
+def refresh_tone(
+    tenant_id: uuid.UUID,
+    session: Session = Depends(get_session),
+    client=Depends(get_anthropic_client),
+) -> dict:
+    """Analyseer de tone of voice opnieuw van de website en cache 'm (voor als de site is vernieuwd)."""
+    tenant = repo.get_tenant(session, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="tenant niet gevonden")
+    tone = analyze_and_store_tone(session, tenant, client)
+    if tone is None:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail="Kon de tone of voice niet bepalen (geen website_url of pagina onbereikbaar).",
+        )
+    return {"tone_of_voice": tone}
 
 
 @router.put("/{tenant_id}/secrets", status_code=status.HTTP_204_NO_CONTENT)
