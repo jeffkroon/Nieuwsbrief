@@ -7,7 +7,13 @@ client wordt geinjecteerd zodat tests een fake kunnen meegeven.
 Model claude-sonnet-4-6 met adaptive thinking en effort 'medium': sterk genoeg voor
 deze tool-taak en ~40% goedkoper per token dan Opus. De harde garanties (link moet
 200 zijn, prijs live gescrapet, concept pas na toestemming) zitten in code, niet in
-de effort. Geen budget_tokens (gebruik
+de effort.
+
+Bij lange gesprekken worden OUDE tool-resultaten opgeruimd (context editing,
+clear_tool_uses): de rauwe data die de assistent al verwerkt heeft (gescrapete
+paginatekst, wedstrijdenlijsten) valt weg, maar het gesprek en de gemaakte keuzes
+blijven staan. Zo blijft een lange chat betaalbaar en binnen de context-limiet
+zonder dat de assistent context of kwaliteit verliest. Geen budget_tokens (gebruik
 adaptive thinking). De system-prompt + tools worden gecachet (prompt caching), zodat
 dat vaste deel niet elke loop-stap opnieuw vol wordt afgerekend.
 """
@@ -64,11 +70,14 @@ def run_agent_turn(
     cached_system = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
 
     for iteration in range(1, max_iterations + 1):
-        response = client.messages.create(
+        response = client.beta.messages.create(
             model=model,
             max_tokens=MAX_OUTPUT_TOKENS,
             thinking={"type": "adaptive"},
             output_config={"effort": "medium"},
+            # Ruim oude tool-resultaten op bij lange gesprekken (behoudt het gesprek zelf).
+            betas=["context-management-2025-06-27"],
+            context_management={"edits": [{"type": "clear_tool_uses_20250919"}]},
             system=cached_system,
             tools=tools,
             messages=convo,

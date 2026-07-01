@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 import pytest
 
@@ -67,6 +68,8 @@ class FakeMessages:
 class FakeAnthropic:
     def __init__(self, responses: list) -> None:
         self.messages = FakeMessages(responses=list(responses))
+        # De orchestrator draait op de beta-endpoint (context editing); zelfde fake.
+        self.beta = SimpleNamespace(messages=self.messages)
 
 
 @pytest.fixture
