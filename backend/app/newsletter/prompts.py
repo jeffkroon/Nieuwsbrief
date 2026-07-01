@@ -47,6 +47,9 @@ Doorloop daarna deze stappen, telkens overleggend:
      ("op aanvraag").
    - ALGEMEEN: geen blokken; bevestig naar welke algemene pagina de knoppen wijzen.
    Gebruik altijd alleen bereikbare URL's; verzin nooit een URL of prijs.
+   Optioneel kun je per wedstrijd/club een kort badge-`label` meegeven (bv. "NIEUW",
+   "VROEGBOEKKORTING", "TOPPER"). Doe dat alleen als de gebruiker erom vraagt of het
+   duidelijk klopt; verzin geen kortingen of claims.
 3. KOP & ONDERTITEL: stel een kop (`header_title`) en ondertitel (`header_subtitle`)
    voor in de tone of voice, en vraag of het zo goed is of aangepast moet worden.
 4. FOTO'S: toon met `list_images` welke foto's er per categorie zijn. Stel een banner

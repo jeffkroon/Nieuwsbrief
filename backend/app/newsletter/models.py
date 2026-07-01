@@ -24,6 +24,7 @@ class Match:
     url: str
     price: str = PRICE_ON_REQUEST
     image_url: str | None = None  # gekozen clubfoto; valt anders terug op dummy
+    label: str | None = None  # optioneel badge-label op de kaart, bv. "NIEUW"
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class Club:
     image_url: str | None = None
     stadium: str | None = None
     city: str | None = None
+    label: str | None = None  # optioneel badge-label op de kaart, bv. "VROEGBOEKKORTING"
 
 
 @dataclass(frozen=True)

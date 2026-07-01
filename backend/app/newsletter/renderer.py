@@ -155,14 +155,22 @@ def render_club_banner(club: Club, brand: dict) -> str:
 
 
 def _card_cell(
-    *, title: str, subtitle: str, img_url: str, price: str, button_text: str, button_url: str, brand: dict
+    *, title: str, subtitle: str, img_url: str, price: str, button_text: str, button_url: str,
+    brand: dict, label: str | None = None,
 ) -> str:
-    """Eén kaart-cel (foto boven, naam, stadion/stad, prijs, knop) in de 2-koloms grid."""
+    """Eén kaart-cel (foto boven, optioneel label, naam, stadion/stad, prijs, knop)."""
     st = effective_styles(brand)
     if price == PRICE_ON_REQUEST:
         price_va, price_amount = "", "op aanvraag"
     else:
         price_va, price_amount = "v.a.", price
+    label_html = (
+        f'<span style="display:inline-block; font-family:{st["font"]}; font-size:9px; '
+        'font-weight:bold; padding:3px 7px; border-radius:3px; letter-spacing:0.5px; '
+        f'margin-bottom:6px; background:#1a3a6e; color:#ffffff;">{label.upper()}</span><br>'
+        if label
+        else ""
+    )
     subtitle_html = (
         f'<p style="margin:0 0 10px 0; font-family:{st["font"]}; font-size:11px; '
         f'color:#999999; line-height:1.4;">{subtitle}</p>'
@@ -183,7 +191,7 @@ def _card_cell(
       <img src="{img_url}" width="290" height="290" border="0" alt="{title}" class="card-img-el" style="display:block; width:290px; height:290px;">
     </td></tr>
     <tr><td style="padding:14px 14px 16px 14px;">
-      <p style="margin:0 0 3px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:18px; font-weight:900; color:{st["accent"]}; text-transform:uppercase; letter-spacing:1px; line-height:1.2;">{title.upper()}</p>
+      {label_html}<p style="margin:0 0 3px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:18px; font-weight:900; color:{st["accent"]}; text-transform:uppercase; letter-spacing:1px; line-height:1.2;">{title.upper()}</p>
       {subtitle_html}
       {va_html}
       <span style="display:block; font-family:{st["font"]}; font-size:22px; font-weight:bold; color:#1a3a6e; line-height:1.1; margin:0 0 6px 0;">{price_amount}</span>
@@ -218,6 +226,7 @@ def render_cards(matches: tuple[Match, ...], clubs: tuple[Club, ...], brand: dic
                 button_text="Bestel tickets",
                 button_url=m.url,
                 brand=brand,
+                label=m.label,
             )
         )
     for c in clubs:
@@ -231,6 +240,7 @@ def render_cards(matches: tuple[Match, ...], clubs: tuple[Club, ...], brand: dic
                 button_text="Bekijk alle wedstrijden",
                 button_url=c.url,
                 brand=brand,
+                label=c.label,
             )
         )
     if not cells:
