@@ -11,12 +11,13 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Conversation
+from app.db.models import Conversation, Tenant
 from app.newsletter.orchestrator import run_agent_turn
 from app.newsletter.prompts import build_system_prompt
 from app.newsletter.tools import TOOL_DEFINITIONS, ToolContext, execute_tool
 from app.repositories import conversations as repo
 from app.services.crypto import SecretCipher
+from app.services.tone import ensure_tone
 
 # Alleen deze rollen worden teruggespeeld naar Claude als geschiedenis.
 _REPLAYABLE_ROLES = {"user", "assistant"}
@@ -56,9 +57,14 @@ def run_conversation_turn(
         template_id=template_id,
     )
 
+    # Tone of voice van het bedrijf gegarandeerd meegeven (eenmalig geanalyseerd + gecacht),
+    # zodat de assistent altijd in de huisstijl schrijft, los van of hij de tool aanroept.
+    tenant = session.get(Tenant, conversation.tenant_id)
+    tone = ensure_tone(session, tenant, client) if tenant else None
+
     result = run_agent_turn(
         client,
-        system=build_system_prompt(),
+        system=build_system_prompt(tone),
         messages=claude_messages,
         tools=TOOL_DEFINITIONS,
         dispatch=lambda name, tool_input: execute_tool(name, tool_input, ctx),

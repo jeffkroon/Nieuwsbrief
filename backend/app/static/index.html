@@ -119,6 +119,13 @@
 
     <div id="templatesView" class="view">
       <div class="card">
+        <h2>Tone of voice</h2>
+        <p class="hint">De assistent schrijft altijd in deze stijl van de bedrijfswebsite. Vernieuw 'm als de site is aangepast.</p>
+        <div id="tonePreview" class="hint" style="white-space:pre-wrap; color:var(--text); margin:8px 0;">Laden...</div>
+        <button class="btn secondary" id="toneRefresh">Tone of voice opnieuw analyseren</button>
+        <span id="toneStatus" class="hint"></span>
+      </div>
+      <div class="card">
         <h2>Mijn nieuwsbriefstijl</h2>
         <p class="hint">Kies een template en pas de kleuren en het lettertype aan. De opmaak (layout) wordt door Dunion beheerd.</p>
         <div class="row" style="margin-bottom:12px;">
@@ -221,7 +228,7 @@ function showView(name) {
   for (const k in navButtons) navButtons[k].classList.toggle("active", k === name);
   chatFooter.style.display = name === "chat" ? "block" : "none";
   if (name === "images") loadCategories();
-  if (name === "templates") loadTemplates();
+  if (name === "templates") { loadTemplates(); loadTone(); }
 }
 for (const k in navButtons) navButtons[k].onclick = () => showView(k);
 
@@ -300,7 +307,7 @@ tenantSel.addEventListener("change", () => {
   addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
   loadCategories();
   loadChatTemplates();
-  if (views.templates.classList.contains("active")) loadTemplates();
+  if (views.templates.classList.contains("active")) { loadTemplates(); loadTone(); }
 });
 
 // ---- images ----
@@ -365,6 +372,29 @@ document.getElementById("uploadBtn").onclick = async () => {
     document.getElementById("uploadFiles").value = "";
     if (viewCategory.value === uploadCategory.value) loadImages(); else { viewCategory.value = uploadCategory.value; loadImages(); }
   }
+};
+
+// ---- tone of voice ----
+const tonePreview = document.getElementById("tonePreview");
+const toneStatus = document.getElementById("toneStatus");
+
+async function loadTone() {
+  const tid = tenantSel.value;
+  if (!tid) return;
+  toneStatus.textContent = "";
+  try {
+    const { tone_of_voice } = await (await fetch(`/tenants/${tid}/tone`)).json();
+    tonePreview.textContent = tone_of_voice || "Nog niet geanalyseerd, wordt bij het eerste gesprek automatisch bepaald (of klik hieronder).";
+  } catch (e) { tonePreview.textContent = "Kon tone of voice niet laden."; }
+}
+
+document.getElementById("toneRefresh").onclick = async () => {
+  const tid = tenantSel.value;
+  toneStatus.textContent = "Analyseren...";
+  const res = await fetch(`/tenants/${tid}/tone/refresh`, { method: "POST" });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); toneStatus.textContent = "Mislukt: " + (e.detail || res.status); return; }
+  tonePreview.textContent = (await res.json()).tone_of_voice || "";
+  toneStatus.textContent = "Bijgewerkt.";
 };
 
 // ---- templates ----
