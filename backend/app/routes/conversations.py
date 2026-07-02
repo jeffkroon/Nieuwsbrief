@@ -39,7 +39,10 @@ def _run_turn(*, session, client, cipher, conversation, user_text, template_id=N
         )
     except anthropic.APIStatusError as exc:
         text = str(getattr(exc, "message", "") or exc)
-        if "credit balance" in text.lower():
+        if exc.status_code == 401:
+            detail = ("De Anthropic API-key is ongeldig of ingetrokken. Zet een nieuwe key "
+                      "in de omgevingsvariabele ANTHROPIC_API_KEY (Anthropic Console -> API keys).")
+        elif "credit balance" in text.lower():
             detail = ("De Anthropic-API heeft geen tegoed meer. Vul credits aan in de "
                       "Anthropic Console (Plans & Billing) en probeer opnieuw.")
         elif exc.status_code == 429:
