@@ -204,11 +204,14 @@
         </div>
         <textarea id="newTmplHtml" rows="10" placeholder="Plak hier de HTML van de layout (met {{ }}-placeholders en de &lt;!-- ##BANNERS## --&gt; marker)" style="width:100%; font-family:monospace; font-size:12px; padding:10px; border:1px solid #cfd3da; border-radius:8px;"></textarea>
         <div class="row" style="margin-top:10px;">
+          <button class="btn" id="tmplToolproof">Maak tool-proof (AI)</button>
           <button class="btn secondary" id="tmplValidate">Valideer</button>
           <button class="btn secondary" id="adminPreview">Voorbeeld verversen</button>
           <button class="btn" id="tmplCreate">Toevoegen</button>
           <span id="adminStatus" class="hint"></span>
         </div>
+        <p class="hint" style="margin:6px 0 0;">Tip: plak een ruwe export (bv. uit Brevo) en klik "Maak tool-proof (AI)": de vaste teksten, knoppen, logo en footer worden vervangen door placeholders en in code gecontroleerd. Daarna kun je 'm opslaan.</p>
+        <div id="toolproofReport" style="display:none; margin-top:10px; padding:12px; border:1px solid var(--border); border-radius:8px; background:#fafbfc; font-size:13px; white-space:pre-wrap;"></div>
         <p class="hint" style="margin:10px 0 0;">Live voorbeeld (ververst automatisch terwijl je typt):</p>
         <iframe id="adminPreviewFrame" class="preview-frame mini" title="Voorbeeld layout"></iframe>
         <div id="tmplList" style="margin-top:14px;"></div>
@@ -662,6 +665,44 @@ document.getElementById("tmplStarter").onclick = async () => {
     document.getElementById("newTmplHtml").value = (await res.json()).html;
     adminStatus.textContent = "Standaard layout geladen, pas aan en sla op.";
     renderAdminPreview();
+  }
+};
+
+document.getElementById("tmplToolproof").onclick = async () => {
+  const html = document.getElementById("newTmplHtml").value.trim();
+  const report = document.getElementById("toolproofReport");
+  if (!html) { adminStatus.textContent = "Plak eerst de HTML van de template."; return; }
+  adminStatus.textContent = "AI zet de template om naar placeholders (kan een minuut duren)...";
+  report.style.display = "none";
+  const btn = document.getElementById("tmplToolproof");
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/tenants/${tenantSel.value}/templates/toolproof`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ html }) });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      adminStatus.textContent = "Mislukt: " + (typeof e.detail === "string" ? e.detail : res.status);
+      return;
+    }
+    const r = await res.json();
+    document.getElementById("newTmplHtml").value = r.html;
+    const lines = [];
+    if (r.applied.length) lines.push("Vervangen (" + r.applied.length + "):", ...r.applied.map(s => "  + " + s), "");
+    if (r.failed.length) lines.push("Niet gelukt (handmatig nakijken):", ...r.failed.map(s => "  ! " + s), "");
+    if (r.checks_failed.length) lines.push("Verificatie GEFAALD:", ...r.checks_failed.map(s => "  X " + s), "");
+    if (r.checks_passed.length) lines.push("Geverifieerd in code (" + r.checks_passed.length + " checks): alle placeholders stromen door.", "");
+    if (r.warnings.length) lines.push("Aandachtspunten:", ...r.warnings.map(s => "  - " + s), "");
+    if (r.notes.length) lines.push("Opmerkingen van de AI:", ...r.notes.map(s => "  - " + s));
+    report.textContent = lines.join("\n").trim();
+    report.style.display = "block";
+    adminStatus.textContent = r.ok
+      ? "Tool-proof gemaakt en geverifieerd. Bekijk het voorbeeld en klik Toevoegen om op te slaan."
+      : "Omgezet, maar niet alles is geverifieerd. Bekijk het rapport voordat je opslaat.";
+    renderAdminPreview();
+  } catch (e) {
+    adminStatus.textContent = "Netwerkfout: " + e.message;
+  } finally {
+    btn.disabled = false;
   }
 };
 

@@ -134,3 +134,37 @@ def test_delete(client, session) -> None:
     tpl = client.post(f"/tenants/{t.id}/templates", json={"name": "A", "html": MARKER_HTML}).json()
     assert client.delete(f"/tenants/{t.id}/templates/{tpl['id']}").status_code == 204
     assert client.get(f"/tenants/{t.id}/templates").json() == []
+
+
+def test_toolproof_endpoint_transforms_and_reports(client, session) -> None:
+    from app.deps import get_anthropic_client
+    from app.main import app
+    from tests.test_toolproof import OPS, STATIC_HTML, FakeLLM
+
+    t = _tenant(session)
+    app.dependency_overrides[get_anthropic_client] = lambda: FakeLLM(
+        {"operations": OPS, "notes": []}
+    )
+    try:
+        resp = client.post(f"/tenants/{t.id}/templates/toolproof", json={"html": STATIC_HTML})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert "{{INTRO_1}}" in body["html"]
+        assert "<!-- ##CARDS## -->" in body["html"]
+        assert body["checks_failed"] == []
+    finally:
+        app.dependency_overrides.pop(get_anthropic_client, None)
+
+
+def test_toolproof_is_admin_only(client, session) -> None:
+    from app.deps import current_role
+    from app.main import app
+
+    t = _tenant(session)
+    app.dependency_overrides[current_role] = lambda: "company"
+    try:
+        resp = client.post(f"/tenants/{t.id}/templates/toolproof", json={"html": "<html></html>"})
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_role, None)

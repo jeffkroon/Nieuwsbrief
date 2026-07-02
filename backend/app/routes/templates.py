@@ -16,12 +16,13 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.deps import get_session, require_admin
+from app.deps import get_anthropic_client, get_session, require_admin
 from app.newsletter.models import Club, Match, NewsletterContent
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.styles import sanitize_styles
 from app.newsletter.template_validation import validate_template_html
 from app.newsletter.templates import load_template
+from app.newsletter.toolproof import MAX_TEMPLATE_CHARS, make_toolproof
 from app.repositories import templates as repo
 from app.repositories import tenants as tenants_repo
 from app.schemas import (
@@ -30,6 +31,8 @@ from app.schemas import (
     TemplateRead,
     TemplateStyleUpdate,
     TemplateSummary,
+    TemplateToolproofRequest,
+    TemplateToolproofResult,
     TemplateUpdate,
     TemplateValidateRequest,
     TemplateValidation,
@@ -112,6 +115,41 @@ def get_template(
 def validate(tenant_id: uuid.UUID, body: TemplateValidateRequest) -> TemplateValidation:
     errors, warnings = validate_template_html(body.html)
     return TemplateValidation(ok=not errors, errors=errors, warnings=warnings)
+
+
+@router.post(
+    "/templates/toolproof",
+    response_model=TemplateToolproofResult,
+    dependencies=[Depends(require_admin)],
+)
+def toolproof(
+    tenant_id: uuid.UUID,
+    body: TemplateToolproofRequest,
+    session: Session = Depends(get_session),
+    client=Depends(get_anthropic_client),
+) -> TemplateToolproofResult:
+    """Zet geplakte statische HTML met AI om naar placeholders, met code-verificatie.
+
+    Slaat niets op: de admin ziet het resultaat + rapport en beslist zelf of het
+    wordt opgeslagen (via de normale create-flow).
+    """
+    _require_tenant(session, tenant_id)
+    if len(body.html) > MAX_TEMPLATE_CHARS:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Template te groot (max {MAX_TEMPLATE_CHARS} tekens).",
+        )
+    result = make_toolproof(client, body.html)
+    return TemplateToolproofResult(
+        ok=result.ok,
+        html=result.html,
+        applied=result.applied,
+        failed=result.failed,
+        checks_passed=result.checks_passed,
+        checks_failed=result.checks_failed,
+        warnings=result.warnings,
+        notes=result.notes,
+    )
 
 
 @router.post(
