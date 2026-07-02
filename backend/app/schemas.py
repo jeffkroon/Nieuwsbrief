@@ -157,6 +157,23 @@ class TemplatePreviewRequest(BaseModel):
     styles: dict = Field(default_factory=dict)
 
 
+class TemplateToolproofRequest(BaseModel):
+    html: str = Field(min_length=1)
+
+
+class TemplateToolproofResult(BaseModel):
+    """Resultaat van de AI-omzetting naar placeholders, incl. code-verificatie."""
+
+    ok: bool
+    html: str
+    applied: list[str]
+    failed: list[str]
+    checks_passed: list[str]
+    checks_failed: list[str]
+    warnings: list[str]
+    notes: list[str]
+
+
 # --- Conversation turns (chat) --------------------------------------------
 # Max berichtlengte: ruim genoeg om een nieuwsbrief te beschrijven, maar voorkomt dat
 # iemand een enorme lap tekst plakt die elke tool-stap opnieuw (duur) wordt meegestuurd.
