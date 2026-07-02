@@ -30,6 +30,32 @@ def test_clubs_step_asks_to_confirm_venue() -> None:
     assert "verzin geen stadion" in prompt
 
 
+def test_default_prompt_is_football() -> None:
+    prompt = build_system_prompt()
+    assert "WEDSTRIJDEN" in prompt
+    assert "find_matches" in prompt
+    assert "CLUBS" in prompt
+
+
+def test_custom_content_types_replace_football() -> None:
+    types = [
+        {"kind": "items", "name": "Cases", "button_text": "Lees de case",
+         "source_url": "https://x.nl/cases/"},
+        {"kind": "items", "name": "Acties", "button_text": "Bekijk aanbieding", "has_price": True},
+    ]
+    prompt = build_system_prompt(content_types=types)
+    assert "CASES" in prompt and "ACTIES" in prompt
+    assert "Lees de case" in prompt and "Bekijk aanbieding" in prompt
+    assert "https://x.nl/cases/" in prompt
+    assert "find_matches" not in prompt  # geen voetbal-instructies voor dit bedrijf
+    assert "ALGEMENE" in prompt  # algemeen kan altijd
+
+
+def test_mixed_content_types() -> None:
+    prompt = build_system_prompt(content_types=[{"kind": "matches"}, {"kind": "items", "name": "Blogs"}])
+    assert "find_matches" in prompt and "BLOGS" in prompt
+
+
 def test_brevo_copy_rules_present() -> None:
     prompt = build_system_prompt()
     # Onderwerpregel-regels

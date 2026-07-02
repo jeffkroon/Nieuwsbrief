@@ -41,6 +41,23 @@ class Club:
 
 
 @dataclass(frozen=True)
+class Item:
+    """Generiek inhoudsblok voor niet-voetbal nieuwsbrieven (case, blog, product, actie).
+
+    Zelfde bouwstenen als Match/Club (titel, subtitel, foto, knop), maar zonder
+    voetbal-aannames: prijs is optioneel en de knoptekst is per item instelbaar.
+    """
+
+    title: str
+    url: str
+    subtitle: str | None = None
+    price: str | None = None  # None = geen prijs tonen (anders dan "op aanvraag")
+    image_url: str | None = None
+    label: str | None = None
+    button_text: str = "Lees meer"
+
+
+@dataclass(frozen=True)
 class NewsletterContent:
     """Volledige door de gebruiker/Claude bepaalde inhoud van een nieuwsbrief."""
 
@@ -54,6 +71,7 @@ class NewsletterContent:
     slot_cta_url: str
     matches: tuple[Match, ...]
     clubs: tuple[Club, ...] = ()
+    items: tuple[Item, ...] = ()  # generieke blokken (cases, blogs, producten, acties)
     preview_text: str | None = None
     header_title: str | None = None
     header_subtitle: str | None = None

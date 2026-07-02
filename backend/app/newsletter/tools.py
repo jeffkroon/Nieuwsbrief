@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Tenant
 from app.newsletter import extraction
-from app.newsletter.models import PRICE_ON_REQUEST, Club, Match, NewsletterContent
+from app.newsletter.models import PRICE_ON_REQUEST, Club, Item, Match, NewsletterContent
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.templates import load_template
 from app.repositories import images as images_repo
@@ -98,14 +98,14 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "find_ticket_links",
-        "description": "Zoek bereikbare ticket-pagina's (club-, competitie- of wedstrijdpagina's) op "
-        "de klantensite die passen bij een zoekopdracht. Gebruik dit om een geldige link te vinden "
-        "voor een wedstrijd die nog niet als losse wedstrijd op de site staat (bijvoorbeeld de "
-        "clubpagina). Optioneel een specifieke pagina-URL om in te zoeken.",
+        "description": "Zoek bereikbare pagina's op de klantensite die passen bij een zoekopdracht: "
+        "club-, competitie- of wedstrijdpagina's, maar ook cases, blogposts, producten, acties of "
+        "andere inhoud. Gebruik dit altijd om een geldige, echte link te vinden voor een blok. "
+        "Optioneel een specifieke pagina-URL om in te zoeken (bv. de bron-URL van de nieuwsbrief-soort).",
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Bijvoorbeeld een clubnaam of competitie"},
+                "query": {"type": "string", "description": "Bijvoorbeeld een clubnaam, competitie, of het soort inhoud ('recente blogposts', 'cases')"},
                 "url": {"type": "string", "description": "Optionele pagina-URL om in te zoeken"},
             },
             "required": ["query"],
@@ -167,6 +167,25 @@ TOOL_DEFINITIONS = [
                             "label": {"type": "string", "description": "Optioneel kort badge-label op de kaart, bv. 'VROEGBOEKKORTING' of 'NIEUW'. Alleen zetten als de gebruiker erom vraagt of het duidelijk klopt."},
                         },
                         "required": ["name", "url"],
+                    },
+                },
+                "items": {
+                    "type": "array",
+                    "description": "Generieke inhoudsblokken voor niet-voetbal nieuwsbrieven "
+                    "(cases, blogposts, producten, acties, vacatures). Per item een titel, "
+                    "korte subtitel en een BEREIKBARE pagina-URL (uit find_ticket_links).",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "subtitle": {"type": "string", "description": "Korte ondertitel (klein lettertype in het blok)"},
+                            "url": {"type": "string", "description": "Bereikbare pagina-URL (uit find_ticket_links)"},
+                            "button_text": {"type": "string", "description": "Knoptekst van dit blok, bv. 'Lees de case' of 'Bekijk aanbieding'. Gebruik de knoptekst van de nieuwsbrief-soort."},
+                            "price": {"type": "string", "description": "Optionele prijs; ALLEEN als de gebruiker die opgeeft of die echt op de pagina staat. Weglaten = geen prijs tonen."},
+                            "image_url": {"type": "string", "description": "BESTANDSNAAM van de foto uit list_images (niet de volledige URL)"},
+                            "label": {"type": "string", "description": "Optioneel kort badge-label, bv. 'NIEUW'"},
+                        },
+                        "required": ["title", "url"],
                     },
                 },
             },
@@ -322,6 +341,31 @@ def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]
     ]
 
 
+def _validated_items(ctx: ToolContext, raw_items: list[dict]) -> list[Item]:
+    """Generieke items (cases, blogs, producten): URL moet bereikbaar zijn (200).
+
+    De prijs wordt niet gescrapet (items zijn vaak prijsloos); alleen een door de
+    gebruiker bevestigde prijs gaat mee. Foto's resolven zoals bij clubs.
+    """
+    items: list[Item] = []
+    for it in raw_items:
+        status, _ = extraction.fetch_page(it["url"], ctx.http_client)
+        if status != 200:
+            raise ValueError(
+                f"URL bestaat niet of is onbereikbaar: {it['url']} (status {status}). "
+                "Gebruik find_ticket_links voor een geldige link."
+            )
+        items.append(
+            Item(
+                title=it["title"], url=it["url"], subtitle=it.get("subtitle"),
+                price=it.get("price"), label=it.get("label"),
+                image_url=_resolve_image_for(ctx, it.get("image_url"), it["title"]),
+                button_text=it.get("button_text") or "Lees meer",
+            )
+        )
+    return items
+
+
 def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
     if not raw_clubs:
         return []
@@ -355,15 +399,16 @@ def _resolve_template_html(ctx: ToolContext, tenant, brand: dict) -> tuple[str, 
 
 
 def _build_newsletter(ctx: ToolContext, tool_input: dict):
-    """Valideer wedstrijden/clubs, bouw de content, kies de template en render de HTML.
+    """Valideer wedstrijden/clubs/items, bouw de content, kies de template en render.
 
     Gedeeld door preview_newsletter (geen Brevo) en create_newsletter_draft (wel Brevo).
-    Geeft (tenant, brand, content, matches, clubs, html) terug.
+    Geeft (tenant, brand, content, matches, clubs, items, html) terug.
     """
     tenant = _load_tenant(ctx)
     brand = tenant.config
     matches = _validated_matches(ctx, tool_input.get("matches", []))
     clubs = _validated_clubs(ctx, tool_input.get("clubs", []))
+    items = _validated_items(ctx, tool_input.get("items", []))
     content = NewsletterContent(
         theme=tool_input["theme"],
         subject=tool_input["subject"],
@@ -380,20 +425,22 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
         preview_text=tool_input.get("preview_text"),
         matches=tuple(matches),
         clubs=tuple(clubs),
+        items=tuple(items),
     )
     template_html, brand = _resolve_template_html(ctx, tenant, brand)
     html = render_newsletter(template_html, brand, content)
-    return tenant, brand, content, matches, clubs, html
+    return tenant, brand, content, matches, clubs, items, html
 
 
 def _tool_preview_newsletter(ctx: ToolContext, tool_input: dict) -> dict:
-    _, _, content, matches, clubs, html = _build_newsletter(ctx, tool_input)
+    _, _, content, matches, clubs, items, html = _build_newsletter(ctx, tool_input)
     ctx.preview_holder.append(html)  # frontend toont dit in het voorbeeldpaneel
     return {
         "status": "preview",
         "subject": content.subject,
         "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
         "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
+        "items_used": [{"title": i.title, "url": i.url, "price": i.price} for i in items],
         "message": "Voorbeeld gerenderd en getoond in het paneel naast de chat. Vat kort samen "
         "en vraag de gebruiker om toestemming voordat je create_newsletter_draft (confirmed=true) aanroept.",
     }
@@ -412,7 +459,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
             "geen Brevo API-key ingesteld voor deze tenant (zet die via PUT /tenants/{id}/secrets)"
         )
 
-    tenant, brand, content, matches, clubs, html = _build_newsletter(ctx, tool_input)
+    tenant, brand, content, matches, clubs, items, html = _build_newsletter(ctx, tool_input)
     list_ids = [tenant.brevo_list_id] if tenant.brevo_list_id else None
 
     client = ctx.brevo_factory(api_key)
@@ -456,6 +503,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         "status": "ready",
         "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
         "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
+        "items_used": [{"title": i.title, "url": i.url, "price": i.price} for i in items],
         "message": "Concept aangemaakt in Brevo. Niets verstuurd; controleer en verstuur handmatig.",
     }
 

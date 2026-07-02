@@ -59,12 +59,14 @@ def run_conversation_turn(
 
     # Tone of voice van het bedrijf gegarandeerd meegeven (eenmalig geanalyseerd + gecacht),
     # zodat de assistent altijd in de huisstijl schrijft, los van of hij de tool aanroept.
+    # De nieuwsbrief-soorten van het bedrijf bepalen het gespreksscript (stap 2).
     tenant = session.get(Tenant, conversation.tenant_id)
     tone = ensure_tone(session, tenant, client) if tenant else None
+    content_types = (tenant.config or {}).get("content_types") if tenant else None
 
     result = run_agent_turn(
         client,
-        system=build_system_prompt(tone),
+        system=build_system_prompt(tone, content_types),
         messages=claude_messages,
         tools=TOOL_DEFINITIONS,
         dispatch=lambda name, tool_input: execute_tool(name, tool_input, ctx),

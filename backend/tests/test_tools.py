@@ -326,6 +326,40 @@ def test_club_image_falls_back_to_club_name(session, cipher) -> None:
     assert "https://cdn/real-inter.png" in ctx.preview_holder[0]  # foto via clubnaam gevonden
 
 
+def test_preview_with_generic_items(session, cipher) -> None:
+    # Generieke items (cases/blogs): URL gevalideerd, knoptekst en titel in de HTML.
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["items"] = [{
+        "title": "Case Coolblue", "subtitle": "SEO en SEA",
+        "url": "https://www.voetbalreizenxl.nl/cases/coolblue/",
+        "button_text": "Lees de case",
+    }]
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>case</html>")),
+        preview_holder=[],
+    )
+    result = execute_tool("preview_newsletter", payload, ctx)
+    assert result["items_used"][0]["title"] == "Case Coolblue"
+    html = ctx.preview_holder[0]
+    assert "CASE COOLBLUE" in html and "Lees de case" in html
+    assert "op aanvraag" not in html  # geen prijs meegegeven -> geen prijsregel
+
+
+def test_items_with_unreachable_url_rejected(session, cipher) -> None:
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["items"] = [{"title": "Kapot", "url": "https://x.nl/404"}]
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(404, text="nee")),
+        preview_holder=[],
+    )
+    with pytest.raises(ValueError, match="onbereikbaar"):
+        execute_tool("preview_newsletter", payload, ctx)
+
+
 def test_preview_newsletter_returns_html_without_brevo(session, cipher) -> None:
     # Preview rendert de HTML, vult preview_holder, en maakt GEEN Brevo-concept aan.
     tenant = _tenant(session)

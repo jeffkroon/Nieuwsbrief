@@ -62,6 +62,18 @@
   /* Templates */
   #templatesView { max-width: 900px; margin: 0 auto; padding: 20px; }
   .style-head { font-size: 13px; font-weight: 700; color: var(--text); margin: 16px 0 6px; }
+  #companiesView { max-width: 900px; margin: 0 auto; padding: 20px; }
+  .company-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .company-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .company-grid input[type=text], .company-grid input[type=password], .company-grid input[type=number] { padding: 8px 10px; border: 1px solid #cfd3da; border-radius: 8px; font-size: 14px; }
+  .company-grid input[type=color] { width: 100%; height: 38px; border: 1px solid #cfd3da; border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
+  .ct-row { display: grid; grid-template-columns: 1fr 1fr 1.4fr auto auto; gap: 8px; align-items: center; margin-top: 6px; }
+  .ct-row input[type=text] { padding: 7px 9px; border: 1px solid #cfd3da; border-radius: 8px; font-size: 13px; }
+  .ct-row .del { color: #c0392b; background: none; border: none; cursor: pointer; font-size: 12px; }
+  .company-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .company-item button { font-size: 12px; background: none; border: none; cursor: pointer; }
+  .company-item .edit { color: #0066cc; }
+  .company-item .del { color: #c0392b; }
   .style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
   .style-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
   .style-grid input[type=color] { width: 100%; height: 38px; border: 1px solid #cfd3da; border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
@@ -81,6 +93,7 @@
       <button id="navChat" class="active">Chat</button>
       <button id="navImages">Foto's</button>
       <button id="navTemplates">Templates</button>
+      <button id="navCompanies" style="display:none;">Bedrijven</button>
       <a href="/logout" style="color:#fff; font-size:13px; text-decoration:underline; align-self:center; margin-left:6px;">Uitloggen</a>
     </nav>
   </header>
@@ -201,6 +214,59 @@
         <div id="tmplList" style="margin-top:14px;"></div>
       </div>
     </div>
+
+    <div id="companiesView" class="view">
+      <div class="card">
+        <h2>Bedrijven</h2>
+        <p class="hint">Alle klanten in de tool. Voeg een nieuw bedrijf toe of bewerk de gegevens.</p>
+        <div id="companyList" style="margin-top:10px;"></div>
+      </div>
+      <div class="card">
+        <h2 id="companyFormTitle">Nieuw bedrijf toevoegen</h2>
+        <h3 class="style-head">Basis</h3>
+        <div class="company-grid">
+          <label>Bedrijfsnaam* <input type="text" id="coName" placeholder="Bijv. Bakkerij Jansen"></label>
+          <label>Slug (URL-naam)* <input type="text" id="coSlug" placeholder="bakkerij-jansen"></label>
+          <label>Website* <input type="text" id="coWebsite" placeholder="https://www.bedrijf.nl"></label>
+          <label>Primaire kleur <input type="color" id="coPrimary" value="#ff7200"></label>
+        </div>
+        <h3 class="style-head">Gegevens voor de footer</h3>
+        <div class="company-grid">
+          <label>E-mail* <input type="text" id="coEmail" placeholder="info@bedrijf.nl"></label>
+          <label>Adres* <input type="text" id="coAdres" placeholder="Straat 1"></label>
+          <label>Postcode + stad* <input type="text" id="coPostcode" placeholder="1234 AB Stad"></label>
+          <label>Telefoon* <input type="text" id="coTelefoon" placeholder="+31 ..."></label>
+          <label>KVK-nummer* <input type="text" id="coKvk" placeholder="12345678"></label>
+        </div>
+        <h3 class="style-head">Afbeeldingen & socials</h3>
+        <div class="company-grid">
+          <label>Logo-URL* <input type="text" id="coLogo" placeholder="https://.../logo.png"></label>
+          <label>Fallback-foto-URL* <span class="hint" style="font-weight:normal;">(getoond als een blok geen eigen foto heeft)</span> <input type="text" id="coDummy" placeholder="https://.../fallback.png"></label>
+          <label>Header-foto-URL <input type="text" id="coHeader" placeholder="optioneel, kan ook via Foto's-tab"></label>
+          <label>Facebook <input type="text" id="coFacebook" placeholder="leeg = link naar website"></label>
+          <label>Instagram <input type="text" id="coInstagram" placeholder="leeg = link naar website"></label>
+          <label>YouTube <input type="text" id="coYoutube" placeholder="leeg = link naar website"></label>
+        </div>
+        <h3 class="style-head">Brevo</h3>
+        <div class="company-grid">
+          <label>Brevo API-key <input type="password" id="coBrevoKey" placeholder="alleen invullen om te (her)zetten"></label>
+          <label>Brevo lijst-ID <input type="number" id="coBrevoList" placeholder="optioneel"></label>
+        </div>
+        <h3 class="style-head">Nieuwsbrief-soorten</h3>
+        <p class="hint">Welke soorten nieuwsbrieven maakt dit bedrijf? "Algemeen" (alleen tekst) kan altijd.</p>
+        <div class="row">
+          <label><input type="checkbox" id="ctMatches"> Wedstrijden (voetbal)</label>
+          <label><input type="checkbox" id="ctClubs"> Clubs (voetbal)</label>
+        </div>
+        <div id="ctRows" style="margin-top:8px;"></div>
+        <button class="btn secondary" id="ctAdd" style="margin-top:8px;">+ Eigen soort toevoegen</button>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn" id="companySave">Bedrijf opslaan</button>
+          <button class="btn secondary" id="companyReset" style="display:none;">Annuleer bewerken</button>
+          <span id="companyStatus" class="hint"></span>
+        </div>
+      </div>
+    </div>
   </main>
 
   <footer id="chatFooter">
@@ -239,11 +305,13 @@ const views = {
   chat: document.getElementById("chatView"),
   images: document.getElementById("imagesView"),
   templates: document.getElementById("templatesView"),
+  companies: document.getElementById("companiesView"),
 };
 const navButtons = {
   chat: document.getElementById("navChat"),
   images: document.getElementById("navImages"),
   templates: document.getElementById("navTemplates"),
+  companies: document.getElementById("navCompanies"),
 };
 const chatFooter = document.getElementById("chatFooter");
 function showView(name) {
@@ -252,6 +320,7 @@ function showView(name) {
   chatFooter.style.display = name === "chat" ? "block" : "none";
   if (name === "images") loadCategories();
   if (name === "templates") { loadTemplates(); loadTone(); }
+  if (name === "companies") loadCompanies();
 }
 for (const k in navButtons) navButtons[k].onclick = () => showView(k);
 
@@ -460,6 +529,7 @@ async function loadRole() {
     isAdmin = !!me.is_admin;
   } catch (e) { isAdmin = false; }
   document.getElementById("adminCard").style.display = isAdmin ? "block" : "none";
+  document.getElementById("navCompanies").style.display = isAdmin ? "inline-block" : "none";
 }
 
 function readStyleInputs() {
@@ -615,6 +685,192 @@ document.getElementById("tmplCreate").onclick = async () => {
   adminStatus.textContent = "Template toegevoegd.";
   document.getElementById("newTmplName").value = ""; document.getElementById("newTmplHtml").value = "";
   loadTemplates();
+};
+
+// ---- bedrijven (alleen admin) ----
+let editingCompanyId = null;
+const CO = (id) => document.getElementById(id);
+const companyStatus = document.getElementById("companyStatus");
+
+function slugify(s) {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+CO("coName").addEventListener("input", () => {
+  if (!editingCompanyId) CO("coSlug").value = slugify(CO("coName").value);
+});
+
+function addCtRow(vals = {}) {
+  const row = document.createElement("div");
+  row.className = "ct-row";
+  row.innerHTML = `<input type="text" class="ct-name" placeholder="Naam (bv. Cases)">`
+    + `<input type="text" class="ct-button" placeholder="Knoptekst (bv. Lees de case)">`
+    + `<input type="text" class="ct-source" placeholder="Bron-URL op de site (optioneel)">`
+    + `<label class="hint" style="white-space:nowrap;"><input type="checkbox" class="ct-price"> prijs</label>`
+    + `<button class="del">weg</button>`;
+  row.querySelector(".ct-name").value = vals.name || "";
+  row.querySelector(".ct-button").value = vals.button_text || "";
+  row.querySelector(".ct-source").value = vals.source_url || "";
+  row.querySelector(".ct-price").checked = !!vals.has_price;
+  row.querySelector(".del").onclick = (e) => { e.preventDefault(); row.remove(); };
+  document.getElementById("ctRows").appendChild(row);
+}
+document.getElementById("ctAdd").onclick = (e) => { e.preventDefault(); addCtRow(); };
+
+function readContentTypes() {
+  const types = [];
+  if (CO("ctMatches").checked) types.push({ kind: "matches" });
+  if (CO("ctClubs").checked) types.push({ kind: "clubs" });
+  for (const row of document.querySelectorAll("#ctRows .ct-row")) {
+    const name = row.querySelector(".ct-name").value.trim();
+    if (!name) continue;
+    const t = { kind: "items", name, button_text: row.querySelector(".ct-button").value.trim() || "Lees meer" };
+    const src = row.querySelector(".ct-source").value.trim();
+    if (src) t.source_url = src;
+    if (row.querySelector(".ct-price").checked) t.has_price = true;
+    types.push(t);
+  }
+  return types;
+}
+
+function companyConfigFromForm() {
+  const website = CO("coWebsite").value.trim();
+  const social = (id) => CO(id).value.trim() || website;
+  const cfg = {
+    brand_name: CO("coName").value.trim(),
+    brand_email: CO("coEmail").value.trim(),
+    brand_adres: CO("coAdres").value.trim(),
+    brand_postcode_stad: CO("coPostcode").value.trim(),
+    brand_telefoon: CO("coTelefoon").value.trim(),
+    brand_kvk: CO("coKvk").value.trim(),
+    website_url: website,
+    primary_color: CO("coPrimary").value,
+    logo_url: CO("coLogo").value.trim(),
+    dummy_image_url: CO("coDummy").value.trim(),
+    facebook_url: social("coFacebook"),
+    instagram_url: social("coInstagram"),
+    youtube_url: social("coYoutube"),
+    content_types: readContentTypes(),
+  };
+  const header = CO("coHeader").value.trim();
+  if (header) cfg.header_image_url = header;
+  return cfg;
+}
+
+function resetCompanyForm() {
+  editingCompanyId = null;
+  for (const id of ["coName","coSlug","coWebsite","coEmail","coAdres","coPostcode","coTelefoon","coKvk","coLogo","coDummy","coHeader","coFacebook","coInstagram","coYoutube","coBrevoKey","coBrevoList"]) CO(id).value = "";
+  CO("coPrimary").value = "#ff7200";
+  CO("ctMatches").checked = false; CO("ctClubs").checked = false;
+  CO("coSlug").disabled = false;
+  document.getElementById("ctRows").innerHTML = "";
+  document.getElementById("companyFormTitle").textContent = "Nieuw bedrijf toevoegen";
+  document.getElementById("companyReset").style.display = "none";
+  companyStatus.textContent = "";
+}
+document.getElementById("companyReset").onclick = resetCompanyForm;
+
+function fillCompanyForm(t) {
+  resetCompanyForm();
+  editingCompanyId = t.id;
+  const c = t.config || {};
+  CO("coName").value = t.name || "";
+  CO("coSlug").value = t.slug || ""; CO("coSlug").disabled = true;
+  CO("coWebsite").value = c.website_url || "";
+  CO("coPrimary").value = (c.primary_color || "#ff7200").toLowerCase();
+  CO("coEmail").value = c.brand_email || ""; CO("coAdres").value = c.brand_adres || "";
+  CO("coPostcode").value = c.brand_postcode_stad || ""; CO("coTelefoon").value = c.brand_telefoon || "";
+  CO("coKvk").value = c.brand_kvk || ""; CO("coLogo").value = c.logo_url || "";
+  CO("coDummy").value = c.dummy_image_url || ""; CO("coHeader").value = c.header_image_url || "";
+  CO("coFacebook").value = c.facebook_url || ""; CO("coInstagram").value = c.instagram_url || "";
+  CO("coYoutube").value = c.youtube_url || "";
+  CO("coBrevoList").value = t.brevo_list_id ?? "";
+  for (const ct of c.content_types || []) {
+    if (ct.kind === "matches") CO("ctMatches").checked = true;
+    else if (ct.kind === "clubs") CO("ctClubs").checked = true;
+    else addCtRow(ct);
+  }
+  document.getElementById("companyFormTitle").textContent = `Bewerken: ${t.name}`;
+  document.getElementById("companyReset").style.display = "inline-block";
+}
+
+async function refreshTenantSelect() {
+  const cur = tenantSel.value;
+  try {
+    const tenants = await (await fetch("/tenants")).json();
+    tenantSel.innerHTML = "";
+    for (const t of tenants) {
+      const o = document.createElement("option");
+      o.value = t.id; o.textContent = t.name; tenantSel.appendChild(o);
+    }
+    if ([...tenantSel.options].some(o => o.value === cur)) tenantSel.value = cur;
+  } catch (e) { /* dropdown blijft zoals hij was */ }
+}
+
+async function loadCompanies() {
+  const list = document.getElementById("companyList");
+  let tenants = [];
+  try { tenants = await (await fetch("/tenants")).json(); }
+  catch (e) { list.innerHTML = '<p class="hint">Kon bedrijven niet laden.</p>'; return; }
+  list.innerHTML = tenants.length ? "" : '<p class="hint">Nog geen bedrijven.</p>';
+  for (const t of tenants) {
+    const el = document.createElement("div");
+    el.className = "company-item";
+    el.innerHTML = `<strong>${t.name}</strong><span class="hint">${t.slug}</span>`
+      + `<span style="margin-left:auto;"></span>`
+      + `<button class="edit">bewerken</button><button class="del">verwijderen</button>`;
+    el.querySelector(".edit").onclick = () => fillCompanyForm(t);
+    el.querySelector(".del").onclick = async () => {
+      if (!confirm(`Bedrijf "${t.name}" en alle bijbehorende data verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
+      await fetch(`/tenants/${t.id}`, { method: "DELETE" });
+      loadCompanies(); refreshTenantSelect();
+    };
+    list.appendChild(el);
+  }
+}
+
+document.getElementById("companySave").onclick = async () => {
+  const required = { coName: "bedrijfsnaam", coSlug: "slug", coWebsite: "website", coEmail: "e-mail", coAdres: "adres", coPostcode: "postcode + stad", coTelefoon: "telefoon", coKvk: "KVK", coLogo: "logo-URL", coDummy: "fallback-foto-URL" };
+  const missing = Object.entries(required).filter(([id]) => !CO(id).value.trim()).map(([, n]) => n);
+  if (missing.length) { companyStatus.textContent = "Vul eerst in: " + missing.join(", "); return; }
+
+  companyStatus.textContent = "Opslaan...";
+  const formConfig = companyConfigFromForm();
+  const listId = CO("coBrevoList").value ? parseInt(CO("coBrevoList").value, 10) : null;
+  let tenantId = editingCompanyId;
+  let res;
+  if (editingCompanyId) {
+    // Config mergen zodat tone of voice, stijlen en fotocategorieën behouden blijven.
+    const current = await (await fetch(`/tenants/${editingCompanyId}`)).json();
+    res = await fetch(`/tenants/${editingCompanyId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: CO("coName").value.trim(), brevo_list_id: listId, config: { ...(current.config || {}), ...formConfig } }),
+    });
+  } else {
+    res = await fetch("/tenants", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug: CO("coSlug").value.trim(), name: CO("coName").value.trim(), brevo_list_id: listId, config: formConfig }),
+    });
+  }
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    companyStatus.textContent = "Fout: " + (typeof e.detail === "string" ? e.detail : res.status);
+    return;
+  }
+  const saved = await res.json();
+  tenantId = saved.id;
+  const brevoKey = CO("coBrevoKey").value.trim();
+  if (brevoKey) {
+    const sres = await fetch(`/tenants/${tenantId}/secrets`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "brevo_api_key", value: brevoKey }),
+    });
+    if (!sres.ok) { companyStatus.textContent = "Bedrijf opgeslagen, maar Brevo-key zetten mislukte."; loadCompanies(); refreshTenantSelect(); return; }
+  }
+  const wasEditing = !!editingCompanyId;
+  resetCompanyForm();
+  companyStatus.textContent = wasEditing ? "Bedrijf bijgewerkt." : "Bedrijf toegevoegd.";
+  loadCompanies();
+  refreshTenantSelect();
 };
 
 loadRole();
