@@ -114,6 +114,50 @@ def test_all_custom_block_and_card_colors_apply() -> None:
     assert all(c in cards for c in ("#555555", "#666666", "#333333", "#777777", "#888888"))
 
 
+def test_item_banner_and_card_render_generic_content() -> None:
+    from app.newsletter.models import Item
+    from app.newsletter.renderer import render_cards, render_item_banner
+
+    item = Item(title="Case Coolblue", url="https://x.nl/cases/coolblue",
+                subtitle="SEO en SEA", image_url="https://cdn/case.png",
+                button_text="Lees de case")
+    banner = render_item_banner(item, BRAND)
+    assert "CASE COOLBLUE" in banner
+    assert "Lees de case" in banner
+    assert "https://x.nl/cases/coolblue" in banner
+    assert "op aanvraag" not in banner  # geen prijs = geen prijsregel
+
+    cards = render_cards((), (), BRAND, (item,))
+    assert "CASE COOLBLUE" in cards and "Lees de case" in cards
+    assert "op aanvraag" not in cards and "v.a." not in cards
+
+
+def test_item_with_price_shows_price() -> None:
+    from app.newsletter.models import Item
+    from app.newsletter.renderer import render_item_banner
+
+    out = render_item_banner(
+        Item(title="Menu december", url="https://x.nl/menu", price="€ 59",
+             button_text="Reserveer"), BRAND,
+    )
+    assert "€ 59" in out and "Reserveer" in out
+
+
+def test_items_render_via_markers() -> None:
+    from app.newsletter.models import Item
+
+    content = NewsletterContent(
+        theme="T", subject="S", intro_1="i1", intro_2="i2", main_cta_text="m",
+        main_cta_url="https://x", slot_cta_text="s", slot_cta_url="https://x",
+        matches=(), items=(Item(title="Vacature developer", url="https://x.nl/jobs/dev",
+                                button_text="Bekijk vacature"),),
+    )
+    banners = render_newsletter("<html><!-- ##BANNERS## --></html>", BRAND, content)
+    cards = render_newsletter("<html><!-- ##CARDS## --></html>", BRAND, content)
+    for out in (banners, cards):
+        assert "VACATURE DEVELOPER" in out and "Bekijk vacature" in out
+
+
 def test_template_without_banner_marker_degrades() -> None:
     # Geen marker en met wedstrijden: geen blokken, geen fout, schone output.
     template = "<html>{{INTRO_1}} geen marker hier</html>"

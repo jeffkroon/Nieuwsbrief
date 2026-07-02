@@ -170,3 +170,21 @@ def test_continue_missing_conversation_404(client, fake_anthropic) -> None:
     fake_anthropic([FakeResponse([FakeText("x")], "end_turn")])
     resp = client.post(f"/conversations/{uuid.uuid4()}/messages", json={"message": "hi"})
     assert resp.status_code == 404
+
+
+def test_content_types_shape_the_system_prompt(client, session, fake_anthropic) -> None:
+    # Een bedrijf met eigen nieuwsbrief-soorten krijgt een prompt zonder voetbal.
+    cfg = {**CONFIG, "content_types": [
+        {"kind": "items", "name": "Cases", "button_text": "Lees de case"},
+    ]}
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug="bureau", name="Marketingbureau", config=cfg)
+    )
+    fake = fake_anthropic([FakeResponse([FakeText("ok")], "end_turn")])
+    resp = client.post(
+        "/conversations", json={"tenant_id": str(tenant.id), "message": "nieuwsbrief over cases"}
+    )
+    assert resp.status_code == 201
+    system_text = fake.messages.calls[0]["system"][0]["text"]
+    assert "CASES" in system_text and "Lees de case" in system_text
+    assert "find_matches" not in system_text  # geen voetbal-script voor dit bedrijf

@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.deps import get_anthropic_client, get_cipher, get_session
+from app.deps import get_anthropic_client, get_cipher, get_session, require_admin
 from app.repositories import secrets as secrets_repo
 from app.repositories import tenants as repo
 from app.schemas import TenantCreate, TenantRead, TenantSecretSet, TenantUpdate
@@ -17,7 +17,12 @@ from app.services.tone import analyze_and_store_tone, get_cached_tone
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
 
-@router.post("", response_model=TenantRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=TenantRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
 def create_tenant(data: TenantCreate, session: Session = Depends(get_session)) -> TenantRead:
     if repo.get_tenant_by_slug(session, data.slug) is not None:
         raise HTTPException(
@@ -39,7 +44,7 @@ def get_tenant(tenant_id: uuid.UUID, session: Session = Depends(get_session)) ->
     return tenant
 
 
-@router.patch("/{tenant_id}", response_model=TenantRead)
+@router.patch("/{tenant_id}", response_model=TenantRead, dependencies=[Depends(require_admin)])
 def update_tenant(
     tenant_id: uuid.UUID, data: TenantUpdate, session: Session = Depends(get_session)
 ) -> TenantRead:
@@ -49,7 +54,9 @@ def update_tenant(
     return tenant
 
 
-@router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_admin)]
+)
 def delete_tenant(tenant_id: uuid.UUID, session: Session = Depends(get_session)) -> Response:
     if not repo.delete_tenant(session, tenant_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="tenant niet gevonden")
@@ -84,7 +91,11 @@ def refresh_tone(
     return {"tone_of_voice": tone}
 
 
-@router.put("/{tenant_id}/secrets", status_code=status.HTTP_204_NO_CONTENT)
+@router.put(
+    "/{tenant_id}/secrets",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
 def set_tenant_secret(
     tenant_id: uuid.UUID,
     body: TenantSecretSet,

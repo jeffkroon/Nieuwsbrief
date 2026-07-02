@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from app.newsletter.models import PRICE_ON_REQUEST, Club, Match, NewsletterContent
+from app.newsletter.models import PRICE_ON_REQUEST, Club, Item, Match, NewsletterContent
 from app.newsletter.styles import effective_styles, style_replacements
 
 BANNER_MARKER = "<!-- ##BANNERS## -->"
@@ -152,13 +152,73 @@ def render_club_banner(club: Club, brand: dict) -> str:
 <tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
 
 
-def _card_cell(
-    *, title: str, subtitle: str, img_url: str, price: str, button_text: str, button_url: str,
-    brand: dict, label: str | None = None,
-) -> str:
-    """Eén kaart-cel (foto boven, optioneel label, naam, stadion/stad, prijs, knop)."""
+def render_item_banner(item: Item, brand: dict) -> str:
+    """Bouw een generiek item-blok (case, blog, product, actie) in banner-stijl.
+
+    Zelfde opmaak als het clubblok, maar de prijs is optioneel en de knoptekst
+    komt uit het item zelf (bv. "Lees de case" of "Bekijk aanbieding").
+    """
     st = effective_styles(brand)
-    if price == PRICE_ON_REQUEST:
+    color = st["block_border"]
+    btn_bg, btn_text = st["button_bg"], st["button_text"]
+    title_c, price_c = st["away_color"], st["price_color"]
+    img_url = item.image_url or club_image_url(item.title, brand)
+    subtitle_html = (
+        f'<p class="club-venue" style="margin:0 0 10px 0; font-family:Arial,Helvetica,sans-serif; '
+        f'font-size:11px; color:#888888; line-height:1.3;">{item.subtitle}</p>'
+        if item.subtitle
+        else ""
+    )
+    price_html = ""
+    if item.price:
+        price_html = (
+            '<table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation" '
+            'style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">'
+            '<tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">'
+            f'<span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; '
+            f'font-weight:bold; color:{price_c}; line-height:1.2;">{item.price}</span>'
+            "</td></tr></tbody></table>"
+        )
+    return f"""
+<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="584" align="center"
+  class="banner-wrap"
+  style="table-layout:fixed; width:584px; border:3px solid {color}; border-radius:6px; border-collapse:separate; background-color:#ffffff;">
+<tbody><tr>
+  <td width="220" class="img-col"
+    style="width:220px; overflow:hidden; padding:0; border-radius:4px 0 0 4px; vertical-align:middle; background-color:#ffffff;">
+    <img src="{img_url}" width="220" height="220" border="0" alt="{item.title}"
+      class="banner-img" style="display:block; width:220px; height:220px;">
+  </td>
+  <td valign="middle" align="center" class="content-col"
+    style="padding:18px 16px 18px 12px; text-align:center; vertical-align:middle; background-color:#ffffff; border-radius:0 4px 4px 0;">
+    <p class="home-name"
+      style="margin:0 0 6px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:22px; font-weight:900; color:{title_c}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{item.title.upper()}</p>
+    {subtitle_html}
+    {price_html}
+    <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
+      style="background:{btn_bg}; border-radius:4px; border-collapse:separate;">
+    <tbody><tr><td class="cta-btn" style="padding:12px 18px; border-radius:4px;">
+      <a href="{item.url}" target="_blank"
+        style="color:{btn_text}; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">{item.button_text}</a>
+    </td></tr></tbody></table>
+  </td>
+</tr></tbody></table>
+<table cellspacing="0" cellpadding="0" border="0" width="100%" style="table-layout:fixed;">
+<tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
+
+
+def _card_cell(
+    *, title: str, subtitle: str, img_url: str, price: str | None, button_text: str,
+    button_url: str, brand: dict, label: str | None = None,
+) -> str:
+    """Eén kaart-cel (foto boven, optioneel label, naam, subtitel, prijs, knop).
+
+    price=None betekent: geen prijsregel tonen (voor items zonder prijs, zoals blogs).
+    """
+    st = effective_styles(brand)
+    if not price:
+        price_va, price_amount = "", ""
+    elif price == PRICE_ON_REQUEST:
         price_va, price_amount = "", "op aanvraag"
     else:
         price_va, price_amount = "v.a.", price
@@ -181,6 +241,12 @@ def _card_cell(
         if price_va
         else ""
     )
+    price_amount_html = (
+        f'<span style="display:block; font-family:{st["font"]}; font-size:22px; font-weight:bold; '
+        f'color:{st["price_color"]}; line-height:1.1; margin:0 0 6px 0;">{price_amount}</span>'
+        if price_amount
+        else ""
+    )
     return f"""<td class="card-cell" width="290" valign="top" style="width:290px; vertical-align:top;">
   <table class="card" cellspacing="0" cellpadding="0" border="0" width="290"
     style="width:290px; border:2px solid {st["card_border"]}; border-radius:6px; border-collapse:separate; background:{st["card_bg"]}; vertical-align:top;">
@@ -192,7 +258,7 @@ def _card_cell(
       {label_html}<p style="margin:0 0 3px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:18px; font-weight:900; color:{st["accent"]}; text-transform:uppercase; letter-spacing:1px; line-height:1.2;">{title.upper()}</p>
       {subtitle_html}
       {va_html}
-      <span style="display:block; font-family:{st["font"]}; font-size:22px; font-weight:bold; color:{st["price_color"]}; line-height:1.1; margin:0 0 6px 0;">{price_amount}</span>
+      {price_amount_html}
       <table cellspacing="0" cellpadding="0" border="0" width="100%" style="border-radius:4px; border-collapse:separate; background:{st["button_bg"]};">
       <tbody><tr><td align="center" style="padding:10px; border-radius:4px;">
         <a href="{button_url}" target="_blank" style="color:{st["button_text"]}; font-family:{st["font"]}; font-size:13px; font-weight:bold; text-decoration:none; white-space:nowrap;">{button_text}</a>
@@ -207,11 +273,16 @@ def _empty_card_cell() -> str:
     return '<td class="card-cell" width="290" style="width:290px;">&nbsp;</td>'
 
 
-def render_cards(matches: tuple[Match, ...], clubs: tuple[Club, ...], brand: dict) -> str:
-    """Render wedstrijden en clubs als een responsive 2-koloms kaart-grid.
+def render_cards(
+    matches: tuple[Match, ...],
+    clubs: tuple[Club, ...],
+    brand: dict,
+    items: tuple[Item, ...] = (),
+) -> str:
+    """Render wedstrijden, clubs en generieke items als een responsive 2-koloms kaart-grid.
 
-    Wedstrijden worden 'HOME' met ondertitel 'vs AWAY'; clubs worden de clubnaam met
-    stadion/stad. Lege invoer geeft een lege string terug.
+    Wedstrijden worden 'HOME' met ondertitel 'vs AWAY'; clubs de clubnaam met
+    stadion/stad; items hun eigen titel/subtitel/knoptekst. Leeg geeft "" terug.
     """
     cells: list[str] = []
     for m in matches:
@@ -239,6 +310,19 @@ def render_cards(matches: tuple[Match, ...], clubs: tuple[Club, ...], brand: dic
                 button_url=c.url,
                 brand=brand,
                 label=c.label,
+            )
+        )
+    for it in items:
+        cells.append(
+            _card_cell(
+                title=it.title,
+                subtitle=it.subtitle or "",
+                img_url=it.image_url or club_image_url(it.title, brand),
+                price=it.price,
+                button_text=it.button_text,
+                button_url=it.url,
+                brand=brand,
+                label=it.label,
             )
         )
     if not cells:
@@ -326,10 +410,13 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
 
     banners = "".join(render_banner(m, brand) for m in content.matches)
     banners += "".join(render_club_banner(c, brand) for c in content.clubs)
+    banners += "".join(render_item_banner(i, brand) for i in content.items)
     html = html.replace(BANNER_MARKER, banners)
     # Kaart-stijl blok (alternatief voor banners): een template gebruikt het ene OF het
     # andere; de marker die er niet is, is gewoon een no-op.
-    html = html.replace(CARD_MARKER, render_cards(content.matches, content.clubs, brand))
+    html = html.replace(
+        CARD_MARKER, render_cards(content.matches, content.clubs, brand, content.items)
+    )
     # Ruim ongevulde eigen placeholders op (bv. als een template een veld weglaat of
     # een onbekende toevoegt), zodat er nooit een rauwe {{IETS}} in de mail belandt.
     return _INTERNAL_PLACEHOLDER.sub("", html)

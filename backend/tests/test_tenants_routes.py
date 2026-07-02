@@ -83,3 +83,25 @@ def test_set_secret_missing_tenant_404(client) -> None:
         json={"kind": "brevo_api_key", "value": "x"},
     )
     assert resp.status_code == 404
+
+
+def test_company_role_cannot_manage_tenants(client) -> None:
+    # Bedrijven beheren (aanmaken/wijzigen/verwijderen/secrets) is alleen voor Dunion-admin.
+    import uuid as _uuid
+
+    from app.deps import current_role
+    from app.main import app
+
+    created = client.post("/tenants", json=_payload("gated")).json()  # als admin
+    app.dependency_overrides[current_role] = lambda: "company"
+    try:
+        assert client.post("/tenants", json=_payload("ander")).status_code == 403
+        assert client.patch(f"/tenants/{created['id']}", json={"name": "X"}).status_code == 403
+        assert client.delete(f"/tenants/{created['id']}").status_code == 403
+        assert client.put(
+            f"/tenants/{created['id']}/secrets", json={"kind": "brevo_api_key", "value": "x"}
+        ).status_code == 403
+        # Lezen mag wel (nodig voor de klant-dropdown).
+        assert client.get("/tenants").status_code == 200
+    finally:
+        app.dependency_overrides.pop(current_role, None)
