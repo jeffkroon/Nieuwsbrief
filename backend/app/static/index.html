@@ -695,9 +695,11 @@ document.getElementById("tmplToolproof").onclick = async () => {
     if (r.notes.length) lines.push("Opmerkingen van de AI:", ...r.notes.map(s => "  - " + s));
     report.textContent = lines.join("\n").trim();
     report.style.display = "block";
-    adminStatus.textContent = r.ok
-      ? "Tool-proof gemaakt en geverifieerd. Bekijk het voorbeeld en klik Toevoegen om op te slaan."
-      : "Omgezet, maar niet alles is geverifieerd. Bekijk het rapport voordat je opslaat.";
+    adminStatus.textContent = r.checks_failed.length
+      ? "Omgezet, maar de verificatie faalde op onderdelen. Bekijk het rapport voordat je opslaat."
+      : (r.failed.length
+        ? "Omgezet, alle verificatie-checks geslaagd. Enkele voorgestelde vervangingen matchten niet (vaak dubbel voorgesteld), zie rapport."
+        : "Tool-proof gemaakt en geverifieerd. Bekijk het voorbeeld en klik Toevoegen om op te slaan.");
     renderAdminPreview();
   } catch (e) {
     adminStatus.textContent = "Netwerkfout: " + e.message;
