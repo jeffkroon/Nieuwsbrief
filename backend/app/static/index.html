@@ -5,103 +5,160 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nieuwsbrief-assistent</title>
 <style>
-  :root { --accent: #FF7200; --bg: #f4f5f7; --panel: #ffffff; --text: #1f2430; --muted: #6a6a6b; --border: #e3e5e9; }
+  :root {
+    --accent: #FF7200; --accent-hover: #e86300; --accent-soft: #fff3e9;
+    --bg: #f6f7f9; --panel: #ffffff; --text: #16181d; --muted: #69707d;
+    --border: #e4e7ec; --sidebar: #141b2d; --sidebar-text: #a5aec0;
+    --danger: #c0392b; --shadow: 0 1px 2px rgba(16,24,40,.05);
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, Arial, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
-  header { background: var(--accent); color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-  header h1 { font-size: 17px; margin: 0; font-weight: 700; }
-  header select { padding: 7px 10px; border-radius: 6px; border: none; font-size: 14px; }
-  .spacer { margin-left: auto; }
-  nav button { background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-size: 14px; cursor: pointer; }
-  nav button.active { background: #fff; color: var(--accent); font-weight: 700; }
+  html, body { height: 100%; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); display: flex; }
+
+  /* Sidebar */
+  #sidebar { width: 226px; flex: 0 0 226px; background: var(--sidebar); color: var(--sidebar-text); display: flex; flex-direction: column; padding: 18px 12px 14px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 20px; }
+  .brand .logo { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), #ffa14d); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 15px; flex: 0 0 32px; }
+  .brand .name { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.25; }
+  .brand .name small { display: block; font-weight: 500; font-size: 11px; color: var(--sidebar-text); }
+  nav#mainNav { display: flex; flex-direction: column; gap: 2px; }
+  nav#mainNav button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; color: var(--sidebar-text); padding: 10px 10px; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  nav#mainNav button:hover { background: rgba(255,255,255,.06); color: #fff; }
+  nav#mainNav button.active { background: rgba(255,114,0,.16); color: #ffb37a; }
+  nav#mainNav button svg { width: 16px; height: 16px; flex: 0 0 16px; }
+  .sidebar-foot { margin-top: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+  #roleBadge { display: inline-block; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.08); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: #cdd5e1; width: max-content; }
+  .sidebar-foot a { color: var(--sidebar-text); text-decoration: none; }
+  .sidebar-foot a:hover { color: #fff; }
+
+  /* App-gebied */
+  #app { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100vh; }
+  #topbar { background: var(--panel); border-bottom: 1px solid var(--border); padding: 10px 22px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .topfield { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  #topbar select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; font-size: 13.5px; color: var(--text); min-width: 170px; font-family: inherit; }
   main { flex: 1; overflow-y: auto; }
   .view { display: none; height: 100%; }
   .view.active { display: block; }
 
   /* Chat */
   #chatSplit { display: flex; height: 100%; }
-  #chat { flex: 1 1 auto; min-width: 0; height: 100%; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-  #chatPreview { flex: 0 0 460px; height: 100%; overflow-y: auto; border-left: 1px solid var(--border); background: #fcfcfd; padding: 14px; display: flex; flex-direction: column; }
-  #chatPreviewHead { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 10px; }
+  #chatCol { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  #chat { flex: 1; overflow-y: auto; padding: 24px 26px 10px; display: flex; flex-direction: column; gap: 12px; }
+  #chatPreview { flex: 0 0 460px; overflow-y: auto; border-left: 1px solid var(--border); background: #fbfbfc; padding: 16px; display: flex; flex-direction: column; }
+  #chatPreviewHead { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
   #chatPreviewFrame { display: none; flex: 1; width: 100%; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
   #chatPreviewFrame.show { display: block; }
   #chatPreview.has-preview #chatPreviewEmpty { display: none; }
-  @media (max-width: 900px) {
-    #chatSplit { flex-direction: column; }
-    #chat { height: auto; flex: 1 1 55%; }
-    #chatPreview { flex: 1 1 45%; border-left: none; border-top: 1px solid var(--border); }
-  }
-  .msg { padding: 11px 15px; border-radius: 14px; max-width: 80%; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; }
+  .msg { padding: 11px 15px; border-radius: 12px; max-width: 76%; line-height: 1.55; white-space: pre-wrap; word-wrap: break-word; font-size: 14.5px; box-shadow: var(--shadow); }
   .user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
   .assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
-  .system { align-self: center; color: var(--muted); font-size: 13px; font-style: italic; }
-  .typing { align-self: flex-start; color: var(--muted); font-size: 14px; }
-  footer { background: var(--panel); border-top: 1px solid var(--border); padding: 14px 20px; }
-  #composer { max-width: 760px; margin: 0 auto; display: flex; gap: 10px; }
-  #input { flex: 1; padding: 12px 14px; border: 1px solid #cfd3da; border-radius: 10px; font-size: 15px; resize: none; font-family: inherit; }
-  #send { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0 22px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .system { align-self: center; color: var(--muted); font-size: 12.5px; font-style: italic; box-shadow: none; }
+  .typing { align-self: flex-start; color: var(--muted); font-size: 13.5px; box-shadow: none; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+  #chatFooter { background: var(--panel); border-top: 1px solid var(--border); padding: 13px 22px; }
+  #composer { max-width: 860px; margin: 0 auto; display: flex; gap: 10px; }
+  #input { flex: 1; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; font-size: 14.5px; resize: none; font-family: inherit; background: #fff; }
+  #input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  #send { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0 22px; font-size: 14.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  #send:hover { background: var(--accent-hover); }
   #send:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* Foto's */
-  #imagesView { max-width: 900px; margin: 0 auto; padding: 20px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 18px; }
-  .card h2 { margin: 0 0 12px 0; font-size: 16px; }
+  /* Pagina's & kaarten */
+  #imagesView, #templatesView, #companiesView { max-width: 980px; margin: 0 auto; padding: 26px 22px 64px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .card h2 { margin: 0 0 10px 0; font-size: 15.5px; }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .row label { font-size: 13px; color: var(--muted); }
-  input[type=file], input[type=text], select.field { padding: 8px 10px; border: 1px solid #cfd3da; border-radius: 8px; font-size: 14px; }
-  .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-weight: 700; font-size: 14px; cursor: pointer; }
-  .btn.secondary { background: #eceff3; color: var(--text); }
+  input[type=file], input[type=text], input[type=password], input[type=number], select.field, textarea { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13.5px; font-family: inherit; background: #fff; color: var(--text); }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-weight: 600; font-size: 13.5px; cursor: pointer; font-family: inherit; }
+  .btn:hover { background: var(--accent-hover); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn.secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .btn.secondary:hover { background: #f3f4f6; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
-  .thumb { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #fafbfc; }
+  .thumb { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #fafbfc; }
   .thumb img { width: 100%; height: 110px; object-fit: cover; display: block; }
-  .thumb .meta { padding: 6px 8px; font-size: 12px; }
+  .thumb .meta { padding: 7px 9px; font-size: 12px; }
   .thumb .name { font-weight: 600; word-break: break-all; }
-  .thumb button { margin-top: 4px; font-size: 11px; color: #c0392b; background: none; border: none; cursor: pointer; padding: 0; }
+  .thumb button { margin-top: 4px; font-size: 11px; color: var(--danger); background: none; border: none; cursor: pointer; padding: 0; }
   .hint { color: var(--muted); font-size: 13px; }
 
-  /* Templates */
-  #templatesView { max-width: 900px; margin: 0 auto; padding: 20px; }
-  .style-head { font-size: 13px; font-weight: 700; color: var(--text); margin: 16px 0 6px; }
-  #companiesView { max-width: 900px; margin: 0 auto; padding: 20px; }
+  /* Templates & bedrijven */
+  .style-head { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; }
   .company-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-  .company-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-  .company-grid input[type=text], .company-grid input[type=password], .company-grid input[type=number] { padding: 8px 10px; border: 1px solid #cfd3da; border-radius: 8px; font-size: 14px; }
-  .company-grid input[type=color] { width: 100%; height: 38px; border: 1px solid #cfd3da; border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
+  .company-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .company-grid input[type=color] { width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
   .ct-row { display: grid; grid-template-columns: 1fr 1fr 1.4fr auto auto; gap: 8px; align-items: center; margin-top: 6px; }
-  .ct-row input[type=text] { padding: 7px 9px; border: 1px solid #cfd3da; border-radius: 8px; font-size: 13px; }
-  .ct-row .del { color: #c0392b; background: none; border: none; cursor: pointer; font-size: 12px; }
-  .company-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
-  .company-item button { font-size: 12px; background: none; border: none; cursor: pointer; }
-  .company-item .edit { color: #0066cc; }
-  .company-item .del { color: #c0392b; }
+  .ct-row .del { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 12px; }
+  .company-item, .tmpl-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .company-item button, .tmpl-item button { font-size: 12px; background: none; border: none; cursor: pointer; font-family: inherit; }
+  .company-item .edit { color: #0b62c4; }
+  .company-item .del, .tmpl-item button { color: var(--danger); }
+  .tmpl-item .badge { background: var(--accent-soft); color: var(--accent-hover); font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }
   .style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
-  .style-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
-  .style-grid input[type=color] { width: 100%; height: 38px; border: 1px solid #cfd3da; border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
+  .style-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .style-grid input[type=color] { width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
   .preview-frame { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; background: #fff; }
   .preview-frame.mini { height: 360px; }
-  .tmpl-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
-  .tmpl-item .badge { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
-  .tmpl-item button { font-size: 12px; color: #c0392b; background: none; border: none; cursor: pointer; }
+
+  /* Mobiel */
+  @media (max-width: 900px) {
+    body { flex-direction: column; }
+    #sidebar { width: 100%; flex: none; flex-direction: row; align-items: center; padding: 8px 12px; gap: 8px; }
+    .brand { padding: 0 8px 0 0; }
+    .brand .name small { display: none; }
+    nav#mainNav { flex-direction: row; }
+    nav#mainNav button { width: auto; padding: 8px 10px; }
+    .sidebar-foot { margin: 0 0 0 auto; flex-direction: row; align-items: center; padding: 0; }
+    #roleBadge { display: none; }
+    #app { height: auto; flex: 1; }
+    #chatSplit { flex-direction: column; }
+    #chatCol { flex: 1 1 55%; }
+    #chatPreview { flex: 1 1 45%; border-left: none; border-top: 1px solid var(--border); }
+  }
 </style>
 </head>
 <body>
-  <header>
-    <h1>Nieuwsbrief-assistent</h1>
-    <select id="tenant" aria-label="Klant"></select>
-    <select id="chatTemplate" aria-label="Template" title="Welke template de assistent gebruikt"></select>
-    <nav class="spacer">
-      <button id="navChat" class="active">Chat</button>
-      <button id="navImages">Foto's</button>
-      <button id="navTemplates">Templates</button>
-      <button id="navCompanies" style="display:none;">Bedrijven</button>
-      <a href="/logout" style="color:#fff; font-size:13px; text-decoration:underline; align-self:center; margin-left:6px;">Uitloggen</a>
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="logo">D</div>
+      <div class="name">Nieuwsbrief Studio<small>door Dunion</small></div>
+    </div>
+    <nav id="mainNav">
+      <button id="navChat" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>Chat</button>
+      <button id="navImages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>Foto's</button>
+      <button id="navTemplates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>Templates</button>
+      <button id="navCompanies" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Bedrijven</button>
     </nav>
-  </header>
+    <div class="sidebar-foot">
+      <span id="roleBadge"></span>
+      <a href="/logout">Uitloggen</a>
+    </div>
+  </aside>
+
+  <div id="app">
+  <div id="topbar">
+    <span class="topfield">Klant
+      <select id="tenant" aria-label="Klant"></select>
+    </span>
+    <span class="topfield">Template
+      <select id="chatTemplate" aria-label="Template" title="Welke template de assistent gebruikt"></select>
+    </span>
+  </div>
 
   <main>
     <div id="chatView" class="view active">
       <div id="chatSplit">
-        <div id="chat"></div>
+        <div id="chatCol">
+          <div id="chat"></div>
+          <footer id="chatFooter">
+            <div id="composer">
+              <textarea id="input" rows="2" placeholder="Beschrijf de nieuwsbrief die je wilt maken..."></textarea>
+              <button id="send">Stuur</button>
+            </div>
+          </footer>
+        </div>
         <div id="chatPreview">
           <div id="chatPreviewHead">Voorbeeld van je nieuwsbrief</div>
           <div id="chatPreviewEmpty" class="hint">Zodra je samen met de assistent een nieuwsbrief opbouwt, verschijnt hier een live voorbeeld, voordat er een Brevo-concept wordt gemaakt.</div>
@@ -271,13 +328,7 @@
       </div>
     </div>
   </main>
-
-  <footer id="chatFooter">
-    <div id="composer">
-      <textarea id="input" rows="2" placeholder="Beschrijf de nieuwsbrief die je wilt maken..."></textarea>
-      <button id="send">Stuur</button>
-    </div>
-  </footer>
+  </div>
 
 <script>
 const tenantSel = document.getElementById("tenant");
@@ -532,7 +583,8 @@ async function loadRole() {
     isAdmin = !!me.is_admin;
   } catch (e) { isAdmin = false; }
   document.getElementById("adminCard").style.display = isAdmin ? "block" : "none";
-  document.getElementById("navCompanies").style.display = isAdmin ? "inline-block" : "none";
+  document.getElementById("navCompanies").style.display = isAdmin ? "" : "none";
+  document.getElementById("roleBadge").textContent = isAdmin ? "Dunion-beheerder" : "Bedrijfsaccount";
 }
 
 function readStyleInputs() {
