@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 
+from app.newsletter.card_block import render_template_cards
 from app.newsletter.models import (
     PRICE_ON_REQUEST,
     Club,
@@ -507,6 +508,9 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
     )
     # Opzet-composer: secties in de gekozen volgorde op de secties-marker (shell-templates).
     html = html.replace(SECTIONS_MARKER, render_sections(content, brand))
+    # Template-eigen kaarten: het ##KAART##-blok herhaalt de markup van de klant
+    # zelf per blok (het ontwerp blijft van de klant, wij vullen alleen de data).
+    html = render_template_cards(html, brand, content, image_fallback=club_image_url)
     # Ruim ongevulde eigen placeholders op (bv. als een template een veld weglaat of
     # een onbekende toevoegt), zodat er nooit een rauwe {{IETS}} in de mail belandt.
     return _INTERNAL_PLACEHOLDER.sub("", html)

@@ -7,6 +7,7 @@ nieuwsbrief of een kaart-/review-layout zonder wedstrijdblokken) gewoon kan.
 
 from __future__ import annotations
 
+from app.newsletter.card_block import CARD_TPL_END, CARD_TPL_START
 from app.newsletter.renderer import BANNER_MARKER, CARD_MARKER, SECTIONS_MARKER
 
 # Niets is hard verplicht; een admin bepaalt zelf de layout.
@@ -52,10 +53,17 @@ def validate_template_html(html: str) -> tuple[list[str], list[str]]:
             "aanbevolen ontbreekt: een afmeldlink, {{ unsubscribe }} (Brevo) of "
             "{% unsubscribe %} (Klaviyo)"
         )
-    # Een blok- of secties-marker is nodig om wedstrijden/clubs/producten te tonen.
-    if BANNER_MARKER not in text and CARD_MARKER not in text and SECTIONS_MARKER not in text:
+    # Een blok-, kaart- of secties-marker is nodig om wedstrijden/clubs/producten te tonen.
+    has_block_marker = any(
+        m in text for m in (BANNER_MARKER, CARD_MARKER, SECTIONS_MARKER, CARD_TPL_START)
+    )
+    if not has_block_marker:
         warnings.append(
-            f"geen blok-marker: zonder {BANNER_MARKER}, {CARD_MARKER} of {SECTIONS_MARKER} "
-            "komen er geen inhoudsblokken in de mail (prima voor een puur algemene nieuwsbrief)"
+            f"geen blok-marker: zonder {BANNER_MARKER}, {CARD_MARKER}, {SECTIONS_MARKER} "
+            f"of een eigen kaart-blok ({CARD_TPL_START}...{CARD_TPL_END}) komen er geen "
+            "inhoudsblokken in de mail (prima voor een puur algemene nieuwsbrief)"
         )
+    # Een kaart-blok zonder sluit-marker kan niet gerenderd worden.
+    if CARD_TPL_START in text and CARD_TPL_END not in text:
+        errors.append(f"kaart-blok niet afgesloten: {CARD_TPL_START} zonder {CARD_TPL_END}")
     return errors, warnings
