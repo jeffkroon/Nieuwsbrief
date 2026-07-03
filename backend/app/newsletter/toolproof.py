@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
+from app.newsletter.card_block import CARD_TPL_START, has_card_block
 from app.newsletter.models import Item, NewsletterContent, Section
 from app.newsletter.renderer import (
     BANNER_MARKER,
@@ -68,9 +69,21 @@ de knop in de hero (vervang de HELE knop-tabel door deze placeholder); \
 binnen de <p>, niet de tags zelf)
 - {{HOOFD_CTA_URL}} en {{HOOFD_CTA_TEKST}}: href en tekst van de belangrijkste knop
 - {{SLOT_CTA_URL}} en {{SLOT_CTA_TEKST}}: href en tekst van de onderste/tweede knop
-- <!-- ##CARDS## --> of <!-- ##BANNERS## -->: vervangt de HELE sectie met herhaalde \
-inhoudsblokken (product-/wedstrijd-/case-kaarten). Kies ##CARDS## bij een grid van \
-kaarten naast elkaar, ##BANNERS## bij brede blokken onder elkaar. Gebruik hiervoor \
+- EIGEN KAART-ONTWERP BEHOUDEN (voorkeur!): heeft de template een eigen ontwerp voor \
+herhaalde product-/inhouds-kaarten (bv. een grid met foto, naam, prijs en knop per \
+product), GOOI DAT ONTWERP DAN NIET WEG. Behoud precies EEN voorbeeldkaart, zet er \
+<!-- ##KAART## --> voor en <!-- /##KAART## --> na, en vervang binnen die kaart de \
+concrete waarden door {{KAART_TITEL}}, {{KAART_SUBTITEL}}, {{KAART_PRIJS}}, \
+{{KAART_URL}} (zowel de link op de foto als op de knop), {{KAART_IMAGE_URL}} en \
+{{KAART_KNOP_TEKST}}. Staan de kaarten per rij in een wrapper (bv. 2 naast elkaar), \
+behoud dan EEN rij-wrapper en zet er <!-- ##KAART_RIJ## --> voor en \
+<!-- /##KAART_RIJ## --> na (met de voorbeeldkaart erbinnen). Verwijder alle overige \
+kaarten en rijen met replace_range. De code herhaalt de voorbeeldkaart per product, \
+twee per rij.
+- <!-- ##CARDS## --> of <!-- ##BANNERS## -->: vervangt de HELE sectie door \
+inhoudsblokken in ONS standaard-ontwerp. Alleen gebruiken als de template GEEN eigen \
+kaart-ontwerp heeft dat behouden kan worden. Kies ##CARDS## bij een grid van kaarten \
+naast elkaar, ##BANNERS## bij brede blokken onder elkaar. Gebruik hiervoor \
 replace_range over de complete sectie.
 - <!-- ##SECTIES## -->: alleen voor "schil"-templates waar de HELE variabele \
 middenzone (hero + teksten + blokken + knoppen samen) per nieuwsbrief opnieuw wordt \
@@ -137,7 +150,16 @@ _SENTINEL_CONTENT = NewsletterContent(
     slot_cta_text="TP-SLOTKNOP",
     slot_cta_url="https://tp-slot.test",
     matches=(),
-    items=(Item(title="TP-BLOK", url="https://tp-item.test", button_text="TP-ITEMKNOP"),),
+    items=(
+        Item(
+            title="TP-BLOK",
+            url="https://tp-item.test",
+            button_text="TP-ITEMKNOP",
+            subtitle="TP-SUBBLOK",
+            price="TP-PRIJS",
+            image_url="https://tp-itemfoto.test/i.png",
+        ),
+    ),
     header_title="TP-KOP",
     header_subtitle="TP-SUBKOP",
     header_cta_text="TP-HEROKNOP",
@@ -254,6 +276,25 @@ def verify_toolproof(html: str) -> tuple[list[str], list[str]]:
             passed.append("blokken-marker rendert de inhoudsblokken")
         else:
             failed.append("blokken-marker aanwezig maar de blokken renderen niet")
+
+    if CARD_TPL_START in html:
+        if not has_card_block(html):
+            failed.append("kaart-blok niet afgesloten (<!-- /##KAART## --> ontbreekt)")
+        else:
+            # Het eigen kaart-ontwerp moet de item-data echt tonen: titel, link en foto.
+            checks = {
+                "titel": "TP-BLOK",
+                "link": "https://tp-item.test",
+                "foto": "https://tp-itemfoto.test/i.png",
+            }
+            missing = [naam for naam, sentinel in checks.items() if sentinel not in rendered]
+            if missing:
+                failed.append(
+                    f"kaart-blok aanwezig maar {', '.join(missing)} komt niet in de render "
+                    "(placeholder {{KAART_...}} vergeten?)"
+                )
+            else:
+                passed.append("kaart-blok herhaalt het eigen ontwerp met de item-data")
 
     if SECTIONS_MARKER in html:
         if "TP-SECTIE-TEKST" in rendered and "TP-BLOK" in rendered:
