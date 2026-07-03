@@ -10,7 +10,15 @@ from sqlalchemy.orm import Session
 from app.deps import get_anthropic_client, get_cipher, get_session, require_admin
 from app.repositories import secrets as secrets_repo
 from app.repositories import tenants as repo
-from app.schemas import TenantCreate, TenantRead, TenantSecretSet, TenantUpdate
+from app.schemas import (
+    TenantCreate,
+    TenantPrefillRequest,
+    TenantPrefillResult,
+    TenantRead,
+    TenantSecretSet,
+    TenantUpdate,
+)
+from app.services.company_prefill import prefill_company
 from app.services.crypto import SecretCipher
 from app.services.tone import analyze_and_store_tone, get_cached_tone
 
@@ -29,6 +37,29 @@ def create_tenant(data: TenantCreate, session: Session = Depends(get_session)) -
             status.HTTP_409_CONFLICT, detail=f"tenant met slug '{data.slug}' bestaat al"
         )
     return repo.create_tenant(session, data)
+
+
+@router.post(
+    "/prefill",
+    response_model=TenantPrefillResult,
+    dependencies=[Depends(require_admin)],
+)
+def prefill_tenant(
+    body: TenantPrefillRequest,
+    client=Depends(get_anthropic_client),
+) -> TenantPrefillResult:
+    """Vul een bedrijfsvoorstel automatisch vanaf de website (naam + URL volstaan).
+
+    Maakt niets aan: de admin krijgt het voorstel in het formulier en beslist zelf.
+    """
+    url = body.website_url.strip()
+    if not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+    try:
+        result = prefill_company(client, name=body.name.strip(), website_url=url)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return TenantPrefillResult(**result)
 
 
 @router.get("", response_model=list[TenantRead])

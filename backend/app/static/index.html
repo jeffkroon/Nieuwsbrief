@@ -291,6 +291,10 @@
           <label>Website* <input type="text" id="coWebsite" placeholder="https://www.bedrijf.nl"></label>
           <label>Primaire kleur <input type="color" id="coPrimary" value="#ff7200"></label>
         </div>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn" id="coPrefill">Vul automatisch in vanaf de website (AI)</button>
+          <span class="hint">Naam + website volstaan: contactgegevens, logo, kleur, socials en nieuwsbrief-soorten worden van de site gehaald. Daarna even checken en opslaan.</span>
+        </div>
         <h3 class="style-head">Gegevens voor de footer</h3>
         <div class="company-grid">
           <label>E-mail* <input type="text" id="coEmail" placeholder="info@bedrijf.nl"></label>
@@ -870,6 +874,59 @@ function companyConfigFromForm() {
   if (header) cfg.header_image_url = header;
   return cfg;
 }
+
+function toColorInput(hex) {
+  if (!hex) return null;
+  hex = hex.toLowerCase().trim();
+  if (/^#[0-9a-f]{3}$/.test(hex)) hex = "#" + [...hex.slice(1)].map(c => c + c).join("");
+  return /^#[0-9a-f]{6}/.test(hex) ? hex.slice(0, 7) : null;
+}
+
+document.getElementById("coPrefill").onclick = async (e) => {
+  e.preventDefault();
+  const name = CO("coName").value.trim();
+  const website = CO("coWebsite").value.trim();
+  if (!name || !website) { companyStatus.textContent = "Vul eerst bedrijfsnaam en website in."; return; }
+  const btn = document.getElementById("coPrefill");
+  btn.disabled = true;
+  companyStatus.textContent = "Website scannen en gegevens invullen (kan een halve minuut duren)...";
+  try {
+    const res = await fetch("/tenants/prefill", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, website_url: website }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      companyStatus.textContent = "Mislukt: " + (typeof err.detail === "string" ? err.detail : res.status);
+      return;
+    }
+    const r = await res.json();
+    const c = r.config || {};
+    CO("coWebsite").value = c.website_url || website;
+    CO("coEmail").value = c.brand_email || "";
+    CO("coAdres").value = c.brand_adres || "";
+    CO("coPostcode").value = c.brand_postcode_stad || "";
+    CO("coTelefoon").value = c.brand_telefoon || "";
+    CO("coKvk").value = c.brand_kvk || "";
+    CO("coLogo").value = c.logo_url || "";
+    CO("coDummy").value = c.dummy_image_url || "";
+    CO("coHeader").value = c.header_image_url || "";
+    CO("coFacebook").value = c.facebook_url || "";
+    CO("coInstagram").value = c.instagram_url || "";
+    CO("coYoutube").value = c.youtube_url || "";
+    const color = toColorInput(c.primary_color);
+    if (color) CO("coPrimary").value = color;
+    document.getElementById("ctRows").innerHTML = "";
+    for (const ct of r.content_types || []) addCtRow(ct);
+    companyStatus.textContent = (r.notes && r.notes.length)
+      ? "Ingevuld. Nog even checken: " + r.notes.join("; ")
+      : "Ingevuld vanaf de website. Controleer de velden en klik op Bedrijf opslaan.";
+  } catch (err) {
+    companyStatus.textContent = "Netwerkfout: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 function resetCompanyForm() {
   editingCompanyId = null;
