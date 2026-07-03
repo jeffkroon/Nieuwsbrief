@@ -107,3 +107,41 @@ def test_fetch_page_ok_and_error() -> None:
     with httpx.Client(transport=httpx.MockTransport(boom)) as c:
         status, html = fetch_page("https://x/", c)
         assert status is None and html == ""
+
+
+def test_html_to_text_keeps_images_when_asked() -> None:
+    html = '<div><img src="/foto/ring.png" alt="x"><a href="/p/ring">Ring</a></div>'
+    plain = html_to_text(html, "https://shop.nl")
+    with_imgs = html_to_text(html, "https://shop.nl", keep_images=True)
+    assert "AFBEELDING" not in plain  # standaard: geen afbeeldingen (bestaand gedrag)
+    assert "AFBEELDING(https://shop.nl/foto/ring.png)" in with_imgs
+    assert "Ring (https://shop.nl/p/ring)" in with_imgs
+
+
+def test_extract_og_image() -> None:
+    from app.newsletter.extraction import extract_og_image
+
+    html = '<head><meta property="og:image" content="https://cdn.shop.nl/ring.png"></head>'
+    assert extract_og_image(html) == "https://cdn.shop.nl/ring.png"
+    # attribuut-volgorde omgedraaid + protocol-relatieve URL
+    html2 = '<meta content="//cdn.shop.nl/k.png" property="og:image">'
+    assert extract_og_image(html2) == "https://cdn.shop.nl/k.png"
+    # http wordt https (mailclients blokkeren http-afbeeldingen)
+    html3 = '<meta property="og:image" content="http://shop.nl/r.png">'
+    assert extract_og_image(html3) == "https://shop.nl/r.png"
+    assert extract_og_image("<html>niks</html>") is None
+
+
+def test_extract_products() -> None:
+    from app.newsletter.extraction import extract_products
+
+    payload = {"products": [{
+        "name": "Ankh Ring (Goud)", "url": "https://shop.nl/products/ankh",
+        "price": "€ 59,95", "image_url": "https://cdn.shop.nl/ankh.png",
+    }]}
+    llm = FakeLLM(payload)
+    products = extract_products(llm, "<html>pagina</html>", source_url="https://shop.nl/collections/ringen")
+    assert products == payload["products"]
+    # De pagina ging met afbeeldingen mee naar het LLM (keep_images-pad).
+    sent = llm.messages.calls[0]["messages"][0]["content"]
+    assert "Bron-URL: https://shop.nl/collections/ringen" in sent

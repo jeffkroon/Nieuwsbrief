@@ -141,16 +141,20 @@ def _item_type_section(ct: dict) -> str:
     source_part = f" (zoek op {source})" if source else ""
     if ct.get("has_price"):
         price_rule = (
-            "Prijs (`price`) alleen meegeven als die echt op de pagina staat of de "
-            "gebruiker die opgeeft."
+            "De prijs komt live van de site (geef de prijs uit `find_products` mee; die "
+            "wordt her-gecheckt); alleen met `price_override` (expliciet verzoek van de "
+            "gebruiker) wint een eigen prijs."
         )
     else:
         price_rule = "Geen prijs tonen, tenzij de gebruiker er expliciet een opgeeft."
     return (
-        f"   - {name}: zoek met `find_ticket_links`{source_part} de bereikbare pagina's "
-        "die passen en laat de gebruiker KIEZEN. Geef per blok een `title`, een korte "
-        f"`subtitle` en de echte pagina-`url`; gebruik als knoptekst (`button_text`) "
-        f'"{button}". {price_rule} Geef deze blokken door via het veld `items`.'
+        f"   - {name}: haal met `find_products`{source_part} de echte producten/inhoud op "
+        "(naam, prijs, foto, URL) en laat de gebruiker KIEZEN; voor losse pagina's kan ook "
+        "`find_ticket_links`. Geef per blok een `title`, een korte `subtitle` en de echte "
+        f'pagina-`url`; gebruik als knoptekst (`button_text`) "{button}". {price_rule} '
+        "De foto komt automatisch van de pagina zelf (of geef de image_url uit "
+        "find_products mee); alleen als de gebruiker een bibliotheek-foto wil, gebruik je "
+        "een bestandsnaam uit `list_images`. Geef deze blokken door via het veld `items`."
     )
 
 

@@ -396,6 +396,74 @@ def test_items_with_unreachable_url_rejected(session, cipher) -> None:
         execute_tool("preview_newsletter", payload, ctx)
 
 
+def test_find_products_tool(session, cipher) -> None:
+    tenant = _tenant(session)
+    payload = {"products": [{"name": "Ankh Ring", "url": "https://shop.nl/p/ankh",
+                             "price": "€ 59,95", "image_url": "https://cdn.shop.nl/a.png"}]}
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, llm=FakeLLM(payload),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>shop</html>")),
+    )
+    result = execute_tool("find_products", {"url": "https://shop.nl/collections/ringen"}, ctx)
+    assert result["count"] == 1
+    assert result["products"][0]["name"] == "Ankh Ring"
+
+
+def test_find_products_unreachable_page(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, llm=FakeLLM({"products": []}),
+        http_client=_http(lambda r: httpx.Response(500, text="stuk")),
+    )
+    with pytest.raises(ValueError, match="status 500"):
+        execute_tool("find_products", {"url": "https://shop.nl/x"}, ctx)
+
+
+def test_item_price_rescraped_site_wins(session, cipher) -> None:
+    # Item met prijs (bv. uit find_products) zonder override: live her-scrape wint.
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["items"] = [{"title": "Ankh Ring", "url": MATCH_URL, "price": "1,-"}]
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": "€ 59,95"}),  # site zegt 59,95
+        http_client=_http(lambda r: httpx.Response(200, text="<html>59,95</html>")),
+        preview_holder=[],
+    )
+    result = execute_tool("preview_newsletter", payload, ctx)
+    assert result["items_used"][0]["price"] == "€ 59,95"
+
+
+def test_item_price_override_wins(session, cipher) -> None:
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["items"] = [{"title": "Ankh Ring", "url": MATCH_URL,
+                         "price": "49,95", "price_override": True}]
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": "€ 59,95"}),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>59,95</html>")),
+        preview_holder=[],
+    )
+    result = execute_tool("preview_newsletter", payload, ctx)
+    assert result["items_used"][0]["price"] == "€ 49,95"  # eigen prijs, genormaliseerd
+
+
+def test_item_image_falls_back_to_og_image(session, cipher) -> None:
+    # Geen image_url meegegeven en niets in de bibliotheek: og:image van de pagina.
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["items"] = [{"title": "Ankh Ring", "url": MATCH_URL}]
+    page = '<html><meta property="og:image" content="https://cdn.shop.nl/ankh-og.png"><body>x</body></html>'
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text=page)),
+        preview_holder=[],
+    )
+    execute_tool("preview_newsletter", payload, ctx)
+    assert "https://cdn.shop.nl/ankh-og.png" in ctx.preview_holder[0]
+
+
 def test_preview_newsletter_returns_html_without_brevo(session, cipher) -> None:
     # Preview rendert de HTML, vult preview_holder, en maakt GEEN Brevo-concept aan.
     tenant = _tenant(session)

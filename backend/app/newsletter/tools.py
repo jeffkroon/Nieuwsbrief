@@ -112,6 +112,20 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "find_products",
+        "description": "Haal de producten van een collectie- of overzichtspagina van de "
+        "klantensite: naam, prijs, productfoto en product-URL, alles exact zoals op de "
+        "pagina. Gebruik dit voor product-nieuwsbrieven zodat de gebruiker uit ECHTE "
+        "producten kiest; foto en prijs komen zo altijd van de site. Zonder url wordt de "
+        "bron-URL van de nieuwsbrief-soort of de website gebruikt.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Collectie-/overzichtspagina om te scannen, bv. de source_url van de gekozen nieuwsbrief-soort"},
+            },
+        },
+    },
+    {
         "name": "create_newsletter_draft",
         "description": "Render de nieuwsbrief en maak hem aan als CONCEPT in Brevo. Verstuurt "
         "niets. Gebruik alleen wedstrijden (met hun echte url) uit find_matches. De link en "
@@ -182,9 +196,10 @@ TOOL_DEFINITIONS = [
                             "title": {"type": "string"},
                             "subtitle": {"type": "string", "description": "Korte ondertitel (klein lettertype in het blok)"},
                             "url": {"type": "string", "description": "Bereikbare pagina-URL (uit find_ticket_links)"},
-                            "button_text": {"type": "string", "description": "Knoptekst van dit blok, bv. 'Lees de case' of 'Bekijk aanbieding'. Gebruik de knoptekst van de nieuwsbrief-soort."},
-                            "price": {"type": "string", "description": "Optionele prijs; ALLEEN als de gebruiker die opgeeft of die echt op de pagina staat. Weglaten = geen prijs tonen."},
-                            "image_url": {"type": "string", "description": "BESTANDSNAAM van de foto uit list_images (niet de volledige URL)"},
+                            "button_text": {"type": "string", "description": "Knoptekst van dit blok, bv. 'Lees de case' of 'SHOP NU'. Gebruik de knoptekst van de nieuwsbrief-soort."},
+                            "price": {"type": "string", "description": "Optionele prijs (bv. uit find_products). Wordt zonder price_override live her-gecheckt op de pagina (site wint). Weglaten = geen prijs tonen."},
+                            "price_override": {"type": "boolean", "description": "Zet ALLEEN op true als de gebruiker EXPLICIET een eigen prijs voor dit blok heeft opgegeven; dan wint 'price' van de site-prijs. Nooit op eigen initiatief gebruiken."},
+                            "image_url": {"type": "string", "description": "Foto: de image_url uit find_products (volledige URL) of een BESTANDSNAAM uit list_images. Weglaten = automatisch de productfoto (og:image) van de pagina."},
                             "label": {"type": "string", "description": "Optioneel kort badge-label, bv. 'NIEUW'"},
                         },
                         "required": ["title", "url"],
@@ -257,6 +272,25 @@ def _tool_find_ticket_links(ctx: ToolContext, tool_input: dict) -> dict:
         _require_llm(ctx), html, source_url=url, query=tool_input["query"]
     )
     return {"source_url": url, "count": len(links), "links": links}
+
+
+def _tool_find_products(ctx: ToolContext, tool_input: dict) -> dict:
+    """Producten (naam, prijs, foto, URL) van een collectie-/overzichtspagina halen."""
+    brand = _load_tenant(ctx).config
+    url = tool_input.get("url") or brand.get("website_url")
+    if not url:
+        raise ValueError("geen URL om producten te zoeken; geef een collectie-URL mee")
+    status, html = extraction.fetch_page(url, ctx.http_client)
+    if status != 200:
+        raise ValueError(f"kon {url} niet ophalen (status {status})")
+    products = extraction.extract_products(_require_llm(ctx), html, source_url=url)
+    return {
+        "source_url": url,
+        "count": len(products),
+        "products": products,
+        "message": "Toon de producten en laat de gebruiker KIEZEN. Gebruik url, prijs en "
+        "image_url exact zoals hier teruggegeven; verzin niets.",
+    }
 
 
 def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:
@@ -355,24 +389,40 @@ def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]
 
 
 def _validated_items(ctx: ToolContext, raw_items: list[dict]) -> list[Item]:
-    """Generieke items (cases, blogs, producten): URL moet bereikbaar zijn (200).
+    """Generieke items (producten, cases, blogs): URL moet bereikbaar zijn (200).
 
-    De prijs wordt niet gescrapet (items zijn vaak prijsloos); alleen een door de
-    gebruiker bevestigde prijs gaat mee. Foto's resolven zoals bij clubs.
+    Prijs: geen prijs meegegeven = geen prijsregel. Prijs meegegeven zonder override =
+    live her-scrapen van de pagina (de site wint; de meegegeven prijs is terugval).
+    Prijs met price_override (expliciet verzoek gebruiker) = die prijs, genormaliseerd.
+    Foto: expliciete verwijzing (bibliotheek of volledige URL) wint; anders de og:image
+    van de productpagina zelf, zodat productfoto's nooit verzonnen worden.
     """
     items: list[Item] = []
     for it in raw_items:
-        status, _ = extraction.fetch_page(it["url"], ctx.http_client)
+        status, page_html = extraction.fetch_page(it["url"], ctx.http_client)
         if status != 200:
             raise ValueError(
                 f"URL bestaat niet of is onbereikbaar: {it['url']} (status {status}). "
-                "Gebruik find_ticket_links voor een geldige link."
+                "Gebruik find_products of find_ticket_links voor een geldige link."
             )
+
+        price = it.get("price")
+        if price and it.get("price_override"):
+            price = extraction.normalize_price(price)
+        elif price:
+            scraped = extraction.extract_price(
+                _require_llm(ctx), page_html, source_url=it["url"]
+            )
+            price = scraped if scraped != PRICE_ON_REQUEST else extraction.normalize_price(price)
+
+        image_url = _resolve_image_for(ctx, it.get("image_url"), it["title"])
+        if not image_url:
+            image_url = extraction.extract_og_image(page_html)
+
         items.append(
             Item(
                 title=it["title"], url=it["url"], subtitle=it.get("subtitle"),
-                price=it.get("price"), label=it.get("label"),
-                image_url=_resolve_image_for(ctx, it.get("image_url"), it["title"]),
+                price=price, label=it.get("label"), image_url=image_url,
                 button_text=it.get("button_text") or "Lees meer",
             )
         )
@@ -528,6 +578,7 @@ _DISPATCH: dict[str, Callable[[ToolContext, dict], dict]] = {
     "list_images": _tool_list_images,
     "analyze_website_tone": _tool_analyze_website_tone,
     "find_ticket_links": _tool_find_ticket_links,
+    "find_products": _tool_find_products,
     "find_matches": _tool_find_matches,
     "preview_newsletter": _tool_preview_newsletter,
     "create_newsletter_draft": _tool_create_newsletter_draft,
