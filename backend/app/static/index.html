@@ -296,12 +296,13 @@
           <span class="hint">Naam + website volstaan: contactgegevens, logo, kleur, socials en nieuwsbrief-soorten worden van de site gehaald. Daarna even checken en opslaan.</span>
         </div>
         <h3 class="style-head">Gegevens voor de footer</h3>
+        <p class="hint">Alleen e-mail is verplicht; lege velden worden gewoon weggelaten uit de footer.</p>
         <div class="company-grid">
           <label>E-mail* <input type="text" id="coEmail" placeholder="info@bedrijf.nl"></label>
-          <label>Adres* <input type="text" id="coAdres" placeholder="Straat 1"></label>
-          <label>Postcode + stad* <input type="text" id="coPostcode" placeholder="1234 AB Stad"></label>
-          <label>Telefoon* <input type="text" id="coTelefoon" placeholder="+31 ..."></label>
-          <label>KVK-nummer* <input type="text" id="coKvk" placeholder="12345678"></label>
+          <label>Adres <input type="text" id="coAdres" placeholder="optioneel"></label>
+          <label>Postcode + stad <input type="text" id="coPostcode" placeholder="optioneel"></label>
+          <label>Telefoon <input type="text" id="coTelefoon" placeholder="optioneel"></label>
+          <label>KVK-nummer <input type="text" id="coKvk" placeholder="optioneel"></label>
         </div>
         <h3 class="style-head">Afbeeldingen & socials</h3>
         <div class="company-grid">
@@ -840,8 +841,8 @@ function readContentTypes() {
 }
 
 const ESP_HINTS = {
-  brevo: "Brevo: API-key begint met 'xkeysib-'. Lijst-ID is optioneel (een nummer).",
-  klaviyo: "Klaviyo: private key (pk_...) met scopes campaigns:write, templates:write en lists:read. Lijst-ID (list- of segment-id) is VERPLICHT.",
+  brevo: "Brevo: API-key begint met 'xkeysib-'. Lijst-ID = het nummer van de contactenlijst waar de campagne aan gericht wordt (Brevo -> Contacts -> Lists, het nummer achter de lijstnaam). Optioneel: zonder lijst maakt Brevo het concept ook aan.",
+  klaviyo: "Klaviyo: private key (pk_...) met scopes campaigns:write, templates:write en lists:read. Lijst-ID = het ID van de lijst/segment waar de campagne aan gericht wordt (Klaviyo -> Audience -> Lists & Segments -> klik de lijst, het ID staat in de URL). VERPLICHT: zonder audience weigert Klaviyo een concept.",
 };
 function updateEspHint() {
   document.getElementById("espHint").textContent = ESP_HINTS[CO("coEsp").value] || "";
@@ -1004,7 +1005,7 @@ async function loadCompanies() {
 }
 
 document.getElementById("companySave").onclick = async () => {
-  const required = { coName: "bedrijfsnaam", coSlug: "slug", coWebsite: "website", coEmail: "e-mail", coAdres: "adres", coPostcode: "postcode + stad", coTelefoon: "telefoon", coKvk: "KVK", coLogo: "logo-URL", coDummy: "fallback-foto-URL" };
+  const required = { coName: "bedrijfsnaam", coSlug: "slug", coWebsite: "website", coEmail: "e-mail", coLogo: "logo-URL", coDummy: "fallback-foto-URL" };
   const missing = Object.entries(required).filter(([id]) => !CO(id).value.trim()).map(([, n]) => n);
   if (missing.length) { companyStatus.textContent = "Vul eerst in: " + missing.join(", "); return; }
 

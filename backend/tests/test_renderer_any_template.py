@@ -221,3 +221,25 @@ def test_sections_blocks_banner_style_and_empty_sections() -> None:
     empty = NewsletterContent(**base)
     out2 = render_newsletter("<html>VAST<!-- ##SECTIES## --></html>", BRAND, empty)
     assert "<!-- ##SECTIES## -->" not in out2 and "VAST" in out2
+
+
+def test_optional_footer_fields_left_out_cleanly() -> None:
+    # Telefoon/KVK/adres zijn optioneel: weggelaten velden geven geen lege labels.
+    brand = {k: v for k, v in BRAND.items()
+             if k not in ("brand_telefoon", "brand_kvk", "brand_adres", "brand_postcode_stad")}
+    template = "<html>{{BRAND_NAME}}<footer>{{FOOTER_CONTACT}}</footer></html>"
+    out = render_newsletter(template, brand, _content())
+    assert "E-mail: a@b.nl" in out  # wat er is, staat erin
+    assert "Tel:" not in out and "KVK" not in out  # wat er niet is, is echt weg
+
+    # Met telefoon erbij verschijnt de regel wel.
+    brand2 = {**brand, "brand_telefoon": "+31 6 123"}
+    out2 = render_newsletter(template, brand2, _content())
+    assert "Tel: +31 6 123" in out2
+
+
+def test_socials_fall_back_to_website() -> None:
+    brand = {k: v for k, v in BRAND.items()
+             if k not in ("facebook_url", "instagram_url", "youtube_url")}
+    out = render_newsletter("<html><a href=\"{{FACEBOOK_URL}}\">f</a></html>", brand, _content())
+    assert 'href="https://x.nl"' in out  # geen kapotte lege links

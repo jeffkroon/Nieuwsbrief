@@ -29,20 +29,15 @@ SECTIONS_MARKER = "<!-- ##SECTIES## -->"
 # zodat elke template-structuur schoon rendert.
 _INTERNAL_PLACEHOLDER = re.compile(r"{{[A-Z0-9_]+}}")
 
+# Alleen wat de mail echt nodig heeft is verplicht; adres/telefoon/KVK/socials zijn
+# optioneel en worden bij ontbreken netjes weggelaten (zie _footer_contact).
 REQUIRED_BRAND_FIELDS = (
     "brand_name",
     "brand_email",
-    "brand_adres",
-    "brand_postcode_stad",
-    "brand_telefoon",
-    "brand_kvk",
     "website_url",
     "primary_color",
     "logo_url",
     "dummy_image_url",
-    "facebook_url",
-    "instagram_url",
-    "youtube_url",
 )
 
 
@@ -419,6 +414,26 @@ def render_sections(content: NewsletterContent, brand: dict) -> str:
     return "".join(parts)
 
 
+def _footer_contact(brand: dict) -> str:
+    """Contactregels voor de footer: alleen wat het bedrijf heeft ingevuld.
+
+    Zo is een telefoonnummer of KVK niet verplicht en blijven er geen lege
+    labels ("Tel:") achter in de mail.
+    """
+    lines: list[str] = []
+    if brand.get("brand_adres"):
+        lines.append(brand["brand_adres"])
+    if brand.get("brand_postcode_stad"):
+        lines.append(brand["brand_postcode_stad"])
+    if brand.get("brand_email"):
+        lines.append(f"E-mail: {brand['brand_email']}")
+    if brand.get("brand_telefoon"):
+        lines.append(f"Tel: {brand['brand_telefoon']}")
+    if brand.get("brand_kvk"):
+        lines.append(f"KVK-nummer: {brand['brand_kvk']}")
+    return "<br>".join(lines)
+
+
 def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
     """Bouw de CTA-knop over de headerfoto.
 
@@ -460,14 +475,15 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
         "{{WEBSITE_URL}}": brand["website_url"],
         "{{LOGO_URL}}": brand["logo_url"],
         "{{BRAND_NAME}}": brand["brand_name"],
-        "{{BRAND_ADRES}}": brand["brand_adres"],
-        "{{BRAND_POSTCODE_STAD}}": brand["brand_postcode_stad"],
+        "{{BRAND_ADRES}}": brand.get("brand_adres", ""),
+        "{{BRAND_POSTCODE_STAD}}": brand.get("brand_postcode_stad", ""),
         "{{BRAND_EMAIL}}": brand["brand_email"],
-        "{{BRAND_TELEFOON}}": brand["brand_telefoon"],
-        "{{BRAND_KVK}}": brand["brand_kvk"],
-        "{{FACEBOOK_URL}}": brand["facebook_url"],
-        "{{INSTAGRAM_URL}}": brand["instagram_url"],
-        "{{YOUTUBE_URL}}": brand["youtube_url"],
+        "{{BRAND_TELEFOON}}": brand.get("brand_telefoon", ""),
+        "{{BRAND_KVK}}": brand.get("brand_kvk", ""),
+        "{{FOOTER_CONTACT}}": _footer_contact(brand),
+        "{{FACEBOOK_URL}}": brand.get("facebook_url") or brand["website_url"],
+        "{{INSTAGRAM_URL}}": brand.get("instagram_url") or brand["website_url"],
+        "{{YOUTUBE_URL}}": brand.get("youtube_url") or brand["website_url"],
         "{{INTRO_1}}": content.intro_1,
         "{{INTRO_2}}": content.intro_2,
         "{{HOOFD_CTA_TEKST}}": content.main_cta_text,
