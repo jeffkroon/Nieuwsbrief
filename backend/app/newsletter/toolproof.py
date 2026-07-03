@@ -16,8 +16,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from app.newsletter.models import Item, NewsletterContent
-from app.newsletter.renderer import BANNER_MARKER, CARD_MARKER, render_newsletter
+from app.newsletter.models import Item, NewsletterContent, Section
+from app.newsletter.renderer import (
+    BANNER_MARKER,
+    CARD_MARKER,
+    SECTIONS_MARKER,
+    render_newsletter,
+)
 from app.newsletter.template_validation import validate_template_html
 
 TRANSFORM_MODEL = "claude-sonnet-4-6"
@@ -67,6 +72,10 @@ binnen de <p>, niet de tags zelf)
 inhoudsblokken (product-/wedstrijd-/case-kaarten). Kies ##CARDS## bij een grid van \
 kaarten naast elkaar, ##BANNERS## bij brede blokken onder elkaar. Gebruik hiervoor \
 replace_range over de complete sectie.
+- <!-- ##SECTIES## -->: alleen voor "schil"-templates waar de HELE variabele \
+middenzone (hero + teksten + blokken + knoppen samen) per nieuwsbrief opnieuw wordt \
+samengesteld in de chat. Vervang dan die complete middenzone door deze ene marker en \
+laat head en footer staan. Gebruik dit alleen als losse placeholders niet passen.
 
 BEDRIJFSGEGEVENS (per bedrijf ingevuld):
 - {{BRAND_NAME}}, {{BRAND_ADRES}}, {{BRAND_POSTCODE_STAD}}, {{BRAND_EMAIL}}, \
@@ -129,6 +138,11 @@ _SENTINEL_CONTENT = NewsletterContent(
     header_subtitle="TP-SUBKOP",
     header_cta_text="TP-HEROKNOP",
     header_image_url="https://tp-hero.test/h.png",
+    sections=(
+        Section(kind="text", text="TP-SECTIE-TEKST"),
+        Section(kind="blocks"),
+        Section(kind="button", text="TP-SECTIEKNOP", url="https://tp-sectieknop.test"),
+    ),
 )
 
 # placeholder -> sentinel die in de render moet verschijnen als de placeholder bestaat.
@@ -235,6 +249,12 @@ def verify_toolproof(html: str) -> tuple[list[str], list[str]]:
             passed.append("blokken-marker rendert de inhoudsblokken")
         else:
             failed.append("blokken-marker aanwezig maar de blokken renderen niet")
+
+    if SECTIONS_MARKER in html:
+        if "TP-SECTIE-TEKST" in rendered and "TP-BLOK" in rendered:
+            passed.append("secties-marker rendert de opzet-secties")
+        else:
+            failed.append("secties-marker aanwezig maar de secties renderen niet")
 
     for tag in ("{{ unsubscribe }}", "{% unsubscribe %}"):
         if tag in html:

@@ -442,6 +442,76 @@ def test_klaviyo_missing_key_gives_clear_error(session, cipher) -> None:
         execute_tool("create_newsletter_draft", payload, ctx)
 
 
+def test_preview_with_sections_composes_layout(session, cipher) -> None:
+    # Opzet-composer end-to-end: shell-template + secties in volgorde, hero-foto uit
+    # de bibliotheek, knop-URL gecheckt, blokken (item) binnen de secties.
+    from app.repositories import images as images_repo
+    from app.repositories import templates as templates_repo
+
+    tenant = _tenant(session)
+    templates_repo.create_template(
+        session, tenant_id=tenant.id, name="Shell",
+        html="<html>SHELL-KOP<!-- ##SECTIES## -->SHELL-FOOTER {{ unsubscribe }}</html>",
+    )
+    images_repo.create_image(
+        session, tenant_id=tenant.id, category="banner", filename="campagne-hero.png",
+        description="Hero", storage_path="p/h.png", url="https://cdn/echte-hero.png",
+    )
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["items"] = [{"title": "Ankh Ring", "url": MATCH_URL, "button_text": "SHOP NU"}]
+    payload["sections"] = [
+        {"kind": "hero", "image_url": "campagne-hero.png", "url": MATCH_URL},
+        {"kind": "text", "text": "SECTIE-INTRO"},
+        {"kind": "blocks"},
+        {"kind": "button", "text": "SHOP ALLES", "url": MATCH_URL},
+    ]
+    page = '<html><meta property="og:image" content="https://cdn/og.png">ok</html>'
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text=page)),
+        preview_holder=[],
+    )
+    execute_tool("preview_newsletter", payload, ctx)
+    out = ctx.preview_holder[0]
+    hero = out.index("https://cdn/echte-hero.png")  # bibliotheek-foto opgelost
+    text = out.index("SECTIE-INTRO")
+    block = out.index("ANKH RING")
+    button = out.index("SHOP ALLES")
+    assert out.index("SHELL-KOP") < hero < text < block < button < out.index("SHELL-FOOTER")
+    assert "SHOP NU" in out  # item-knop binnen het blok
+
+
+def test_sections_button_url_must_be_reachable(session, cipher) -> None:
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["sections"] = [{"kind": "button", "text": "SHOP", "url": "https://x.nl/404"}]
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(404, text="weg")),
+        preview_holder=[],
+    )
+    with pytest.raises(ValueError, match="onbereikbaar"):
+        execute_tool("preview_newsletter", payload, ctx)
+
+
+def test_sections_hero_requires_findable_image(session, cipher) -> None:
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["sections"] = [{"kind": "hero", "image_url": "bestaat-niet.png"}]
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher, preview_holder=[])
+    with pytest.raises(ValueError, match="hero-sectie"):
+        execute_tool("preview_newsletter", payload, ctx)
+
+
+def test_sections_unknown_kind_rejected(session, cipher) -> None:
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["sections"] = [{"kind": "carousel"}]
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher, preview_holder=[])
+    with pytest.raises(ValueError, match="onbekende sectie-soort"):
+        execute_tool("preview_newsletter", payload, ctx)
+
+
 def test_find_products_tool(session, cipher) -> None:
     tenant = _tenant(session)
     payload = {"products": [{"name": "Ankh Ring", "url": "https://shop.nl/p/ankh",

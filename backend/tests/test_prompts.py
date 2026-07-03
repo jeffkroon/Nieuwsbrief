@@ -64,3 +64,11 @@ def test_brevo_copy_rules_present() -> None:
     # Preheader-regels
     assert "85 en 100 tekens" in prompt
     assert "preview_text" in prompt
+
+
+def test_opzet_step_present() -> None:
+    # De opzet-composer-stap: over de opbouw praten en doorgeven via `sections`.
+    prompt = build_system_prompt()
+    assert "OPZET" in prompt
+    assert "`sections`" in prompt
+    assert "preview_newsletter" in prompt

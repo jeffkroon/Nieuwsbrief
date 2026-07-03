@@ -176,3 +176,48 @@ def test_template_without_banner_marker_degrades() -> None:
     out = render_newsletter(template, BRAND, _content([Match("A", "B", "https://x", "€ 9")]))
     assert "Bestel tickets" not in out  # blokken niet gerenderd
     assert "{{" not in out  # geen rauwe placeholders
+
+
+def test_sections_render_in_order() -> None:
+    from app.newsletter.models import Item, Section
+
+    content = NewsletterContent(
+        theme="T", subject="S", intro_1="i1", intro_2="i2", main_cta_text="m",
+        main_cta_url="https://x", slot_cta_text="s", slot_cta_url="https://x",
+        matches=(),
+        items=(Item(title="Ankh Ring", url="https://x.nl/p/ankh", price="€ 59,95",
+                    image_url="https://cdn/a.png", button_text="SHOP NU"),),
+        sections=(
+            Section(kind="hero", image_url="https://cdn/hero.png", url="https://x.nl/collectie"),
+            Section(kind="text", text="SECTIE-TEKST-EEN"),
+            Section(kind="blocks"),
+            Section(kind="button", text="SHOP DE COLLECTIE", url="https://x.nl/collectie"),
+        ),
+    )
+    out = render_newsletter("<html><!-- ##SECTIES## --></html>", BRAND, content)
+    # Alles aanwezig en in volgorde: hero -> tekst -> blokken -> knop.
+    hero = out.index("https://cdn/hero.png")
+    text = out.index("SECTIE-TEKST-EEN")
+    block = out.index("ANKH RING")
+    button = out.index("SHOP DE COLLECTIE")
+    assert hero < text < block < button
+    assert "SHOP NU" in out  # item-knop binnen het blok
+    assert "<!-- ##SECTIES## -->" not in out
+
+
+def test_sections_blocks_banner_style_and_empty_sections() -> None:
+    from app.newsletter.models import Item, Section
+
+    item = Item(title="Ketting X", url="https://x.nl/p/k", image_url="https://cdn/k.png",
+                button_text="SHOP NU")
+    base = dict(theme="T", subject="S", intro_1="i1", intro_2="i2", main_cta_text="m",
+                main_cta_url="https://x", slot_cta_text="s", slot_cta_url="https://x",
+                matches=(), items=(item,))
+    banner_style = NewsletterContent(**base, sections=(Section(kind="blocks", style="banners"),))
+    out = render_newsletter("<html><!-- ##SECTIES## --></html>", BRAND, banner_style)
+    assert 'class="banner-wrap"' in out  # banner-stijl gebruikt
+
+    # Geen sections: marker verdwijnt netjes, klassiek pad onaangetast.
+    empty = NewsletterContent(**base)
+    out2 = render_newsletter("<html>VAST<!-- ##SECTIES## --></html>", BRAND, empty)
+    assert "<!-- ##SECTIES## -->" not in out2 and "VAST" in out2
