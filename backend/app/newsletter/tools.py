@@ -34,6 +34,7 @@ from app.newsletter.models import (
     Section,
 )
 from app.newsletter.renderer import render_newsletter
+from app.newsletter.styles import is_valid_hex_color
 from app.newsletter.templates import load_template
 from app.repositories import images as images_repo
 from app.repositories import newsletters as newsletters_repo
@@ -176,6 +177,7 @@ TOOL_DEFINITIONS = [
                 "preview_text": {"type": "string"},
                 "confirmed": {"type": "boolean", "description": "Zet alleen op true NADAT de gebruiker expliciet toestemming heeft gegeven om het concept in Brevo aan te maken"},
                 "header_image_url": {"type": "string", "description": "De bannerfoto: een BESTANDSNAAM uit list_images('banner') (bv. 'allianz-arena.jpg'), of de volledige banner_url die find_banner teruggaf. Nooit een zelf verzonnen URL."},
+                "header_text_color": {"type": "string", "description": "Optioneel: hex-kleur voor de kop en ondertitel op de bannerfoto, bv. '#ffffff'. Alleen meegeven als de gebruiker om een andere kleur vraagt; standaard geldt de kopkleur uit de stijl-builder."},
                 "matches": {
                     "type": "array",
                     "description": "Wedstrijdblokken. Mag leeg zijn voor een ALGEMENE nieuwsbrief "
@@ -688,6 +690,12 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
     clubs = _validated_clubs(ctx, tool_input.get("clubs", []))
     items = _validated_items(ctx, tool_input.get("items", []))
     sections = _validated_sections(ctx, tool_input.get("sections", []))
+    header_text_color = (tool_input.get("header_text_color") or "").strip() or None
+    if header_text_color and not is_valid_hex_color(header_text_color):
+        raise ValueError(
+            f"header_text_color moet een hex-kleur zijn (bv. '#ffffff'), "
+            f"niet {header_text_color!r}"
+        )
     content = NewsletterContent(
         theme=tool_input["theme"],
         subject=tool_input["subject"],
@@ -695,6 +703,7 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
         header_subtitle=tool_input.get("header_subtitle"),
         header_cta_text=tool_input.get("header_cta_text"),
         header_image_url=_resolve_image(ctx, tool_input.get("header_image_url")),
+        header_text_color=header_text_color,
         intro_1=tool_input["intro_1"],
         intro_2=tool_input["intro_2"],
         main_cta_text=tool_input["main_cta_text"],
