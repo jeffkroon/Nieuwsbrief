@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.deps import get_anthropic_client, get_session, require_admin
-from app.newsletter.models import Club, Match, NewsletterContent
+from app.newsletter.models import Club, Match, NewsletterContent, Section
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.styles import sanitize_styles
 from app.newsletter.template_validation import validate_template_html
@@ -69,6 +69,12 @@ _SAMPLE = NewsletterContent(
     header_title="Voorbeeldnieuwsbrief",
     header_subtitle="Zo ziet jouw stijl eruit",
     header_cta_text="Bekijk alle wedstrijden",
+    # Voor shell-templates met de ##SECTIES##-marker toont de preview een voorbeeldopzet.
+    sections=(
+        Section(kind="text", text="Dit is een voorbeeldtekst in jouw gekozen stijl."),
+        Section(kind="blocks"),
+        Section(kind="button", text="Bekijk alles", url="https://example.com"),
+    ),
 )
 
 

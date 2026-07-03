@@ -72,7 +72,15 @@ _STEP2_CLOSING = """   - ALGEMEEN: geen blokken; bevestig naar welke algemene pa
    "VROEGBOEKKORTING", "TOPPER"). Doe dat alleen als de gebruiker erom vraagt of het
    duidelijk klopt; verzin geen kortingen of claims."""
 
-_PROMPT_TAIL = """3. KOP & ONDERTITEL: stel een kop (`header_title`) en ondertitel (`header_subtitle`)
+_PROMPT_TAIL = """2b. OPZET (alleen voor templates met een secties-marker): bespreek de OPBOUW van de
+   nieuwsbrief met de gebruiker: welke onderdelen en in welke volgorde (bv. hero-foto,
+   introtekst, de blokken, een knop, nog een tekst). Stel een logische standaardopzet
+   voor en pas 'm aan op verzoek ("laat de hero weg", "tekst tussen de blokken",
+   "extra knop onderaan"). Geef de opbouw door via het veld `sections` (soorten:
+   `hero`, `text`, `blocks`, `button`; bij `blocks` kies je `cards` of `banners`).
+   Zonder `sections` gebruikt de template zijn vaste opzet. Elke wijziging aan de
+   opzet toon je direct opnieuw met `preview_newsletter`.
+3. KOP & ONDERTITEL: stel een kop (`header_title`) en ondertitel (`header_subtitle`)
    voor in de tone of voice, en vraag of het zo goed is of aangepast moet worden.
 4. FOTO'S: toon met `list_images` welke foto's er per categorie zijn. Stel een banner
    voor en per blok een passende foto, gematcht op bestandsnaam/omschrijving. Geef de

@@ -9,11 +9,19 @@ from __future__ import annotations
 
 import re
 
-from app.newsletter.models import PRICE_ON_REQUEST, Club, Item, Match, NewsletterContent
+from app.newsletter.models import (
+    PRICE_ON_REQUEST,
+    Club,
+    Item,
+    Match,
+    NewsletterContent,
+    Section,
+)
 from app.newsletter.styles import effective_styles, style_replacements
 
 BANNER_MARKER = "<!-- ##BANNERS## -->"
 CARD_MARKER = "<!-- ##CARDS## -->"
+SECTIONS_MARKER = "<!-- ##SECTIES## -->"
 
 # Onze interne placeholders zijn HOOFDLETTERS_MET_UNDERSCORE zonder spaties. Brevo-tags
 # ({{ contact.EMAIL }}, {{ unsubscribe }}) hebben spaties/kleine letters en matchen dus
@@ -347,6 +355,70 @@ def render_cards(
     return gap.join(rows) + gap
 
 
+def _section_hero(section: Section) -> str:
+    """Klikbare foto over de volle breedte (zoals de hero in webshop-templates)."""
+    img = (
+        f'<img src="{section.image_url}" width="600" alt="" '
+        'style="display:block;outline:none;text-decoration:none;height:auto;width:100%;">'
+    )
+    inner = f'<a href="{section.url}" target="_blank" style="display:block;">{img}</a>' if section.url else img
+    return (
+        '<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="100%" '
+        'style="table-layout:fixed;"><tbody><tr><td style="padding:0; font-size:0; line-height:0;">'
+        f"{inner}</td></tr></tbody></table>"
+    )
+
+
+def _section_text(section: Section, st: dict) -> str:
+    return (
+        '<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="100%" '
+        'style="table-layout:fixed;"><tbody><tr><td style="padding:22px 40px;">'
+        f'<p style="margin:0; font-family:{st["font"]}; font-size:15px; line-height:1.6; '
+        f'color:{st["text_color"]};">{section.text}</p>'
+        "</td></tr></tbody></table>"
+    )
+
+
+def _section_button(section: Section, st: dict) -> str:
+    return (
+        '<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="100%" '
+        'style="table-layout:fixed;"><tbody><tr><td align="center" style="padding:10px 20px 24px;">'
+        '<table cellspacing="0" cellpadding="0" border="0" role="presentation" '
+        f'style="background:{st["button_bg"]}; border-radius:4px; border-collapse:separate;">'
+        '<tbody><tr><td align="center" style="padding:13px 30px; border-radius:4px;">'
+        f'<a href="{section.url}" target="_blank" style="color:{st["button_text"]}; '
+        f'font-family:{st["font"]}; font-size:14px; font-weight:bold; text-decoration:none; '
+        f'white-space:nowrap; display:inline-block;">{section.text}</a>'
+        "</td></tr></tbody></table></td></tr></tbody></table>"
+    )
+
+
+def render_sections(content: NewsletterContent, brand: dict) -> str:
+    """Render de opzet-secties in volgorde (voor templates met de ##SECTIES##-marker).
+
+    Elke sectie-soort wordt in code gerenderd (garanties blijven in code); "blocks"
+    hergebruikt de bestaande kaart-/banner-renderers voor de gekozen inhoud.
+    """
+    st = effective_styles(brand)
+    parts: list[str] = []
+    for section in content.sections:
+        if section.kind == "hero" and section.image_url:
+            parts.append(_section_hero(section))
+        elif section.kind == "text" and section.text:
+            parts.append(_section_text(section, st))
+        elif section.kind == "button" and section.text and section.url:
+            parts.append(_section_button(section, st))
+        elif section.kind == "blocks":
+            if section.style == "banners":
+                blocks = "".join(render_banner(m, brand) for m in content.matches)
+                blocks += "".join(render_club_banner(c, brand) for c in content.clubs)
+                blocks += "".join(render_item_banner(i, brand) for i in content.items)
+            else:
+                blocks = render_cards(content.matches, content.clubs, brand, content.items)
+            parts.append(blocks)
+    return "".join(parts)
+
+
 def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
     """Bouw de CTA-knop over de headerfoto.
 
@@ -417,6 +489,8 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
     html = html.replace(
         CARD_MARKER, render_cards(content.matches, content.clubs, brand, content.items)
     )
+    # Opzet-composer: secties in de gekozen volgorde op de secties-marker (shell-templates).
+    html = html.replace(SECTIONS_MARKER, render_sections(content, brand))
     # Ruim ongevulde eigen placeholders op (bv. als een template een veld weglaat of
     # een onbekende toevoegt), zodat er nooit een rauwe {{IETS}} in de mail belandt.
     return _INTERNAL_PLACEHOLDER.sub("", html)

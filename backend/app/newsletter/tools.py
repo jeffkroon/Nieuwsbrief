@@ -23,7 +23,14 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Tenant
 from app.newsletter import extraction
-from app.newsletter.models import PRICE_ON_REQUEST, Club, Item, Match, NewsletterContent
+from app.newsletter.models import (
+    PRICE_ON_REQUEST,
+    Club,
+    Item,
+    Match,
+    NewsletterContent,
+    Section,
+)
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.templates import load_template
 from app.repositories import images as images_repo
@@ -207,6 +214,26 @@ TOOL_DEFINITIONS = [
                             "label": {"type": "string", "description": "Optioneel kort badge-label, bv. 'NIEUW'"},
                         },
                         "required": ["title", "url"],
+                    },
+                },
+                "sections": {
+                    "type": "array",
+                    "description": "OPTIONELE opbouw voor templates met de "
+                    "<!-- ##SECTIES## --> marker: de secties worden in deze volgorde "
+                    "gerenderd (de opzet die je met de gebruiker hebt besproken). "
+                    "Weglaten = de vaste opzet van de template.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "kind": {"type": "string", "enum": ["hero", "text", "blocks", "button"],
+                                     "description": "hero = klikbare foto; text = alinea; blocks = de gekozen wedstrijden/clubs/items; button = losse knop"},
+                            "text": {"type": "string", "description": "Tekst (voor text en button)"},
+                            "url": {"type": "string", "description": "Bereikbare link (voor hero en button)"},
+                            "image_url": {"type": "string", "description": "Hero-foto: BESTANDSNAAM uit list_images of volledige URL"},
+                            "style": {"type": "string", "enum": ["cards", "banners"],
+                                      "description": "Voor blocks: cards (naast elkaar) of banners (onder elkaar)"},
+                        },
+                        "required": ["kind"],
                     },
                 },
             },
@@ -433,6 +460,45 @@ def _validated_items(ctx: ToolContext, raw_items: list[dict]) -> list[Item]:
     return items
 
 
+def _require_reachable(ctx: ToolContext, url: str) -> None:
+    status, _ = extraction.fetch_page(url, ctx.http_client)
+    if status != 200:
+        raise ValueError(f"URL bestaat niet of is onbereikbaar: {url} (status {status}).")
+
+
+def _validated_sections(ctx: ToolContext, raw_sections: list[dict]) -> list[Section]:
+    """Opzet-secties valideren: hero-foto moet vindbaar zijn, knop-/hero-links moeten
+    echt bestaan (200). Garanties in code, niet in het model."""
+    sections: list[Section] = []
+    for s in raw_sections:
+        kind = s.get("kind")
+        if kind == "hero":
+            image = _resolve_image_for(ctx, s.get("image_url"))
+            if not image:
+                raise ValueError(
+                    "hero-sectie: geen vindbare foto. Gebruik een bestandsnaam uit "
+                    "list_images of een volledige URL."
+                )
+            url = s.get("url")
+            if url:
+                _require_reachable(ctx, url)
+            sections.append(Section(kind="hero", image_url=image, url=url))
+        elif kind == "text":
+            if not s.get("text"):
+                raise ValueError("text-sectie zonder tekst")
+            sections.append(Section(kind="text", text=s["text"]))
+        elif kind == "button":
+            if not (s.get("text") and s.get("url")):
+                raise ValueError("button-sectie vereist zowel text als url")
+            _require_reachable(ctx, s["url"])
+            sections.append(Section(kind="button", text=s["text"], url=s["url"]))
+        elif kind == "blocks":
+            sections.append(Section(kind="blocks", style=s.get("style")))
+        else:
+            raise ValueError(f"onbekende sectie-soort: {kind!r}")
+    return sections
+
+
 def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
     if not raw_clubs:
         return []
@@ -478,6 +544,7 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
     matches = _validated_matches(ctx, tool_input.get("matches", []))
     clubs = _validated_clubs(ctx, tool_input.get("clubs", []))
     items = _validated_items(ctx, tool_input.get("items", []))
+    sections = _validated_sections(ctx, tool_input.get("sections", []))
     content = NewsletterContent(
         theme=tool_input["theme"],
         subject=tool_input["subject"],
@@ -495,6 +562,7 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
         matches=tuple(matches),
         clubs=tuple(clubs),
         items=tuple(items),
+        sections=tuple(sections),
     )
     template_html, brand = _resolve_template_html(ctx, tenant, brand)
     html = render_newsletter(template_html, brand, content)

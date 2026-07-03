@@ -58,6 +58,24 @@ class Item:
 
 
 @dataclass(frozen=True)
+class Section:
+    """Eén bouwblok in een sectie-gebaseerde nieuwsbrief (opzet-composer).
+
+    Soorten:
+    - "hero": klikbare foto over de volle breedte (image_url, optioneel url)
+    - "text": een alinea lopende tekst (text)
+    - "blocks": de gekozen wedstrijden/clubs/items, als "cards" of "banners" (style)
+    - "button": losse gecentreerde knop (text + url)
+    """
+
+    kind: str
+    text: str | None = None
+    url: str | None = None
+    image_url: str | None = None
+    style: str | None = None  # alleen voor blocks: "cards" (default) of "banners"
+
+
+@dataclass(frozen=True)
 class NewsletterContent:
     """Volledige door de gebruiker/Claude bepaalde inhoud van een nieuwsbrief."""
 
@@ -72,6 +90,9 @@ class NewsletterContent:
     matches: tuple[Match, ...]
     clubs: tuple[Club, ...] = ()
     items: tuple[Item, ...] = ()  # generieke blokken (cases, blogs, producten, acties)
+    # Opzet-composer: gevuld = de secties worden in deze volgorde gerenderd op de
+    # ##SECTIES##-marker; leeg = de vaste placeholder-opzet van de template.
+    sections: tuple[Section, ...] = ()
     preview_text: str | None = None
     header_title: str | None = None
     header_subtitle: str | None = None
