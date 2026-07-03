@@ -11,6 +11,8 @@ from app.deps import get_anthropic_client, get_cipher, get_session, require_admi
 from app.repositories import secrets as secrets_repo
 from app.repositories import tenants as repo
 from app.schemas import (
+    EspListsRequest,
+    EspListsResult,
     TenantCreate,
     TenantPrefillRequest,
     TenantPrefillResult,
@@ -18,8 +20,10 @@ from app.schemas import (
     TenantSecretSet,
     TenantUpdate,
 )
+from app.services.brevo import BrevoClient, BrevoError
 from app.services.company_prefill import prefill_company
 from app.services.crypto import SecretCipher
+from app.services.klaviyo import KlaviyoClient, KlaviyoError
 from app.services.tone import analyze_and_store_tone, get_cached_tone
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
@@ -60,6 +64,35 @@ def prefill_tenant(
     except ValueError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return TenantPrefillResult(**result)
+
+
+@router.post(
+    "/esp-lists",
+    response_model=EspListsResult,
+    dependencies=[Depends(require_admin)],
+)
+def esp_lists(
+    body: EspListsRequest,
+    session: Session = Depends(get_session),
+    cipher: SecretCipher = Depends(get_cipher),
+) -> EspListsResult:
+    """Contactenlijsten van het verzendplatform ophalen (alleen-lezen), zodat de
+    admin een lijst kan KIEZEN in plaats van een ID op te zoeken."""
+    api_key = (body.api_key or "").strip()
+    if not api_key and body.tenant_id:
+        kind = "klaviyo_api_key" if body.esp == "klaviyo" else "brevo_api_key"
+        api_key = secrets_repo.get_tenant_secret(session, cipher, body.tenant_id, kind) or ""
+    if not api_key:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Geen API-key: plak de key in het formulier of sla 'm eerst op bij het bedrijf.",
+        )
+    try:
+        client = KlaviyoClient(api_key) if body.esp == "klaviyo" else BrevoClient(api_key)
+        lists = client.get_lists()
+    except (KlaviyoError, BrevoError, ValueError) as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return EspListsResult(lists=lists)
 
 
 @router.get("", response_model=list[TenantRead])

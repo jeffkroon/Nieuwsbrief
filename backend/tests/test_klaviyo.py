@@ -113,3 +113,25 @@ def test_jsonapi_error_detail_surfaced() -> None:
     )}
     with pytest.raises(KlaviyoError, match="html is verplicht"):
         _draft(_client_with(responses, []))
+
+
+def test_get_lists_paginates() -> None:
+    recorder: list[httpx.Request] = []
+    page2 = httpx.Response(200, json={"data": [
+        {"type": "list", "id": "L3", "attributes": {"name": "VIP"}},
+    ], "links": {"next": None}})
+    page1 = httpx.Response(200, json={"data": [
+        {"type": "list", "id": "L1", "attributes": {"name": "Nieuwsbrief"}},
+        {"type": "list", "id": "L2", "attributes": {"name": "Klanten"}},
+    ], "links": {"next": "https://a.klaviyo.com/api/lists?page%5Bcursor%5D=xyz"}})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorder.append(request)
+        return page2 if "cursor" in str(request.url) else page1
+
+    client = KlaviyoClient("pk_test", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    lists = client.get_lists()
+    assert [(l["id"], l["name"]) for l in lists] == [
+        ("L1", "Nieuwsbrief"), ("L2", "Klanten"), ("L3", "VIP"),
+    ]
+    assert len(recorder) == 2  # paginatie gevolgd

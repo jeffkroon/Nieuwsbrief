@@ -106,6 +106,24 @@ class KlaviyoClient:
         self._delete_silent(f"/api/templates/{template_id}")
         return KlaviyoDraft(campaign_id=campaign_id, message_id=message_id)
 
+    def get_lists(self, max_pages: int = 10) -> list[dict]:
+        """Alle lijsten (id + naam) ophalen, voor de lijst-kiezer bij onboarding.
+
+        Alleen-lezen (scope lists:read); volgt de JSON:API-paginatie.
+        """
+        lists: list[dict] = []
+        path = "/api/lists"
+        for _ in range(max_pages):
+            body = self._request("GET", path, None, expect=(200,))
+            for row in body.get("data") or []:
+                name = ((row.get("attributes") or {}).get("name")) or row.get("id", "")
+                lists.append({"id": row.get("id"), "name": name})
+            next_url = (body.get("links") or {}).get("next")
+            if not next_url:
+                break
+            path = next_url.replace(self._base_url, "", 1)
+        return lists
+
     # -- stappen -------------------------------------------------------------
     def _create_template(self, name: str, html: str) -> str:
         body = self._request(

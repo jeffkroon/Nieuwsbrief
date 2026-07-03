@@ -70,6 +70,22 @@ class TenantPrefillResult(BaseModel):
     notes: list[str]
 
 
+class EspListsRequest(BaseModel):
+    """Lijsten ophalen bij het verzendplatform (voor de lijst-kiezer bij onboarding).
+
+    Key komt uit het formulier (net geplakt) of, bij een bestaand bedrijf, uit de
+    versleutelde opslag via tenant_id.
+    """
+
+    esp: Literal["brevo", "klaviyo"]
+    api_key: str | None = None
+    tenant_id: uuid.UUID | None = None
+
+
+class EspListsResult(BaseModel):
+    lists: list[dict]
+
+
 # --- Tenant secret (alleen schrijven, nooit teruglezen) -------------------
 class TenantSecretSet(BaseModel):
     kind: SecretKind

@@ -139,3 +139,37 @@ def test_prefill_is_admin_only(client) -> None:
         assert resp.status_code == 403
     finally:
         app.dependency_overrides.pop(current_role, None)
+
+
+def test_esp_lists_endpoint(client, monkeypatch) -> None:
+    from app.routes import tenants as tenants_routes
+
+    class FakeKlaviyo:
+        def __init__(self, key: str) -> None:
+            assert key == "pk_plakwerk"
+
+        def get_lists(self):
+            return [{"id": "L1", "name": "Nieuwsbrief"}]
+
+    monkeypatch.setattr(tenants_routes, "KlaviyoClient", FakeKlaviyo)
+    resp = client.post("/tenants/esp-lists", json={"esp": "klaviyo", "api_key": "pk_plakwerk"})
+    assert resp.status_code == 200
+    assert resp.json()["lists"] == [{"id": "L1", "name": "Nieuwsbrief"}]
+
+
+def test_esp_lists_requires_key(client) -> None:
+    resp = client.post("/tenants/esp-lists", json={"esp": "klaviyo"})
+    assert resp.status_code == 400
+    assert "API-key" in resp.json()["detail"]
+
+
+def test_esp_lists_admin_only(client) -> None:
+    from app.deps import current_role
+    from app.main import app
+
+    app.dependency_overrides[current_role] = lambda: "company"
+    try:
+        resp = client.post("/tenants/esp-lists", json={"esp": "brevo", "api_key": "x"})
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_role, None)
