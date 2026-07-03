@@ -88,3 +88,23 @@ def test_template_info_shapes_prompt() -> None:
     assert "GEEN eigen template" in fallback
     # Zonder template_info geen sectie (bestaand gedrag).
     assert "ACTIEVE TEMPLATE" not in build_system_prompt()
+
+
+def test_esp_label_follows_tenant() -> None:
+    # Klaviyo-bedrijf: het gesprek noemt Klaviyo, niet Brevo.
+    klaviyo = build_system_prompt(esp="klaviyo")
+    assert "Klaviyo" in klaviyo and "Brevo" not in klaviyo
+    assert "Brevo" in build_system_prompt()  # default blijft Brevo
+
+
+def test_template_without_header_title_warns_agent() -> None:
+    zonder = build_system_prompt(
+        template_info={"is_fallback": False, "name": "Kaal", "has_sections": False,
+                       "has_header_title": False}
+    )
+    assert "GEEN kop of ondertitel over de bannerfoto" in zonder
+    met = build_system_prompt(
+        template_info={"is_fallback": False, "name": "Vol", "has_sections": False,
+                       "has_header_title": True}
+    )
+    assert "GEEN kop of ondertitel" not in met

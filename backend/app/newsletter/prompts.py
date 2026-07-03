@@ -217,6 +217,13 @@ def _template_section(template_info: dict) -> str:
             "Deze template heeft een VASTE opzet: sla stap 2b (opzet bespreken) over en "
             "vul de vaste onderdelen van de template in."
         )
+    if template_info.get("has_header_title") is False:
+        lines.append(
+            "LET OP: deze template toont GEEN kop of ondertitel over de bannerfoto; "
+            "header_title en header_subtitle komen niet in de mail terecht. Beloof dus "
+            "nooit een titel over de banner; meld eerlijk dat deze template dat niet "
+            "ondersteunt als de gebruiker erom vraagt."
+        )
     return "\n".join(lines)
 
 
@@ -224,16 +231,22 @@ def build_system_prompt(
     tone_of_voice: str | None = None,
     content_types: list[dict] | None = None,
     template_info: dict | None = None,
+    esp: str | None = None,
 ) -> str:
     """Bouw de system-prompt voor een bedrijf.
 
     `content_types` bepaalt welke nieuwsbrief-soorten de assistent aanbiedt (uit
     tenant.config); zonder lijst geldt de voetbal-set. `template_info` (naam,
-    has_sections, is_fallback) vertelt de assistent wat de actieve template kan.
-    Een bekende tone of voice wordt er verplicht ingezet.
+    has_sections, has_header_title, is_fallback) vertelt de assistent wat de
+    actieve template kan. `esp` bepaalt hoe het verzendplatform heet in het
+    gesprek (Brevo of Klaviyo). Een bekende tone of voice wordt er verplicht
+    ingezet.
     """
     types = content_types if content_types else DEFAULT_CONTENT_TYPES
     prompt = f"{_PROMPT_HEAD}\n{_content_section(types)}\n{_PROMPT_TAIL}"
+    if esp == "klaviyo":
+        # De basisteksten noemen Brevo; voor een Klaviyo-bedrijf heet het platform anders.
+        prompt = prompt.replace("Brevo", "Klaviyo")
     if template_info:
         prompt = f"{prompt}\n\n{_template_section(template_info)}"
     if not tone_of_voice:

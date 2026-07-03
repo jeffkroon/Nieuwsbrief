@@ -41,11 +41,14 @@ def _template_info(
     if template is None:
         template = templates_repo.get_default_template(session, tenant_id)
     if template is None:
-        return {"is_fallback": True, "has_sections": False}
+        # De ingebouwde fallback-layout heeft wel een kop over de banner.
+        return {"is_fallback": True, "has_sections": False, "has_header_title": True}
+    html = template.html or ""
     return {
         "is_fallback": False,
         "name": template.name,
-        "has_sections": SECTIONS_MARKER in (template.html or ""),
+        "has_sections": SECTIONS_MARKER in html,
+        "has_header_title": "{{HEADER_TITEL}}" in html,
     }
 
 
@@ -91,9 +94,10 @@ def run_conversation_turn(
     content_types = (tenant.config or {}).get("content_types") if tenant else None
     template_info = _template_info(session, conversation.tenant_id, template_id)
 
+    esp = (tenant.config or {}).get("esp") if tenant else None
     result = run_agent_turn(
         client,
-        system=build_system_prompt(tone, content_types, template_info),
+        system=build_system_prompt(tone, content_types, template_info, esp=esp),
         messages=claude_messages,
         tools=TOOL_DEFINITIONS,
         dispatch=lambda name, tool_input: execute_tool(name, tool_input, ctx),
