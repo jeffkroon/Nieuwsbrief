@@ -257,6 +257,42 @@ def test_create_draft_site_price_wins_over_manual(session, cipher) -> None:
     assert result["matches_used"][0]["price"] == "€ 299"  # echte prijs wint
 
 
+def test_price_override_beats_site_price(session, cipher) -> None:
+    # Gebruiker vraagt expliciet om een eigen prijs -> die wint van de site-prijs.
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    payload = {**DRAFT_INPUT, "matches": [{
+        "home": "Chelsea", "away": "Arsenal", "url": MATCH_URL,
+        "price": "249,-", "price_override": True,
+    }]}
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": "€ 299"}),  # site zegt 299, maar override wint
+        brevo_factory=lambda key: FakeBrevo(key),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>299,-</html>")),
+    )
+    result = execute_tool("create_newsletter_draft", payload, ctx)
+    assert result["matches_used"][0]["price"] == "€ 249"  # eigen prijs, genormaliseerd
+
+
+def test_price_override_still_validates_url(session, cipher) -> None:
+    # Ook met een eigen prijs moet de link gewoon bestaan (garantie blijft).
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    payload = {**DRAFT_INPUT, "matches": [{
+        "home": "Chelsea", "away": "Arsenal", "url": MATCH_URL,
+        "price": "249,-", "price_override": True,
+    }]}
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": None}),
+        brevo_factory=lambda key: FakeBrevo(key),
+        http_client=_http(lambda r: httpx.Response(404, text="weg")),
+    )
+    with pytest.raises(ValueError, match="onbereikbaar"):
+        execute_tool("create_newsletter_draft", payload, ctx)
+
+
 def test_create_draft_with_clubs(session, cipher) -> None:
     tenant = _tenant(session)
     secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
