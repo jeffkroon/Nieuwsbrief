@@ -145,3 +145,30 @@ def test_extract_products() -> None:
     # De pagina ging met afbeeldingen mee naar het LLM (keep_images-pad).
     sent = llm.messages.calls[0]["messages"][0]["content"]
     assert "Bron-URL: https://shop.nl/collections/ringen" in sent
+
+
+def test_normalize_banner_url_shopify_crop() -> None:
+    from app.newsletter.extraction import normalize_banner_url
+
+    url = "https://shop.test/cdn/shop/collections/4.png?v=171&width=2048"
+    out = normalize_banner_url(url)
+    # Bestaande maat-parameters vervangen door mail-formaat; versie-parameter blijft.
+    assert "v=171" in out
+    assert "width=1200" in out and "height=600" in out and "crop=center" in out
+    assert "width=2048" not in out
+
+
+def test_normalize_banner_url_no_crop_keeps_ratio() -> None:
+    from app.newsletter.extraction import normalize_banner_url
+
+    out = normalize_banner_url(
+        "https://shop.test/cdn/shop/collections/4.png?v=171", crop="origineel"
+    )
+    assert "width=1200" in out and "height" not in out and "crop" not in out
+
+
+def test_normalize_banner_url_leaves_other_hosts_alone() -> None:
+    from app.newsletter.extraction import normalize_banner_url
+
+    url = "https://cdn.anders.test/banner.png?width=9999"
+    assert normalize_banner_url(url) == url

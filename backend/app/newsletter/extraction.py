@@ -11,7 +11,7 @@ from __future__ import annotations
 import html as html_lib
 import json
 import re
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import httpx
 
@@ -128,6 +128,32 @@ def extract_og_image(raw_html: str) -> str | None:
     if url.startswith("http://"):
         url = "https://" + url[len("http://"):]
     return url or None
+
+
+# Shopify-CDN-afbeeldingen kunnen server-side geschaald en bijgesneden worden via
+# querystring-parameters; dat gebruiken we om een banner mail-vriendelijk te maken.
+_SHOPIFY_CDN_PATH = "/cdn/shop/"
+BANNER_WIDTH = 1200
+BANNER_HEIGHT = 600
+
+
+def normalize_banner_url(url: str, crop: str = "landscape") -> str:
+    """Maak van een og:image een mail-vriendelijke banner-URL (deterministisch).
+
+    Alleen Shopify-CDN-URL's worden herschreven (breedte 1200; bij crop
+    "landscape" ook 1200x600 center-crop); andere hosts komen ongewijzigd terug,
+    want daar weten we niet of resize-parameters veilig zijn.
+    """
+    parsed = urlsplit(url)
+    if _SHOPIFY_CDN_PATH not in parsed.path:
+        return url
+    params = [
+        (k, v) for k, v in parse_qsl(parsed.query) if k not in ("width", "height", "crop")
+    ]
+    params.append(("width", str(BANNER_WIDTH)))
+    if crop == "landscape":
+        params.extend([("height", str(BANNER_HEIGHT)), ("crop", "center")])
+    return urlunsplit(parsed._replace(query=urlencode(params)))
 
 
 def _parse_json(response) -> dict:

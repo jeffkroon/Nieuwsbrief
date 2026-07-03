@@ -136,6 +136,20 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "find_banner",
+        "description": "Haal het eigen bannerbeeld van een pagina van de klantensite "
+        "(bv. de collectiepagina waar de nieuwsbrief over gaat). Het beeld wordt "
+        "genormaliseerd naar mail-formaat en in code gecheckt op bereikbaarheid. "
+        "Gebruik dit voor de headerfoto als er geen passende bannerfoto in "
+        "list_images('banner') staat; laat de gebruiker het resultaat bevestigen.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Pagina-URL om de banner van te pakken, bv. de collectie- of source_url van de gekozen nieuwsbrief-soort"},
+            },
+        },
+    },
+    {
         "name": "create_newsletter_draft",
         "description": "Render de nieuwsbrief en maak hem aan als CONCEPT bij het "
         "verzendplatform van dit bedrijf (Brevo of Klaviyo). Verstuurt niets. Gebruik "
@@ -157,7 +171,7 @@ TOOL_DEFINITIONS = [
                 "slot_cta_url": {"type": "string"},
                 "preview_text": {"type": "string"},
                 "confirmed": {"type": "boolean", "description": "Zet alleen op true NADAT de gebruiker expliciet toestemming heeft gegeven om het concept in Brevo aan te maken"},
-                "header_image_url": {"type": "string", "description": "BESTANDSNAAM van de gekozen bannerfoto uit list_images('banner'), bv. 'allianz-arena.jpg'. Niet de volledige URL."},
+                "header_image_url": {"type": "string", "description": "De bannerfoto: een BESTANDSNAAM uit list_images('banner') (bv. 'allianz-arena.jpg'), of de volledige banner_url die find_banner teruggaf. Nooit een zelf verzonnen URL."},
                 "matches": {
                     "type": "array",
                     "description": "Wedstrijdblokken. Mag leeg zijn voor een ALGEMENE nieuwsbrief "
@@ -321,6 +335,65 @@ def _tool_find_products(ctx: ToolContext, tool_input: dict) -> dict:
         "products": products,
         "message": "Toon de producten en laat de gebruiker KIEZEN. Gebruik url, prijs en "
         "image_url exact zoals hier teruggegeven; verzin niets.",
+    }
+
+
+def _require_image(ctx: ToolContext, url: str) -> None:
+    """Garandeer dat de URL een bereikbare afbeelding is (200 + image/*)."""
+    try:
+        if ctx.http_client is not None:
+            resp = ctx.http_client.get(url)
+        else:
+            with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+                resp = client.get(url)
+    except httpx.HTTPError as exc:
+        raise ValueError(f"banner-URL is onbereikbaar: {url} ({exc})") from exc
+    content_type = resp.headers.get("content-type", "")
+    if resp.status_code != 200 or not content_type.startswith("image/"):
+        raise ValueError(
+            f"banner-URL is geen bereikbare afbeelding: {url} "
+            f"(status {resp.status_code}, type {content_type or 'onbekend'})"
+        )
+
+
+def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
+    """Het eigen bannerbeeld (og:image) van een pagina van de klantensite ophalen.
+
+    Genormaliseerd naar mail-formaat (Shopify-CDN: 1200 breed, standaard 1200x600
+    center-crop; instelbaar per bedrijf via config "banner_crop") en in code
+    gecheckt: de URL moet een bereikbare afbeelding zijn, anders duidelijke fout.
+    """
+    brand = _load_tenant(ctx).config
+    url = tool_input.get("url") or brand.get("website_url")
+    if not url:
+        raise ValueError("geen URL om een banner te zoeken; geef een pagina-URL mee")
+    status, html = extraction.fetch_page(url, ctx.http_client)
+    if status != 200:
+        raise ValueError(f"kon {url} niet ophalen (status {status})")
+    og_image = extraction.extract_og_image(html)
+    if not og_image:
+        return {
+            "source_url": url,
+            "banner_url": None,
+            "message": "Deze pagina heeft geen eigen bannerbeeld. Kies een foto uit "
+            "list_images('banner') of vraag de gebruiker om er een te uploaden.",
+        }
+    crop = brand.get("banner_crop") or "landscape"
+    banner = extraction.normalize_banner_url(og_image, crop=crop)
+    try:
+        _require_image(ctx, banner)
+    except ValueError:
+        if banner == og_image:
+            raise
+        # De bijgesneden variant werkt niet op deze CDN: val terug op het origineel,
+        # dat moet dan wel zelf een bereikbare afbeelding zijn.
+        _require_image(ctx, og_image)
+        banner = og_image
+    return {
+        "source_url": url,
+        "banner_url": banner,
+        "message": "Echte banner van de site (bereikbaarheid gecheckt). Geef deze "
+        "volledige URL door als header_image_url nadat de gebruiker akkoord is.",
     }
 
 
@@ -664,6 +737,7 @@ _DISPATCH: dict[str, Callable[[ToolContext, dict], dict]] = {
     "analyze_website_tone": _tool_analyze_website_tone,
     "find_ticket_links": _tool_find_ticket_links,
     "find_products": _tool_find_products,
+    "find_banner": _tool_find_banner,
     "find_matches": _tool_find_matches,
     "preview_newsletter": _tool_preview_newsletter,
     "create_newsletter_draft": _tool_create_newsletter_draft,
