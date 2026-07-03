@@ -683,3 +683,50 @@ def test_unknown_tool_raises(session, cipher) -> None:
     ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
     with pytest.raises(ValueError, match="onbekende tool"):
         execute_tool("doesnotexist", {}, ctx)
+
+
+_COLLECTIE_HTML = (
+    '<html><meta property="og:image" '
+    'content="http://shop.test/cdn/shop/collections/4.png?v=171&amp;width=2048"></html>'
+)
+
+
+def _banner_http(image_status=200, image_type="image/png"):
+    def handler(r: httpx.Request) -> httpx.Response:
+        if "/cdn/shop/" in r.url.path:
+            return httpx.Response(image_status, headers={"content-type": image_type}, content=b"x")
+        return httpx.Response(200, text=_COLLECTIE_HTML)
+
+    return _http(handler)
+
+
+def test_find_banner_returns_cropped_site_banner(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, http_client=_banner_http()
+    )
+    result = execute_tool("find_banner", {"url": "https://shop.test/collections/ringen"}, ctx)
+    banner = result["banner_url"]
+    assert banner.startswith("https://")  # http -> https upgrade
+    assert "width=1200" in banner and "height=600" in banner and "crop=center" in banner
+
+
+def test_find_banner_without_og_image(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>geen meta</html>")),
+    )
+    result = execute_tool("find_banner", {"url": "https://shop.test/x"}, ctx)
+    assert result["banner_url"] is None
+    assert "geen eigen bannerbeeld" in result["message"]
+
+
+def test_find_banner_rejects_non_image(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_banner_http(image_type="text/html"),
+    )
+    with pytest.raises(ValueError, match="geen bereikbare afbeelding"):
+        execute_tool("find_banner", {"url": "https://shop.test/collections/ringen"}, ctx)
