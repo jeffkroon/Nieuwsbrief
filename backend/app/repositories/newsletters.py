@@ -19,6 +19,7 @@ def create_newsletter(
     conversation_id: uuid.UUID | None = None,
     input: dict | None = None,
     brevo_campaign_id: int | None = None,
+    esp_campaign_ref: str | None = None,
     status: str = "draft",
 ) -> Newsletter:
     newsletter = Newsletter(
@@ -29,6 +30,7 @@ def create_newsletter(
         html=html,
         input=input or {},
         brevo_campaign_id=brevo_campaign_id,
+        esp_campaign_ref=esp_campaign_ref,
         status=status,
     )
     session.add(newsletter)

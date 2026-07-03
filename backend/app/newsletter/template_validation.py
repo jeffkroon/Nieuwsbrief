@@ -12,9 +12,12 @@ from app.newsletter.renderer import BANNER_MARKER, CARD_MARKER
 # Niets is hard verplicht; een admin bepaalt zelf de layout.
 REQUIRED: dict[str, str] = {}
 
+# Afmeldlink: Brevo gebruikt {{ unsubscribe }}, Klaviyo {% unsubscribe %}; een van
+# beide volstaat (apart gecheckt in validate_template_html).
+UNSUBSCRIBE_TAGS = ("{{ unsubscribe }}", "{% unsubscribe %}")
+
 # Aanbevolen placeholders: ontbreken levert een waarschuwing op, geen blokkade.
 RECOMMENDED: dict[str, str] = {
-    "{{ unsubscribe }}": "afmeldlink (wettelijk verplicht voor e-mail)",
     "{{ contact.EMAIL }}": "e-mailadres van de ontvanger",
     "{{HEADER_TITEL}}": "titel over de headerfoto",
     "{{HEADER_IMAGE_URL}}": "headerfoto",
@@ -43,6 +46,12 @@ def validate_template_html(html: str) -> tuple[list[str], list[str]]:
         for marker, desc in RECOMMENDED.items()
         if marker not in text
     ]
+    # Afmeldlink: een van beide ESP-tags volstaat (wettelijk verplicht voor e-mail).
+    if not any(tag in text for tag in UNSUBSCRIBE_TAGS):
+        warnings.append(
+            "aanbevolen ontbreekt: een afmeldlink, {{ unsubscribe }} (Brevo) of "
+            "{% unsubscribe %} (Klaviyo)"
+        )
     # Een blok-marker (banners OF kaarten) is nodig om wedstrijden/clubs te tonen.
     if BANNER_MARKER not in text and CARD_MARKER not in text:
         warnings.append(

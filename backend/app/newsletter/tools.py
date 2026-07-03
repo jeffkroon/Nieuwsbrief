@@ -32,9 +32,11 @@ from app.repositories import secrets as secrets_repo
 from app.repositories import templates as templates_repo
 from app.services.brevo import BrevoClient, BrevoError
 from app.services.crypto import SecretCipher
+from app.services.klaviyo import KlaviyoClient, KlaviyoError
 
 DEFAULT_TEMPLATE = "voetbalreizenxl-main"
 BREVO_SECRET_KIND = "brevo_api_key"
+KLAVIYO_SECRET_KIND = "klaviyo_api_key"
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,7 @@ class ToolContext:
     llm: object | None = None  # Anthropic-client voor site-extractie
     conversation_id: uuid.UUID | None = None
     brevo_factory: Callable[[str], BrevoClient] = BrevoClient
+    klaviyo_factory: Callable[[str], KlaviyoClient] = KlaviyoClient
     http_client: httpx.Client | None = None
     template_id: uuid.UUID | None = None  # gekozen template in de chat; None = standaard
     # Voorbeeld-HTML wordt hierin gezet door preview_newsletter, zodat de chat-laag het
@@ -127,9 +130,10 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "create_newsletter_draft",
-        "description": "Render de nieuwsbrief en maak hem aan als CONCEPT in Brevo. Verstuurt "
-        "niets. Gebruik alleen wedstrijden (met hun echte url) uit find_matches. De link en "
-        "prijs worden live van de site gevalideerd en gescrapet.",
+        "description": "Render de nieuwsbrief en maak hem aan als CONCEPT bij het "
+        "verzendplatform van dit bedrijf (Brevo of Klaviyo). Verstuurt niets. Gebruik "
+        "alleen echte inhoud (find_matches/find_products/find_ticket_links); links en "
+        "prijzen worden live gevalideerd.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -518,16 +522,25 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
             "vraag de gebruiker eerst om toestemming, en roep dit pas aan met confirmed=true."
         )
     tenant = _load_tenant(ctx)
-    api_key = secrets_repo.get_tenant_secret(ctx.session, ctx.cipher, tenant.id, BREVO_SECRET_KIND)
+    esp = (tenant.config or {}).get("esp", "brevo")
+    esp_label = "Klaviyo" if esp == "klaviyo" else "Brevo"
+    secret_kind = KLAVIYO_SECRET_KIND if esp == "klaviyo" else BREVO_SECRET_KIND
+    api_key = secrets_repo.get_tenant_secret(ctx.session, ctx.cipher, tenant.id, secret_kind)
     if not api_key:
         raise ValueError(
-            "geen Brevo API-key ingesteld voor deze tenant (zet die via PUT /tenants/{id}/secrets)"
+            f"geen {esp_label} API-key ingesteld voor deze tenant "
+            "(zet die via de Bedrijven-tab of PUT /tenants/{id}/secrets)"
         )
 
     tenant, brand, content, matches, clubs, items, html = _build_newsletter(ctx, tool_input)
-    list_ids = [tenant.brevo_list_id] if tenant.brevo_list_id else None
+    if esp == "klaviyo":
+        client = ctx.klaviyo_factory(api_key)
+        list_id = brand.get("klaviyo_list_id")
+        list_ids = [list_id] if list_id else None
+    else:
+        client = ctx.brevo_factory(api_key)
+        list_ids = [tenant.brevo_list_id] if tenant.brevo_list_id else None
 
-    client = ctx.brevo_factory(api_key)
     try:
         draft = client.create_draft(
             name=f"{brand['brand_name']} - {content.theme}",
@@ -538,7 +551,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
             list_ids=list_ids,
             preview_text=content.preview_text,
         )
-    except BrevoError:
+    except (BrevoError, KlaviyoError):
         newsletters_repo.create_newsletter(
             ctx.session,
             tenant_id=tenant.id,
@@ -551,6 +564,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         )
         raise
 
+    is_klaviyo = esp == "klaviyo"
     newsletter = newsletters_repo.create_newsletter(
         ctx.session,
         tenant_id=tenant.id,
@@ -559,17 +573,20 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         theme=content.theme,
         html=html,
         input=tool_input,
-        brevo_campaign_id=draft.campaign_id,
+        brevo_campaign_id=None if is_klaviyo else draft.campaign_id,
+        esp_campaign_ref=str(draft.campaign_id) if is_klaviyo else None,
         status="ready",
     )
     return {
         "newsletter_id": str(newsletter.id),
-        "brevo_campaign_id": draft.campaign_id,
+        "esp": esp,
+        "campaign_id": draft.campaign_id,
+        "brevo_campaign_id": None if is_klaviyo else draft.campaign_id,
         "status": "ready",
         "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
         "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
         "items_used": [{"title": i.title, "url": i.url, "price": i.price} for i in items],
-        "message": "Concept aangemaakt in Brevo. Niets verstuurd; controleer en verstuur handmatig.",
+        "message": f"Concept aangemaakt in {esp_label}. Niets verstuurd; controleer en verstuur handmatig.",
     }
 
 

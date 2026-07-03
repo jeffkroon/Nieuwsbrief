@@ -308,11 +308,18 @@
           <label>Instagram <input type="text" id="coInstagram" placeholder="leeg = link naar website"></label>
           <label>YouTube <input type="text" id="coYoutube" placeholder="leeg = link naar website"></label>
         </div>
-        <h3 class="style-head">Brevo</h3>
+        <h3 class="style-head">Verzendplatform</h3>
         <div class="company-grid">
-          <label>Brevo API-key <input type="password" id="coBrevoKey" placeholder="alleen invullen om te (her)zetten"></label>
-          <label>Brevo lijst-ID <input type="number" id="coBrevoList" placeholder="optioneel"></label>
+          <label>Platform
+            <select id="coEsp" class="field">
+              <option value="brevo">Brevo</option>
+              <option value="klaviyo">Klaviyo</option>
+            </select>
+          </label>
+          <label>API-key <input type="password" id="coBrevoKey" placeholder="alleen invullen om te (her)zetten"></label>
+          <label>Lijst-ID <input type="text" id="coBrevoList" placeholder="zie hint hieronder"></label>
         </div>
+        <p class="hint" id="espHint"></p>
         <h3 class="style-head">Nieuwsbrief-soorten</h3>
         <p class="hint">Welke soorten nieuwsbrieven maakt dit bedrijf? "Algemeen" (alleen tekst) kan altijd.</p>
         <div class="row">
@@ -828,6 +835,16 @@ function readContentTypes() {
   return types;
 }
 
+const ESP_HINTS = {
+  brevo: "Brevo: API-key begint met 'xkeysib-'. Lijst-ID is optioneel (een nummer).",
+  klaviyo: "Klaviyo: private key (pk_...) met scopes campaigns:write, templates:write en lists:read. Lijst-ID (list- of segment-id) is VERPLICHT.",
+};
+function updateEspHint() {
+  document.getElementById("espHint").textContent = ESP_HINTS[CO("coEsp").value] || "";
+}
+CO("coEsp").addEventListener("change", updateEspHint);
+updateEspHint();
+
 function companyConfigFromForm() {
   const website = CO("coWebsite").value.trim();
   const social = (id) => CO(id).value.trim() || website;
@@ -846,7 +863,9 @@ function companyConfigFromForm() {
     instagram_url: social("coInstagram"),
     youtube_url: social("coYoutube"),
     content_types: readContentTypes(),
+    esp: CO("coEsp").value,
   };
+  if (cfg.esp === "klaviyo") cfg.klaviyo_list_id = CO("coBrevoList").value.trim();
   const header = CO("coHeader").value.trim();
   if (header) cfg.header_image_url = header;
   return cfg;
@@ -857,6 +876,7 @@ function resetCompanyForm() {
   for (const id of ["coName","coSlug","coWebsite","coEmail","coAdres","coPostcode","coTelefoon","coKvk","coLogo","coDummy","coHeader","coFacebook","coInstagram","coYoutube","coBrevoKey","coBrevoList"]) CO(id).value = "";
   CO("coPrimary").value = "#ff7200";
   CO("ctMatches").checked = false; CO("ctClubs").checked = false;
+  CO("coEsp").value = "brevo"; updateEspHint();
   CO("coSlug").disabled = false;
   document.getElementById("ctRows").innerHTML = "";
   document.getElementById("companyFormTitle").textContent = "Nieuw bedrijf toevoegen";
@@ -879,7 +899,9 @@ function fillCompanyForm(t) {
   CO("coDummy").value = c.dummy_image_url || ""; CO("coHeader").value = c.header_image_url || "";
   CO("coFacebook").value = c.facebook_url || ""; CO("coInstagram").value = c.instagram_url || "";
   CO("coYoutube").value = c.youtube_url || "";
-  CO("coBrevoList").value = t.brevo_list_id ?? "";
+  CO("coEsp").value = c.esp || "brevo";
+  updateEspHint();
+  CO("coBrevoList").value = (c.esp === "klaviyo" ? c.klaviyo_list_id : t.brevo_list_id) ?? "";
   for (const ct of c.content_types || []) {
     if (ct.kind === "matches") CO("ctMatches").checked = true;
     else if (ct.kind === "clubs") CO("ctClubs").checked = true;
@@ -929,9 +951,15 @@ document.getElementById("companySave").onclick = async () => {
   const missing = Object.entries(required).filter(([id]) => !CO(id).value.trim()).map(([, n]) => n);
   if (missing.length) { companyStatus.textContent = "Vul eerst in: " + missing.join(", "); return; }
 
+  const esp = CO("coEsp").value;
+  const listRaw = CO("coBrevoList").value.trim();
+  if (esp === "klaviyo" && !listRaw) {
+    companyStatus.textContent = "Klaviyo vereist een lijst-ID (list- of segment-id).";
+    return;
+  }
   companyStatus.textContent = "Opslaan...";
   const formConfig = companyConfigFromForm();
-  const listId = CO("coBrevoList").value ? parseInt(CO("coBrevoList").value, 10) : null;
+  const listId = esp === "brevo" && listRaw ? parseInt(listRaw, 10) : null;
   let tenantId = editingCompanyId;
   let res;
   if (editingCompanyId) {
@@ -954,13 +982,14 @@ document.getElementById("companySave").onclick = async () => {
   }
   const saved = await res.json();
   tenantId = saved.id;
-  const brevoKey = CO("coBrevoKey").value.trim();
-  if (brevoKey) {
+  const espKey = CO("coBrevoKey").value.trim();
+  if (espKey) {
+    const kind = esp === "klaviyo" ? "klaviyo_api_key" : "brevo_api_key";
     const sres = await fetch(`/tenants/${tenantId}/secrets`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "brevo_api_key", value: brevoKey }),
+      body: JSON.stringify({ kind, value: espKey }),
     });
-    if (!sres.ok) { companyStatus.textContent = "Bedrijf opgeslagen, maar Brevo-key zetten mislukte."; loadCompanies(); refreshTenantSelect(); return; }
+    if (!sres.ok) { companyStatus.textContent = "Bedrijf opgeslagen, maar de API-key zetten mislukte."; loadCompanies(); refreshTenantSelect(); return; }
   }
   const wasEditing = !!editingCompanyId;
   resetCompanyForm();

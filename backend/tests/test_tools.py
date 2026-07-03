@@ -396,6 +396,52 @@ def test_items_with_unreachable_url_rejected(session, cipher) -> None:
         execute_tool("preview_newsletter", payload, ctx)
 
 
+def test_create_draft_via_klaviyo_when_esp_configured(session, cipher) -> None:
+    # tenant.config esp=klaviyo -> Klaviyo-adapter, string-ref opgeslagen, Brevo onaangeraakt.
+    from types import SimpleNamespace
+
+    cfg = {**CONFIG, "esp": "klaviyo", "klaviyo_list_id": "LIST9"}
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug="sieraden", name="Sieraden", config=cfg)
+    )
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "klaviyo_api_key", "pk_geheim")
+    captured: dict = {}
+
+    class FakeKlaviyo:
+        def __init__(self, key: str) -> None:
+            captured["key"] = key
+
+        def create_draft(self, **kw):
+            captured["kw"] = kw
+            return SimpleNamespace(campaign_id="CAMP9", message_id="MSG9")
+
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        klaviyo_factory=FakeKlaviyo,
+        brevo_factory=lambda k: pytest.fail("Brevo mag niet worden aangeroepen"),
+    )
+    result = execute_tool("create_newsletter_draft", payload, ctx)
+    assert captured["key"] == "pk_geheim"
+    assert captured["kw"]["list_ids"] == ["LIST9"]
+    assert result["esp"] == "klaviyo" and result["campaign_id"] == "CAMP9"
+    assert "Klaviyo" in result["message"]
+    nl = session.get(Newsletter, uuid.UUID(result["newsletter_id"]))
+    assert nl.esp_campaign_ref == "CAMP9"
+    assert nl.brevo_campaign_id is None
+
+
+def test_klaviyo_missing_key_gives_clear_error(session, cipher) -> None:
+    cfg = {**CONFIG, "esp": "klaviyo", "klaviyo_list_id": "L1"}
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug="sieraden2", name="Sieraden2", config=cfg)
+    )
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    with pytest.raises(ValueError, match="Klaviyo API-key"):
+        execute_tool("create_newsletter_draft", payload, ctx)
+
+
 def test_find_products_tool(session, cipher) -> None:
     tenant = _tenant(session)
     payload = {"products": [{"name": "Ankh Ring", "url": "https://shop.nl/p/ankh",
