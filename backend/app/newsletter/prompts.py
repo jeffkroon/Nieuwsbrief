@@ -63,6 +63,11 @@ _CLUBS_SECTION = """   - CLUBS: vraag welke clubs; zoek met `find_ticket_links` 
 
 _STEP2_CLOSING = """   - ALGEMEEN: geen blokken; bevestig naar welke algemene pagina de knoppen wijzen.
    Gebruik altijd alleen bereikbare URL's; verzin nooit een URL of prijs.
+   PRIJZEN: de prijs komt standaard ALTIJD live van de website. Alleen als de gebruiker
+   EXPLICIET een eigen prijs voor een blok opgeeft (bv. "zet de prijs op 299"), geef je
+   die door als `price` met `price_override: true`; die wint dan van de site-prijs.
+   Stel nooit zelf een afwijkende prijs voor en zet `price_override` nooit op eigen
+   initiatief. Herhaal in je status dat het om een eigen (handmatige) prijs gaat.
    Optioneel kun je per blok een kort badge-`label` meegeven (bv. "NIEUW",
    "VROEGBOEKKORTING", "TOPPER"). Doe dat alleen als de gebruiker erom vraagt of het
    duidelijk klopt; verzin geen kortingen of claims."""

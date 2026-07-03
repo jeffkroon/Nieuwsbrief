@@ -144,7 +144,8 @@ TOOL_DEFINITIONS = [
                             "home": {"type": "string"},
                             "away": {"type": "string"},
                             "url": {"type": "string", "description": "Bereikbare ticket-URL (uit find_matches of find_ticket_links)"},
-                            "price": {"type": "string", "description": "Handmatige vanafprijs; ALLEEN gebruiken als de site geen prijs heeft en de gebruiker die heeft opgegeven"},
+                            "price": {"type": "string", "description": "Handmatige vanafprijs. Zonder price_override alleen de terugval als de site geen prijs heeft; met price_override=true wint deze prijs van de site."},
+                            "price_override": {"type": "boolean", "description": "Zet ALLEEN op true als de gebruiker EXPLICIET een eigen prijs voor dit blok heeft opgegeven; dan wint 'price' van de site-prijs. Nooit op eigen initiatief gebruiken."},
                             "image_url": {"type": "string", "description": "BESTANDSNAAM van de gematchte foto uit list_images (niet de volledige URL)"},
                             "label": {"type": "string", "description": "Optioneel kort badge-label op de kaart, bv. 'NIEUW' of 'TOPPER'. Alleen zetten als de gebruiker erom vraagt of het duidelijk klopt."},
                         },
@@ -160,7 +161,8 @@ TOOL_DEFINITIONS = [
                         "properties": {
                             "name": {"type": "string"},
                             "url": {"type": "string", "description": "Bereikbare clubpagina-URL"},
-                            "price": {"type": "string", "description": "Handmatige vanafprijs als de site er geen heeft"},
+                            "price": {"type": "string", "description": "Handmatige vanafprijs. Zonder price_override alleen de terugval als de site geen prijs heeft; met price_override=true wint deze prijs van de site."},
+                            "price_override": {"type": "boolean", "description": "Zet ALLEEN op true als de gebruiker EXPLICIET een eigen prijs voor dit blok heeft opgegeven; dan wint 'price' van de site-prijs. Nooit op eigen initiatief gebruiken."},
                             "image_url": {"type": "string", "description": "BESTANDSNAAM van de clubfoto uit list_images (niet de volledige URL)"},
                             "stadium": {"type": "string", "description": "Naam van het stadion (klein lettertype in het blok)"},
                             "city": {"type": "string", "description": "Naam van de stad (klein lettertype in het blok)"},
@@ -311,14 +313,23 @@ def _resolve_image_for(ctx: ToolContext, explicit: str | None, *fallback_names: 
     return None
 
 
-def _resolve_price(ctx: ToolContext, llm, url: str, manual: str | None) -> str:
-    """URL moet bereikbaar zijn (200). Scrape de prijs; val terug op handmatige prijs."""
+def _resolve_price(
+    ctx: ToolContext, llm, url: str, manual: str | None, override: bool = False
+) -> str:
+    """URL moet bereikbaar zijn (200). Standaard wint de live gescrapete site-prijs.
+
+    Alleen als de gebruiker EXPLICIET een eigen prijs heeft opgegeven (override=True)
+    wint de handmatige prijs van de site; de URL wordt dan nog steeds gevalideerd.
+    Zonder override is de handmatige prijs enkel de terugval als de site er geen heeft.
+    """
     status, html = extraction.fetch_page(url, ctx.http_client)
     if status != 200:
         raise ValueError(
             f"URL bestaat niet of is onbereikbaar: {url} (status {status}). "
             "Gebruik find_matches of find_ticket_links voor een geldige link."
         )
+    if override and manual:
+        return extraction.normalize_price(manual)
     price = extraction.extract_price(llm, html, source_url=url)
     # Geen prijs op de site? Gebruik de handmatig opgegeven vanafprijs (echte prijs wint).
     if price == PRICE_ON_REQUEST and manual:
@@ -333,7 +344,9 @@ def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]
     return [
         Match(
             home=m["home"], away=m["away"], url=m["url"],
-            price=_resolve_price(ctx, llm, m["url"], m.get("price")),
+            price=_resolve_price(
+                ctx, llm, m["url"], m.get("price"), override=bool(m.get("price_override"))
+            ),
             image_url=_resolve_image_for(ctx, m.get("image_url"), m["home"], m["away"]),
             label=m.get("label"),
         )
@@ -373,7 +386,9 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
     return [
         Club(
             name=c["name"], url=c["url"],
-            price=_resolve_price(ctx, llm, c["url"], c.get("price")),
+            price=_resolve_price(
+                ctx, llm, c["url"], c.get("price"), override=bool(c.get("price_override"))
+            ),
             image_url=_resolve_image_for(ctx, c.get("image_url"), c["name"]),
             stadium=c.get("stadium"), city=c.get("city"), label=c.get("label"),
         )
