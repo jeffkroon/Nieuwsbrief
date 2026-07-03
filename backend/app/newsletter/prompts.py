@@ -185,17 +185,51 @@ def _content_section(content_types: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _template_section(template_info: dict) -> str:
+    """Vertel de assistent welke template actief is en wat die kan.
+
+    De assistent kan de template-HTML zelf niet zien; deze feiten komen uit code.
+    """
+    lines = ["=== ACTIEVE TEMPLATE ==="]
+    if template_info.get("is_fallback"):
+        lines.append(
+            "LET OP: dit bedrijf heeft nog GEEN eigen template; er wordt een generieke "
+            "standaard-layout gebruikt. Meld dit meteen aan het begin van het gesprek en "
+            "adviseer om via de Templates-tab een eigen template toe te voegen. Je kunt "
+            "wel gewoon doorwerken met de standaard-layout."
+        )
+    else:
+        lines.append(f"Gekozen template: \"{template_info.get('name', 'onbekend')}\".")
+    if template_info.get("has_sections"):
+        lines.append(
+            "Deze template ondersteunt OPZET-SECTIES: doorloop stap 2b en bespreek de "
+            "opbouw (hero, teksten, blokken, knoppen en de volgorde) actief met de "
+            "gebruiker voordat je teksten gaat schrijven."
+        )
+    else:
+        lines.append(
+            "Deze template heeft een VASTE opzet: sla stap 2b (opzet bespreken) over en "
+            "vul de vaste onderdelen van de template in."
+        )
+    return "\n".join(lines)
+
+
 def build_system_prompt(
-    tone_of_voice: str | None = None, content_types: list[dict] | None = None
+    tone_of_voice: str | None = None,
+    content_types: list[dict] | None = None,
+    template_info: dict | None = None,
 ) -> str:
     """Bouw de system-prompt voor een bedrijf.
 
     `content_types` bepaalt welke nieuwsbrief-soorten de assistent aanbiedt (uit
-    tenant.config); zonder lijst geldt de voetbal-set. Een bekende tone of voice
-    wordt er verplicht ingezet zodat de assistent altijd in die stijl schrijft.
+    tenant.config); zonder lijst geldt de voetbal-set. `template_info` (naam,
+    has_sections, is_fallback) vertelt de assistent wat de actieve template kan.
+    Een bekende tone of voice wordt er verplicht ingezet.
     """
     types = content_types if content_types else DEFAULT_CONTENT_TYPES
     prompt = f"{_PROMPT_HEAD}\n{_content_section(types)}\n{_PROMPT_TAIL}"
+    if template_info:
+        prompt = f"{prompt}\n\n{_template_section(template_info)}"
     if not tone_of_voice:
         return prompt
     return (

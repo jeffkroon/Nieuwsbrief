@@ -188,3 +188,30 @@ def test_content_types_shape_the_system_prompt(client, session, fake_anthropic) 
     system_text = fake.messages.calls[0]["system"][0]["text"]
     assert "CASES" in system_text and "Lees de case" in system_text
     assert "find_matches" not in system_text  # geen voetbal-script voor dit bedrijf
+
+
+def test_template_info_injected_in_prompt(client, session, fake_anthropic) -> None:
+    # Bedrijf met een secties-template: de agent krijgt te horen dat 2b moet.
+    from app.repositories import templates as templates_repo
+
+    tenant = _tenant(session)
+    templates_repo.create_template(
+        session, tenant_id=tenant.id, name="Shell",
+        html="<html><!-- ##SECTIES## -->{{ unsubscribe }}</html>",
+    )
+    fake = fake_anthropic([FakeResponse([FakeText("ok")], "end_turn")])
+    client.post("/conversations", json={"tenant_id": str(tenant.id), "message": "hoi"})
+    system_text = fake.messages.calls[0]["system"][0]["text"]
+    assert "OPZET-SECTIES" in system_text and '"Shell"' in system_text
+
+
+def test_fallback_template_warns_agent(client, session, fake_anthropic) -> None:
+    # Bedrijf zonder eigen templates: de agent moet dit melden.
+    cfg = {**CONFIG}
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug="zonder-template", name="Zonder", config=cfg)
+    )
+    fake = fake_anthropic([FakeResponse([FakeText("ok")], "end_turn")])
+    client.post("/conversations", json={"tenant_id": str(tenant.id), "message": "hoi"})
+    system_text = fake.messages.calls[0]["system"][0]["text"]
+    assert "GEEN eigen template" in system_text
