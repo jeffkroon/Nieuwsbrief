@@ -78,9 +78,13 @@ samengesteld in de chat. Vervang dan die complete middenzone door deze ene marke
 laat head en footer staan. Gebruik dit alleen als losse placeholders niet passen.
 
 BEDRIJFSGEGEVENS (per bedrijf ingevuld):
-- {{BRAND_NAME}}, {{BRAND_ADRES}}, {{BRAND_POSTCODE_STAD}}, {{BRAND_EMAIL}}, \
-{{BRAND_TELEFOON}}, {{BRAND_KVK}}, {{WEBSITE_URL}}, {{LOGO_URL}}, {{FACEBOOK_URL}}, \
-{{INSTAGRAM_URL}}, {{YOUTUBE_URL}}
+- {{BRAND_NAME}}, {{WEBSITE_URL}}, {{LOGO_URL}}, {{FACEBOOK_URL}}, {{INSTAGRAM_URL}}, \
+{{YOUTUBE_URL}}
+- {{FOOTER_CONTACT}}: HEEL het blok met adres/e-mail/telefoon/KVK in de footer \
+vervangen door deze ene placeholder (regels die het bedrijf niet heeft worden \
+automatisch weggelaten). Gebruik deze boven losse velden; losse velden \
+({{BRAND_ADRES}}, {{BRAND_POSTCODE_STAD}}, {{BRAND_EMAIL}}, {{BRAND_TELEFOON}}, \
+{{BRAND_KVK}}) bestaan ook maar laten lege labels achter als iets ontbreekt.
 
 STIJL (kleuren/lettertype uit de stijl-builder):
 - {{STYLE_FONT}}, {{STYLE_TEXT_COLOR}}, {{STYLE_HEADING_COLOR}}, {{STYLE_LINK_COLOR}}, \
@@ -160,6 +164,7 @@ _PLACEHOLDER_SENTINELS = {
     "{{LOGO_URL}}": "https://tp-logo.test/logo.png",
     "{{WEBSITE_URL}}": "https://tp-website.test",
     "{{BRAND_NAME}}": "TP-MERK",
+    "{{FOOTER_CONTACT}}": "TP-ADRES 1",
     "{{BRAND_EMAIL}}": "tp@merk-email.test",
     "{{BRAND_ADRES}}": "TP-ADRES 1",
     "{{BRAND_POSTCODE_STAD}}": "1234 TP STAD",
