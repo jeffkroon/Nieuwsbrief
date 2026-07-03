@@ -322,7 +322,11 @@
             </select>
           </label>
           <label>API-key <input type="password" id="coBrevoKey" placeholder="alleen invullen om te (her)zetten"></label>
-          <label>Lijst-ID <input type="text" id="coBrevoList" placeholder="zie hint hieronder"></label>
+          <label>Lijst-ID <input type="text" id="coBrevoList" placeholder="of kies hieronder"></label>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn secondary" id="espListsBtn">Haal lijsten op met de API-key</button>
+          <select id="espListsSelect" class="field" style="display:none; min-width:280px;"></select>
         </div>
         <p class="hint" id="espHint"></p>
         <h3 class="style-head">Nieuwsbrief-soorten</h3>
@@ -850,6 +854,53 @@ function updateEspHint() {
 CO("coEsp").addEventListener("change", updateEspHint);
 updateEspHint();
 
+document.getElementById("espListsBtn").onclick = async (e) => {
+  e.preventDefault();
+  const esp = CO("coEsp").value;
+  const body = { esp };
+  const key = CO("coBrevoKey").value.trim();
+  if (key) body.api_key = key;
+  else if (editingCompanyId) body.tenant_id = editingCompanyId;
+  else { companyStatus.textContent = "Plak eerst de API-key (of bewerk een bedrijf met opgeslagen key)."; return; }
+  const btn = document.getElementById("espListsBtn");
+  btn.disabled = true;
+  companyStatus.textContent = "Lijsten ophalen bij " + (esp === "klaviyo" ? "Klaviyo" : "Brevo") + "...";
+  try {
+    const res = await fetch("/tenants/esp-lists", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      companyStatus.textContent = "Mislukt: " + (typeof err.detail === "string" ? err.detail : res.status);
+      return;
+    }
+    const { lists } = await res.json();
+    const sel = document.getElementById("espListsSelect");
+    sel.innerHTML = "";
+    if (!lists.length) { sel.style.display = "none"; companyStatus.textContent = "Geen lijsten gevonden in dit account."; return; }
+    const ph = document.createElement("option");
+    ph.value = ""; ph.textContent = `Kies een lijst (${lists.length} gevonden)`;
+    sel.appendChild(ph);
+    for (const l of lists) {
+      const o = document.createElement("option");
+      o.value = l.id; o.textContent = `${l.name} (${l.id})`;
+      sel.appendChild(o);
+    }
+    sel.style.display = "inline-block";
+    companyStatus.textContent = "Kies de lijst; het ID wordt automatisch ingevuld.";
+  } catch (err) {
+    companyStatus.textContent = "Netwerkfout: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+document.getElementById("espListsSelect").addEventListener("change", (e) => {
+  if (e.target.value) {
+    CO("coBrevoList").value = e.target.value;
+    companyStatus.textContent = "Lijst-ID ingevuld.";
+  }
+});
+
 function companyConfigFromForm() {
   const website = CO("coWebsite").value.trim();
   const social = (id) => CO(id).value.trim() || website;
@@ -935,6 +986,8 @@ function resetCompanyForm() {
   CO("coPrimary").value = "#ff7200";
   CO("ctMatches").checked = false; CO("ctClubs").checked = false;
   CO("coEsp").value = "brevo"; updateEspHint();
+  const espSel = document.getElementById("espListsSelect");
+  espSel.innerHTML = ""; espSel.style.display = "none";
   CO("coSlug").disabled = false;
   document.getElementById("ctRows").innerHTML = "";
   document.getElementById("companyFormTitle").textContent = "Nieuw bedrijf toevoegen";

@@ -84,6 +84,25 @@ class BrevoClient:
             raise BrevoError(f"Onverwacht antwoord van Brevo: {body!r}")
         return BrevoDraft(campaign_id=campaign_id)
 
+    def get_lists(self) -> list[dict]:
+        """Alle contactenlijsten (id + naam) ophalen, voor de lijst-kiezer. Alleen-lezen."""
+        headers = {"api-key": self._api_key, "Accept": "application/json"}
+        url = f"{self._base_url}/contacts/lists?limit=50"
+        try:
+            if self._client is not None:
+                response = self._client.get(url, headers=headers)
+            else:
+                with httpx.Client(timeout=self._timeout) as client:
+                    response = client.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            raise BrevoError(f"Brevo-verzoek mislukt: {exc}") from exc
+        if response.status_code != 200:
+            raise BrevoError(f"Brevo gaf HTTP {response.status_code}: {response.text}")
+        return [
+            {"id": row.get("id"), "name": row.get("name") or str(row.get("id"))}
+            for row in response.json().get("lists", [])
+        ]
+
     # -- intern ------------------------------------------------------------
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {"api-key": self._api_key, "Content-Type": "application/json"}

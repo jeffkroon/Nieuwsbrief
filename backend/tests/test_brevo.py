@@ -104,3 +104,16 @@ def test_unexpected_response_raises() -> None:
         _client(handler).create_draft(
             name="x", subject="y", sender_name="n", sender_email="e@e.nl", html=VALID_HTML
         )
+
+
+def test_get_lists() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert "/contacts/lists" in str(request.url)
+        return httpx.Response(200, json={"lists": [
+            {"id": 12, "name": "Nieuwsbrief", "totalSubscribers": 100},
+            {"id": 34, "name": "Klanten"},
+        ]})
+
+    lists = _client(handler).get_lists()
+    assert lists == [{"id": 12, "name": "Nieuwsbrief"}, {"id": 34, "name": "Klanten"}]
