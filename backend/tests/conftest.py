@@ -81,3 +81,12 @@ def client(session: Session, cipher) -> Iterator:
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_chat_limiter():
+    """De chat-rate-limiter is module-globaal; zonder reset lekt hij tussen tests."""
+    from app.routes import conversations as _conv
+
+    _conv._chat_limiter.reset()
+    yield

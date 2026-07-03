@@ -215,3 +215,14 @@ def test_fallback_template_warns_agent(client, session, fake_anthropic) -> None:
     client.post("/conversations", json={"tenant_id": str(tenant.id), "message": "hoi"})
     system_text = fake.messages.calls[0]["system"][0]["text"]
     assert "GEEN eigen template" in system_text
+
+
+def test_klaviyo_tenant_prompt_says_klaviyo(client, session, fake_anthropic) -> None:
+    cfg = {**CONFIG, "esp": "klaviyo"}
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug="klaviyo-shop", name="Shop", config=cfg)
+    )
+    fake = fake_anthropic([FakeResponse([FakeText("ok")], "end_turn")])
+    client.post("/conversations", json={"tenant_id": str(tenant.id), "message": "hoi"})
+    system_text = fake.messages.calls[0]["system"][0]["text"]
+    assert "Klaviyo" in system_text and "Brevo" not in system_text
