@@ -72,3 +72,19 @@ def test_opzet_step_present() -> None:
     assert "OPZET" in prompt
     assert "`sections`" in prompt
     assert "preview_newsletter" in prompt
+
+
+def test_template_info_shapes_prompt() -> None:
+    # Secties-template -> stap 2b doorlopen; vaste template -> 2b overslaan.
+    with_sections = build_system_prompt(
+        template_info={"is_fallback": False, "name": "Shell", "has_sections": True}
+    )
+    assert "OPZET-SECTIES" in with_sections and '"Shell"' in with_sections
+    fixed = build_system_prompt(
+        template_info={"is_fallback": False, "name": "Card", "has_sections": False}
+    )
+    assert "VASTE opzet" in fixed and "sla stap 2b" in fixed
+    fallback = build_system_prompt(template_info={"is_fallback": True, "has_sections": False})
+    assert "GEEN eigen template" in fallback
+    # Zonder template_info geen sectie (bestaand gedrag).
+    assert "ACTIEVE TEMPLATE" not in build_system_prompt()

@@ -14,13 +14,39 @@ from sqlalchemy.orm import Session
 from app.db.models import Conversation, Tenant
 from app.newsletter.orchestrator import run_agent_turn
 from app.newsletter.prompts import build_system_prompt
+from app.newsletter.renderer import SECTIONS_MARKER
 from app.newsletter.tools import TOOL_DEFINITIONS, ToolContext, execute_tool
 from app.repositories import conversations as repo
+from app.repositories import templates as templates_repo
 from app.services.crypto import SecretCipher
 from app.services.tone import ensure_tone
 
 # Alleen deze rollen worden teruggespeeld naar Claude als geschiedenis.
 _REPLAYABLE_ROLES = {"user", "assistant"}
+
+
+def _template_info(
+    session: Session, tenant_id: uuid.UUID, template_id: uuid.UUID | None
+) -> dict:
+    """Feiten over de actieve template voor de prompt (naam, secties, fallback).
+
+    Zelfde keuzevolgorde als de renderer: gekozen template > standaard van het
+    bedrijf > ingebouwde fallback.
+    """
+    template = None
+    if template_id is not None:
+        candidate = templates_repo.get_template(session, template_id)
+        if candidate is not None and candidate.tenant_id == tenant_id:
+            template = candidate
+    if template is None:
+        template = templates_repo.get_default_template(session, tenant_id)
+    if template is None:
+        return {"is_fallback": True, "has_sections": False}
+    return {
+        "is_fallback": False,
+        "name": template.name,
+        "has_sections": SECTIONS_MARKER in (template.html or ""),
+    }
 
 
 @dataclass(frozen=True)
@@ -63,10 +89,11 @@ def run_conversation_turn(
     tenant = session.get(Tenant, conversation.tenant_id)
     tone = ensure_tone(session, tenant, client) if tenant else None
     content_types = (tenant.config or {}).get("content_types") if tenant else None
+    template_info = _template_info(session, conversation.tenant_id, template_id)
 
     result = run_agent_turn(
         client,
-        system=build_system_prompt(tone, content_types),
+        system=build_system_prompt(tone, content_types, template_info),
         messages=claude_messages,
         tools=TOOL_DEFINITIONS,
         dispatch=lambda name, tool_input: execute_tool(name, tool_input, ctx),

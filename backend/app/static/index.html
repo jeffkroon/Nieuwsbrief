@@ -359,7 +359,7 @@ async function loadChatTemplates() {
   try { list = await (await fetch(`/tenants/${tid}/templates`)).json(); } catch (e) { list = []; }
   chatTemplate.innerHTML = "";
   if (!list.length) {
-    const o = document.createElement("option"); o.value = ""; o.textContent = "Standaard layout"; chatTemplate.appendChild(o);
+    const o = document.createElement("option"); o.value = ""; o.textContent = "(nog geen eigen template)"; chatTemplate.appendChild(o);
     return;
   }
   for (const t of list) {
