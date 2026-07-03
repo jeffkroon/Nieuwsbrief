@@ -13,10 +13,12 @@ echt zijn, ongeacht hoe de site is opgebouwd.
 from __future__ import annotations
 
 import copy
+import html as html_lib
 import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from sqlalchemy.orm import Session
@@ -140,6 +142,8 @@ TOOL_DEFINITIONS = [
         "description": "Haal het eigen bannerbeeld van een pagina van de klantensite "
         "(bv. de collectiepagina waar de nieuwsbrief over gaat). Het beeld wordt "
         "genormaliseerd naar mail-formaat en in code gecheckt op bereikbaarheid. "
+        "Heeft de pagina zelf geen banner, dan krijg je de banners van de gelinkte "
+        "collecties als 'candidates' terug: toon die en laat de gebruiker kiezen. "
         "Gebruik dit voor de headerfoto als er geen passende bannerfoto in "
         "list_images('banner') staat; laat de gebruiker het resultaat bevestigen.",
         "input_schema": {
@@ -356,12 +360,67 @@ def _require_image(ctx: ToolContext, url: str) -> None:
         )
 
 
+# Bij een pagina zonder eigen banner: hoeveel gelinkte collectiepagina's we maximaal
+# nalopen, en hoeveel banner-kandidaten we teruggeven aan de gebruiker.
+_BANNER_SCAN_LIMIT = 8
+_BANNER_CANDIDATES_LIMIT = 5
+
+
+def _banner_or_none(ctx: ToolContext, page_url: str, crop: str) -> str | None:
+    """De gecheckte banner van één pagina, of None (nooit een exception)."""
+    status, html = extraction.fetch_page(page_url, ctx.http_client)
+    if status != 200:
+        return None
+    og_image = extraction.extract_og_image(html)
+    if not og_image:
+        return None
+    banner = extraction.normalize_banner_url(og_image, crop=crop)
+    for candidate in (banner, og_image):
+        try:
+            _require_image(ctx, candidate)
+            return candidate
+        except ValueError:
+            continue
+    return None
+
+
+def _collection_banner_candidates(
+    ctx: ToolContext, source_url: str, html: str, crop: str
+) -> list[dict]:
+    """Banners van collectiepagina's die op deze pagina gelinkt staan.
+
+    Deterministisch (geen LLM): volg de /collections/-links van de pagina zelf en
+    geef alleen banners terug die echt bestaan en bereikbaar zijn.
+    """
+    links: list[str] = []
+    for m in re.finditer(r'href="([^"]+)"', html):
+        link = urljoin(source_url, html_lib.unescape(m.group(1))).split("#")[0].split("?")[0]
+        path = urlsplit(link).path
+        if "/collections/" not in path or path.rstrip("/").endswith("/all"):
+            continue
+        if link != source_url.split("?")[0] and link not in links:
+            links.append(link)
+    candidates: list[dict] = []
+    for link in links[:_BANNER_SCAN_LIMIT]:
+        banner = _banner_or_none(ctx, link, crop)
+        if banner:
+            slug = urlsplit(link).path.rstrip("/").rsplit("/", 1)[-1]
+            candidates.append(
+                {"name": slug.replace("-", " "), "page_url": link, "banner_url": banner}
+            )
+        if len(candidates) >= _BANNER_CANDIDATES_LIMIT:
+            break
+    return candidates
+
+
 def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
     """Het eigen bannerbeeld (og:image) van een pagina van de klantensite ophalen.
 
     Genormaliseerd naar mail-formaat (Shopify-CDN: 1200 breed, standaard 1200x600
     center-crop; instelbaar per bedrijf via config "banner_crop") en in code
     gecheckt: de URL moet een bereikbare afbeelding zijn, anders duidelijke fout.
+    Heeft de pagina zelf geen banner, dan worden de banners van de gelinkte
+    collectiepagina's als kandidaten teruggegeven.
     """
     brand = _load_tenant(ctx).config
     url = tool_input.get("url") or brand.get("website_url")
@@ -370,8 +429,19 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
     status, html = extraction.fetch_page(url, ctx.http_client)
     if status != 200:
         raise ValueError(f"kon {url} niet ophalen (status {status})")
+    crop = brand.get("banner_crop") or "landscape"
     og_image = extraction.extract_og_image(html)
     if not og_image:
+        candidates = _collection_banner_candidates(ctx, url, html, crop)
+        if candidates:
+            return {
+                "source_url": url,
+                "banner_url": None,
+                "candidates": candidates,
+                "message": "Deze pagina heeft geen eigen bannerbeeld, maar deze "
+                "collecties op de site wel. Toon de opties en laat de gebruiker "
+                "KIEZEN; gebruik daarna de gekozen banner_url letterlijk.",
+            }
         return {
             "source_url": url,
             "banner_url": None,

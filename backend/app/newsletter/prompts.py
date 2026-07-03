@@ -90,9 +90,11 @@ _PROMPT_TAIL = """2b. OPZET (alleen voor templates met een secties-marker): besp
    passende BANNERfoto in de bibliotheek, stel dan voor om met `find_banner` de eigen
    banner van de website te pakken (geef de pagina-URL mee waar de nieuwsbrief over
    gaat, bv. de collectiepagina); de `banner_url` uit dat resultaat mag je letterlijk
-   doorgeven als `header_image_url`. Is er ook geen site-banner, meld dat eerlijk en
-   vraag of ze er een uploaden of dat de fallback oké is. Verzin nooit een foto-naam
-   of URL.
+   doorgeven als `header_image_url`. Geeft `find_banner` een lijst `candidates` terug
+   (banners van collecties op de site), toon die opties dan aan de gebruiker en laat
+   KIEZEN; gebruik daarna de gekozen `banner_url`. Is er ook geen site-banner, meld
+   dat eerlijk en vraag of ze er een uploaden of dat de fallback oké is. Verzin nooit
+   een foto-naam of URL.
 5. TEKSTEN: stel de intro (twee korte alinea's), de onderwerpregel en de preheader
    voor, en vraag akkoord of aanpassingen.
 
