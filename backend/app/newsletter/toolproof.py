@@ -89,7 +89,9 @@ alles vanaf "from" tot aan (exclusief) "to" wordt vervangen door "replace".
 tekstkleur door {{STYLE_TEXT_COLOR}}, linkkleuren door {{STYLE_LINK_COLOR}}, de \
 pagina-achtergrond door {{STYLE_PAGE_BG}}, de footer door {{STYLE_FOOTER_BG}} en \
 {{STYLE_FOOTER_TEXT}}, en font-family van lopende tekst door {{STYLE_FONT}}.
-- Laat Brevo-tags ({{ unsubscribe }}, {{ contact.EMAIL }}) exact staan.
+- Laat ESP-tags exact staan: Brevo-tags ({{ unsubscribe }}, {{ contact.EMAIL }}) en \
+Klaviyo-tags ({% unsubscribe %}, {% current_year %}, {{ organization.name }}, \
+{{ organization.full_address }} en vergelijkbaar). Voeg zelf geen afmeldlink toe.
 - Echte klantreviews/testimonials en juridische teksten mogen statisch blijven; meld \
 dat in notes.
 - Meld in notes alles wat je niet kon vervangen of wat aandacht nodig heeft."""
@@ -234,11 +236,12 @@ def verify_toolproof(html: str) -> tuple[list[str], list[str]]:
         else:
             failed.append("blokken-marker aanwezig maar de blokken renderen niet")
 
-    if "{{ unsubscribe }}" in html:
-        if "{{ unsubscribe }}" in rendered:
-            passed.append("afmeldlink blijft behouden")
-        else:
-            failed.append("afmeldlink verdwijnt bij het renderen")
+    for tag in ("{{ unsubscribe }}", "{% unsubscribe %}"):
+        if tag in html:
+            if tag in rendered:
+                passed.append(f"afmeldlink ({tag}) blijft behouden")
+            else:
+                failed.append(f"afmeldlink ({tag}) verdwijnt bij het renderen")
 
     return passed, failed
 

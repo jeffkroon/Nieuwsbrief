@@ -20,7 +20,7 @@ Channel = Literal["slack", "web", "api"]
 ConversationStatus = Literal["active", "completed", "abandoned"]
 MessageRole = Literal["user", "assistant", "system", "tool"]
 NewsletterStatus = Literal["draft", "generating", "ready", "approved", "sent", "failed"]
-SecretKind = Literal["brevo_api_key"]
+SecretKind = Literal["brevo_api_key", "klaviyo_api_key"]
 
 
 class _ORMModel(BaseModel):
@@ -235,6 +235,7 @@ class NewsletterRead(_ORMModel):
     html: str | None
     input: dict
     brevo_campaign_id: int | None
+    esp_campaign_ref: str | None = None
     status: NewsletterStatus
     error: str | None
     created_at: datetime

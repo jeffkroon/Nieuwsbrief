@@ -54,6 +54,18 @@ def test_brevo_runtime_tags_survive() -> None:
     assert "{{ unsubscribe }}" in out
 
 
+def test_klaviyo_runtime_tags_survive() -> None:
+    # Klaviyo-templates gebruiken {% ... %} en {{ organization.* }}; die blijven staan.
+    template = (
+        "<html>{{INTRO_1}} {% unsubscribe %} {% current_year %} "
+        "{{ organization.name }} {{ organization.full_address }}</html>"
+    )
+    out = render_newsletter(template, BRAND, _content())
+    for tag in ("{% unsubscribe %}", "{% current_year %}",
+                "{{ organization.name }}", "{{ organization.full_address }}"):
+        assert tag in out
+
+
 def test_card_marker_renders_cards() -> None:
     from app.newsletter.models import Club
     from app.newsletter.renderer import render_cards

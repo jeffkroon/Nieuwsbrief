@@ -162,6 +162,8 @@ class Newsletter(Base):
     html: Mapped[str | None] = mapped_column(Text)
     input: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     brevo_campaign_id: Mapped[int | None] = mapped_column(Integer)
+    # Campagne-referentie voor niet-Brevo ESP's (Klaviyo-ids zijn strings).
+    esp_campaign_ref: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="draft")
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
