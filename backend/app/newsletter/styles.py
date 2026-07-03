@@ -58,6 +58,11 @@ FONT_KEY = "font_family"
 _HEX = re.compile(r"^#[0-9a-fA-F]{3,8}$")
 
 
+def is_valid_hex_color(value: str | None) -> bool:
+    """Geldige hex-kleur (bv. '#fff' of '#ffffff')? Voor validatie aan de randen."""
+    return isinstance(value, str) and bool(_HEX.match(value.strip()))
+
+
 def sanitize_styles(raw: dict | None) -> dict:
     """Houd alleen geldige kleuren (hex) en een bekende lettertype-sleutel over.
 

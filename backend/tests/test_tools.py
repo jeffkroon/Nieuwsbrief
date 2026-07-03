@@ -783,3 +783,34 @@ def test_find_banner_no_links_keeps_honest_message(session, cipher) -> None:
     )
     result = execute_tool("find_banner", {"url": "https://shop.test/x"}, ctx)
     assert result["banner_url"] is None and "candidates" not in result
+
+
+def _preview_input(**extra) -> dict:
+    return {
+        "theme": "Zomer", "subject": "Zomer", "intro_1": "a", "intro_2": "b",
+        "main_cta_text": "SHOP", "main_cta_url": "https://shop.test/all",
+        "slot_cta_text": "SHOP", "slot_cta_url": "https://shop.test/all",
+        "matches": [], **extra,
+    }
+
+
+def test_header_text_color_overrides_heading(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>ok</html>")),
+    )
+    execute_tool("preview_newsletter", _preview_input(header_text_color="#123abc"), ctx)
+    assert ctx.preview_holder, "preview hoort gerenderd te zijn"
+    # De kop op de banner krijgt exact de gevraagde kleur (geen default-kleur).
+    assert "#123abc" in ctx.preview_holder[-1]
+
+
+def test_header_text_color_must_be_hex(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>ok</html>")),
+    )
+    with pytest.raises(ValueError, match="hex-kleur"):
+        execute_tool("preview_newsletter", _preview_input(header_text_color="wit"), ctx)

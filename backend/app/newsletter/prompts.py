@@ -120,6 +120,10 @@ Header-elementen die je meegeeft:
 - `header_cta_text`: de tekst van de knop op de foto, bijvoorbeeld "Bekijk alle
   wedstrijden". De link van deze knop is automatisch dezelfde als de hoofd-knop
   (`main_cta_url`), dus die hoef je niet apart op te geven.
+- `header_text_color`: ALLEEN als de gebruiker om een andere kleur voor de kop op de
+  banner vraagt (bv. "maak de titel wit"), geef dan de hex-kleur mee (bv. "#ffffff")
+  en render direct opnieuw. Zonder verzoek laat je dit veld weg (dan geldt de
+  kopkleur uit de stijl-builder).
 
 Regels voor de onderwerpregel (subject) en preheader (preview_text):
 - Onderwerpregel: maximaal 50 tekens (ongeveer 7 tot 9 woorden). Zet de belangrijkste

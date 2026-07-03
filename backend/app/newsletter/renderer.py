@@ -493,6 +493,9 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
         "{{SLOT_CTA_URL}}": content.slot_cta_url,
         **style_replacements(brand),
     }
+    # Per-nieuwsbrief kopkleur (bv. "maak de titel wit"): wint van de stijl-builder.
+    if content.header_text_color:
+        replacements["{{STYLE_HEADING_COLOR}}"] = content.header_text_color
     html = template
     for placeholder, value in replacements.items():
         html = html.replace(placeholder, value)
