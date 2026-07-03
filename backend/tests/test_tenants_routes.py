@@ -105,3 +105,37 @@ def test_company_role_cannot_manage_tenants(client) -> None:
         assert client.get("/tenants").status_code == 200
     finally:
         app.dependency_overrides.pop(current_role, None)
+
+
+def test_prefill_endpoint(client, session, monkeypatch) -> None:
+    from app.deps import get_anthropic_client
+    from app.main import app
+    from app.services import company_prefill
+    from tests.test_company_prefill import HOME_HTML, LLM_PAYLOAD, FakeLLM, _fake_fetch
+
+    monkeypatch.setattr(
+        company_prefill.extraction, "fetch_page",
+        _fake_fetch({"https://shop.nl": (200, HOME_HTML)}),
+    )
+    app.dependency_overrides[get_anthropic_client] = lambda: FakeLLM(LLM_PAYLOAD)
+    try:
+        resp = client.post("/tenants/prefill", json={"name": "Shop NL", "website_url": "shop.nl"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["config"]["brand_email"] == "hallo@shop.nl"
+        assert body["config"]["website_url"] == "https://shop.nl"  # https aangevuld
+        assert body["content_types"][0]["button_text"] == "SHOP NU"
+    finally:
+        app.dependency_overrides.pop(get_anthropic_client, None)
+
+
+def test_prefill_is_admin_only(client) -> None:
+    from app.deps import current_role
+    from app.main import app
+
+    app.dependency_overrides[current_role] = lambda: "company"
+    try:
+        resp = client.post("/tenants/prefill", json={"name": "X", "website_url": "https://x.nl"})
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_role, None)

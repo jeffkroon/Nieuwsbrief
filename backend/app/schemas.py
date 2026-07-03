@@ -57,6 +57,19 @@ class TenantRead(_ORMModel):
     updated_at: datetime
 
 
+class TenantPrefillRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    website_url: str = Field(min_length=4)
+
+
+class TenantPrefillResult(BaseModel):
+    """Voorstel voor een nieuw bedrijf, van de website gehaald (admin controleert)."""
+
+    config: dict
+    content_types: list[dict]
+    notes: list[str]
+
+
 # --- Tenant secret (alleen schrijven, nooit teruglezen) -------------------
 class TenantSecretSet(BaseModel):
     kind: SecretKind
