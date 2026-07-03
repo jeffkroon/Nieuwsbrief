@@ -730,3 +730,56 @@ def test_find_banner_rejects_non_image(session, cipher) -> None:
     )
     with pytest.raises(ValueError, match="geen bereikbare afbeelding"):
         execute_tool("find_banner", {"url": "https://shop.test/collections/ringen"}, ctx)
+
+
+_HOMEPAGE_HTML = (
+    "<html>"
+    '<a href="/collections/ringen">Ringen</a>'
+    '<a href="/collections/all">Alles</a>'
+    '<a href="/collections/oorbellen">Oorbellen</a>'
+    '<a href="/collections/ringen?sort=prijs">Ringen gesorteerd</a>'
+    '<a href="/pages/over-ons">Over ons</a>'
+    "</html>"
+)
+_RINGEN_HTML = (
+    '<html><meta property="og:image" '
+    'content="https://shop.test/cdn/shop/collections/ringen.png?v=1"></html>'
+)
+
+
+def _candidates_http():
+    def handler(r: httpx.Request) -> httpx.Response:
+        if "/cdn/shop/" in r.url.path:
+            return httpx.Response(200, headers={"content-type": "image/png"}, content=b"x")
+        if r.url.path == "/collections/ringen":
+            return httpx.Response(200, text=_RINGEN_HTML)
+        if r.url.path == "/collections/oorbellen":
+            return httpx.Response(200, text="<html>geen banner</html>")
+        return httpx.Response(200, text=_HOMEPAGE_HTML)
+
+    return _http(handler)
+
+
+def test_find_banner_offers_collection_candidates(session, cipher) -> None:
+    # De pagina zelf heeft geen banner: dan kandidaten van gelinkte collecties,
+    # alleen die met een ECHTE banner (oorbellen valt af, /all wordt overgeslagen).
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, http_client=_candidates_http()
+    )
+    result = execute_tool("find_banner", {"url": "https://shop.test/"}, ctx)
+    assert result["banner_url"] is None
+    names = [c["name"] for c in result["candidates"]]
+    assert names == ["ringen"]
+    assert "width=1200" in result["candidates"][0]["banner_url"]
+    assert "KIEZEN" in result["message"]
+
+
+def test_find_banner_no_links_keeps_honest_message(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>niks</html>")),
+    )
+    result = execute_tool("find_banner", {"url": "https://shop.test/x"}, ctx)
+    assert result["banner_url"] is None and "candidates" not in result
