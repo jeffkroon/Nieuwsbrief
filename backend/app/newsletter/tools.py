@@ -34,7 +34,13 @@ from app.newsletter.models import (
     Section,
 )
 from app.newsletter.renderer import render_newsletter
-from app.newsletter.styles import COLOR_KEYS, EMAIL_SAFE_FONTS, FONT_KEY, is_valid_hex_color
+from app.newsletter.styles import (
+    COLOR_KEYS,
+    EMAIL_SAFE_FONTS,
+    FONT_KEY,
+    SPACING_KEYS,
+    is_valid_hex_color,
+)
 from app.newsletter.templates import load_template
 from app.repositories import images as images_repo
 from app.repositories import newsletters as newsletters_repo
@@ -888,6 +894,14 @@ TOOL_DEFINITIONS.append(
                     "enum": sorted(EMAIL_SAFE_FONTS),
                     "description": "Mail-veilig lettertype voor de hele nieuwsbrief.",
                 },
+                "spacing_banner_intro": {
+                    "type": "integer",
+                    "description": "Witruimte in px tussen de bannerfoto en de introtekst (0-200, standaard 80).",
+                },
+                "spacing_intro_products": {
+                    "type": "integer",
+                    "description": "Witruimte in px tussen de introtekst en de productfoto's (0-200, standaard 80).",
+                },
             },
         },
     }
@@ -908,7 +922,9 @@ def _tool_update_template_styles(ctx: ToolContext, tool_input: dict) -> dict:
         raise ValueError("geen template gevonden voor dit merk")
 
     requested = {
-        k: v for k, v in tool_input.items() if k in COLOR_KEYS or k == FONT_KEY
+        k: v
+        for k, v in tool_input.items()
+        if k in COLOR_KEYS or k in SPACING_KEYS or k == FONT_KEY
     }
     if not requested:
         raise ValueError("geen geldige stijlsleutels meegegeven")
