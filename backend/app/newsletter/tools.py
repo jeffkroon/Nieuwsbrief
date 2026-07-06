@@ -857,8 +857,12 @@ TOOL_DEFINITIONS.append(
 
 
 _STYLE_KEY_UITLEG = {
-    "button_bg": "achtergrondkleur van ALLE knoppen (bv. 'Bekijk alle sieraden')",
-    "button_text": "tekstkleur op knoppen",
+    "button_bg": "achtergrondkleur van de knoppen op de product-/wedstrijdkaarten",
+    "button_text": "tekstkleur op de kaart-knoppen",
+    "hero_button_bg": "achtergrondkleur van de knop op de bannerfoto (volgt button_bg tot je 'm zet)",
+    "hero_button_text": "tekstkleur op de bannerknop",
+    "cta_button_bg": "achtergrondkleur van de grote knop onderaan (volgt button_bg tot je 'm zet)",
+    "cta_button_text": "tekstkleur op de onderste knop",
     "accent": "accentkleur (o.a. banner-elementen en kaart-titels)",
     "heading_color": "kopkleur op de headerfoto",
     "text_color": "kleur van de introtekst",

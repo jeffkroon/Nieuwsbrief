@@ -119,7 +119,7 @@ def test_no_matches_renders_general_newsletter() -> None:
     html = render_newsletter(TEMPLATE, BRAND, _content(()))
     assert "Bestel tickets" not in html  # geen wedstrijdblokken
     assert BANNER_MARKER not in html
-    assert "Bekijk alle wedstrijden" in html  # header-knop blijft
+    assert 'class="hero-cta"' in html  # header-knop blijft (tekst = hoofd-knoptekst)
     assert "Eerste alinea." in html
 
 
@@ -172,7 +172,9 @@ def test_hero_cta_default() -> None:
     from app.newsletter.renderer import _render_hero_cta
     content = _content((Match(home="A", away="B", url="https://site/a/"),))  # main_cta_url = https://x/all
     hero = _render_hero_cta(BRAND, content)
-    assert "Bekijk alle wedstrijden" in hero  # default tekst
+    # Zonder eigen header_cta_text valt de knop terug op de hoofd-knoptekst
+    # (geen hardcoded voetbaltekst meer; werkt zo voor elke klant).
+    assert "Bekijk alles" in hero
     assert 'href="https://x/all"' in hero  # link gelijk aan de hoofd-knop
 
 

@@ -39,8 +39,14 @@ _COLOR_DEFAULTS: dict[str, str | None] = {
     "heading_color": "#ffffff",  # kop op de headerfoto
     "link_color": "#0092ff",     # links in de tekst
     "page_bg": "#ffffff",        # e-mail-achtergrond
-    "button_bg": None,           # knoppen -> merkkleur
-    "button_text": "#ffffff",    # knop-tekst
+    "button_bg": None,           # productkaart-/blok-knoppen -> merkkleur
+    "button_text": "#ffffff",    # tekst op productkaart-/blok-knoppen
+    # Banner- en onderste knop volgen button_bg/button_text totdat ze zelf gezet
+    # worden (fallback in effective_styles), zodat bestaand gedrag gelijk blijft.
+    "hero_button_bg": None,      # knop op de bannerfoto
+    "hero_button_text": None,    # tekst op de bannerknop
+    "cta_button_bg": None,       # grote knop onderaan (hoofd- en slotknop)
+    "cta_button_text": None,     # tekst op de onderste knop
     "accent": None,              # wedstrijd-/clubnaam op de kaart -> merkkleur
     "block_border": None,        # rand van het wedstrijdblok -> merkkleur
     "card_border": "#e8e8e8",    # rand van een kaart
@@ -125,6 +131,16 @@ def effective_styles(brand: dict) -> dict:
     # Footer valt terug op de merk-footerkleur als er geen eigen keuze is.
     if not styles.get("footer_bg") and brand_footer:
         result["footer_bg"] = brand_footer
+    # Banner- en onderste knop kleuren mee met de productknoppen totdat ze
+    # zelf een kleur krijgen; zo blijven bestaande templates pixel-identiek.
+    for key, base in (
+        ("hero_button_bg", "button_bg"),
+        ("hero_button_text", "button_text"),
+        ("cta_button_bg", "button_bg"),
+        ("cta_button_text", "button_text"),
+    ):
+        if not styles.get(key):
+            result[key] = result[base]
     return result
 
 
@@ -138,6 +154,10 @@ _TEMPLATE_TOKENS = {
     "{{STYLE_PAGE_BG}}": "page_bg",
     "{{STYLE_BUTTON_BG}}": "button_bg",
     "{{STYLE_BUTTON_TEXT}}": "button_text",
+    "{{STYLE_HERO_BUTTON_BG}}": "hero_button_bg",
+    "{{STYLE_HERO_BUTTON_TEXT}}": "hero_button_text",
+    "{{STYLE_CTA_BUTTON_BG}}": "cta_button_bg",
+    "{{STYLE_CTA_BUTTON_TEXT}}": "cta_button_text",
     "{{STYLE_ACCENT}}": "accent",
     "{{STYLE_FOOTER_BG}}": "footer_bg",
     "{{STYLE_FOOTER_TEXT}}": "footer_text",

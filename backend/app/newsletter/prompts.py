@@ -139,7 +139,10 @@ Algemene regels:
 - STIJL (kleuren, lettertype, witruimte): vraagt de gebruiker om templatekleuren
   ("maak de knoppen zwart", "andere linkkleur"), een ander lettertype of meer/minder
   witruimte, gebruik dan `update_template_styles` en render daarna opnieuw met
-  `preview_newsletter`. Dit geldt voor ALLE nieuwsbrieven van deze template; meld dat
+  `preview_newsletter`. Knoppen kunnen apart: `button_bg` is de kaart-/productknop,
+  `hero_button_bg` de knop op de banner, `cta_button_bg` de grote knop onderaan;
+  vraag bij "maak de knop rood" kort WELKE knop bedoeld wordt als dat niet
+  duidelijk is. Dit geldt voor ALLE nieuwsbrieven van deze template; meld dat
   erbij. Uitzondering: de kleur van de kop op de bannerfoto gaat per nieuwsbrief via
   het veld `header_text_color`. Weigert de tool iets (bv. witruimte op een template
   zonder spacing-tokens), leg dat eerlijk uit.
