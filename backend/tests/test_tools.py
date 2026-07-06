@@ -902,3 +902,53 @@ def test_spacing_applied_on_template_with_tokens(session, cipher):
     ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
     out = execute_tool("update_template_styles", {"spacing_banner_intro": 40}, ctx)
     assert out["toegepast"] == {"spacing_banner_intro": 40}
+
+
+def test_rerender_inherits_missing_fields(session, cipher):
+    # Garantie: een her-render met alleen de gewijzigde velden erft de rest
+    # (bv. de bannerfoto) uit de vorige preview van hetzelfde gesprek.
+    from app.repositories import conversations as conv_repo
+
+    tenant = _tenant(session)
+    conversation = conv_repo.create_conversation(session, tenant_id=tenant.id, channel="web")
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        conversation_id=conversation.id,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>ok</html>")),
+    )
+    volledig = _preview_input(
+        header_title="Zomer", header_image_url="https://cdn/banner-zomer.png"
+    )
+    execute_tool("preview_newsletter", volledig, ctx)
+    assert "banner-zomer" in ctx.preview_holder[-1]
+
+    # Her-render met alleen een tekstwijziging: banner en kop blijven staan.
+    execute_tool("preview_newsletter", _preview_input(intro_1="nieuwe intro"), ctx)
+    html = ctx.preview_holder[-1]
+    assert "banner-zomer" in html and "Zomer" in html and "nieuwe intro" in html
+
+    # Expliciet overschrijven wint van erven.
+    execute_tool(
+        "preview_newsletter",
+        _preview_input(header_image_url="https://cdn/banner-herfst.png"),
+        ctx,
+    )
+    assert "banner-herfst" in ctx.preview_holder[-1]
+    # confirmed wordt nooit bewaard/geërfd (toestemming blijft expliciet).
+    session.expire_all()
+    stored = conv_repo.get_conversation(session, conversation.id).last_preview
+    assert "confirmed" not in stored and stored["header_image_url"] == "https://cdn/banner-herfst.png"
+
+
+def test_changing_product_button_pins_other_buttons(session, cipher):
+    # "Maak de productknoppen zwart" mag de banner-/onderste knop niet meekleuren.
+    tenant, template = _make_tenant_with_template(session)  # button_bg #000000 in styles
+    from app.repositories import templates as templates_repo
+
+    templates_repo.update_styles(session, template.id, {"button_bg": "#b51a00"})
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    out = execute_tool("update_template_styles", {"button_bg": "#000000"}, ctx)
+    assert out["styles"]["button_bg"] == "#000000"
+    # De andere knoppen zijn vastgezet op de kleur die ze effectief hadden.
+    assert out["styles"]["hero_button_bg"] == "#b51a00"
+    assert out["styles"]["cta_button_bg"] == "#b51a00"

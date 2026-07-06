@@ -23,7 +23,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 from sqlalchemy.orm import Session
 
-from app.db.models import Tenant
+from app.db.models import Conversation, Tenant
 from app.newsletter import extraction
 from app.newsletter.models import (
     PRICE_ON_REQUEST,
@@ -39,6 +39,7 @@ from app.newsletter.styles import (
     EMAIL_SAFE_FONTS,
     FONT_KEY,
     SPACING_KEYS,
+    effective_styles,
     is_valid_hex_color,
     sanitize_styles,
 )
@@ -692,12 +693,33 @@ def _resolve_template_html(ctx: ToolContext, tenant, brand: dict) -> tuple[str, 
     return load_template(brand.get("template", DEFAULT_TEMPLATE)), brand
 
 
+def _inherit_last_preview(ctx: ToolContext, tool_input: dict) -> dict:
+    """Erf ontbrekende velden uit de vorige preview van dit gesprek.
+
+    Garantie in code: "wijzig één ding en render opnieuw" kan nooit meer velden
+    kwijtraken (bv. de bannerfoto) doordat de agent ze vergeet te herhalen.
+    Expliciet meegegeven waarden winnen altijd (ook een lege lijst = leegmaken);
+    `confirmed` (de toestemming voor het echte concept) wordt nooit geërfd.
+    """
+    if ctx.conversation_id is None:
+        return tool_input
+    conversation = ctx.session.get(Conversation, ctx.conversation_id)
+    if conversation is None:
+        return tool_input
+    previous = {k: v for k, v in (conversation.last_preview or {}).items() if k != "confirmed"}
+    merged = {**previous, **tool_input}
+    conversation.last_preview = {k: v for k, v in merged.items() if k != "confirmed"}
+    ctx.session.commit()
+    return merged
+
+
 def _build_newsletter(ctx: ToolContext, tool_input: dict):
     """Valideer wedstrijden/clubs/items, bouw de content, kies de template en render.
 
     Gedeeld door preview_newsletter (geen Brevo) en create_newsletter_draft (wel Brevo).
     Geeft (tenant, brand, content, matches, clubs, items, html) terug.
     """
+    tool_input = _inherit_last_preview(ctx, tool_input)
     tenant = _load_tenant(ctx)
     brand = tenant.config
     matches = _validated_matches(ctx, tool_input.get("matches", []))
@@ -960,6 +982,24 @@ def _tool_update_template_styles(ctx: ToolContext, tool_input: dict) -> dict:
             f"geen geldige stijlwaarden: {', '.join(rejected)} geweigerd "
             "(kleuren als hex zoals '#000000', witruimte 0-200, bekend lettertype)"
         )
+
+    # Wijzigt de productknop-kleur en zijn banner-/onderste knop nog niet apart
+    # gezet? Pin ze dan op hun huidige effectieve kleur, zodat alleen de
+    # gevraagde knopgroep verandert (geen stil meekleuren).
+    if any(k in clean_requested for k in ("button_bg", "button_text")):
+        tenant = ctx.session.get(Tenant, ctx.tenant_id)
+        current = effective_styles({**((tenant.config if tenant else {}) or {}),
+                                    "styles": template.styles or {}})
+        for pin_key, base in (
+            ("hero_button_bg", "button_bg"),
+            ("hero_button_text", "button_text"),
+            ("cta_button_bg", "button_bg"),
+            ("cta_button_text", "button_text"),
+        ):
+            if (base in clean_requested
+                    and pin_key not in (template.styles or {})
+                    and pin_key not in clean_requested):
+                clean_requested[pin_key] = current[pin_key]
 
     merged = {**(template.styles or {}), **clean_requested}
     updated = templates_repo.update_styles(ctx.session, template.id, merged)

@@ -112,6 +112,9 @@ class Conversation(Base):
     channel: Mapped[str] = mapped_column(Text, nullable=False)
     external_ref: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
+    # Laatste preview-/draft-invoer van de agent: een her-render erft ontbrekende
+    # velden hieruit, zodat "wijzig één ding" nooit andere velden kwijtraakt.
+    last_preview: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
