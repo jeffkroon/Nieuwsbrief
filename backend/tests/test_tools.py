@@ -946,21 +946,3 @@ def test_spacing_honesty_is_per_key(session, cipher):
             _preview_input(style_overrides={"spacing_text_button": 40}),
             ctx,
         )
-
-
-def test_club_price_is_lowest_on_page(session, cipher):
-    # Clubblok: 'vanaf' = de laagste wedstrijdprijs op de clubpagina, niet de
-    # eerste/prominentste die het model toevallig ziet.
-    tenant = _tenant(session)
-    llm = FakeLLM({"matches": [
-        {"home": "AS Roma", "away": "Lazio", "url": "https://x/derby", "price": "200,-"},
-        {"home": "AS Roma", "away": "Empoli", "url": "https://x/e", "price": "€ 99"},
-    ]})
-    ctx = ToolContext(
-        session=session, tenant_id=tenant.id, cipher=cipher, llm=llm,
-        http_client=_http(lambda r: httpx.Response(200, text="<html>club</html>")),
-    )
-    from app.newsletter.tools import _validated_clubs
-
-    clubs = _validated_clubs(ctx, [{"name": "AS Roma", "url": "https://x/roma"}])
-    assert clubs[0].price == "€ 99"

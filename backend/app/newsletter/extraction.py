@@ -174,38 +174,6 @@ def normalize_price(value: str | None) -> str:
     return f"€ {amount}"
 
 
-def price_amount(price: str) -> float | None:
-    """Numerieke waarde van een genormaliseerde prijs ('€ 1.299,50' -> 1299.50)."""
-    digits = re.search(r"([0-9][0-9.,]*)", price or "")
-    if not digits:
-        return None
-    raw = digits.group(1).rstrip(".,")
-    # NL-notatie: punt = duizendtal, komma = decimaal.
-    raw = raw.replace(".", "").replace(",", ".")
-    try:
-        return float(raw)
-    except ValueError:
-        return None
-
-
-def extract_min_price(llm, raw_html: str, *, source_url: str, model: str = EXTRACT_MODEL) -> str:
-    """Vanafprijs van een pagina met MEERDERE wedstrijden (bv. een clubpagina).
-
-    'Vanaf' = de laagste prijs, dus we halen alle wedstrijden op (zelfde extractie
-    als find_matches) en nemen het minimum IN CODE. Vindt de pagina-extractie geen
-    wedstrijden, dan valt dit terug op de enkele-pagina-prijs.
-    """
-    matches = extract_matches(llm, raw_html, source_url=source_url, model=model)
-    amounts = [
-        (price_amount(m.get("price") or ""), m.get("price"))
-        for m in matches
-    ]
-    amounts = [(a, p) for a, p in amounts if a is not None]
-    if amounts:
-        return normalize_price(min(amounts)[1])
-    return extract_price(llm, raw_html, source_url=source_url, model=model)
-
-
 def fetch_page(url: str, client: httpx.Client | None = None, timeout: float = 20.0) -> tuple[int | None, str]:
     """Haal een pagina op. Geeft (status, html) terug; (None, '') bij netwerkfout."""
     try:
