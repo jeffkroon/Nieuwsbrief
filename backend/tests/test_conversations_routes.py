@@ -155,7 +155,10 @@ def test_continue_conversation_keeps_history(client, session, fake_anthropic) ->
     assert [m["role"] for m in second_history] == ["user", "assistant", "user"]
     assert second_history[0]["content"] == "eerste vraag"
     assert second_history[1]["content"] == "Eerste antwoord."
-    assert second_history[2]["content"] == "tweede vraag"
+    # Het laatste bericht krijgt een cache-markering (geschiedenis-caching);
+    # de tekst zelf blijft gelijk.
+    assert second_history[2]["content"][0]["text"] == "tweede vraag"
+    assert second_history[2]["content"][0]["cache_control"] == {"type": "ephemeral"}
 
 
 def test_start_missing_tenant_404(client, fake_anthropic) -> None:

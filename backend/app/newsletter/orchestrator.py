@@ -52,6 +52,33 @@ def _text_from(content: list) -> str:
     return "".join(getattr(b, "text", "") for b in content if getattr(b, "type", None) == "text")
 
 
+def _with_history_cache(messages: list[dict]) -> list[dict]:
+    """Kopie van de berichten met een cache-markering op het laatste blok.
+
+    De geschiedenis (berichten + tool-resultaten) wordt elke loop-stap opnieuw
+    meegestuurd; zonder markering telkens tegen de volle prijs. Met een
+    cache-markering op het laatste blok leest elke volgende call de geschiedenis
+    uit de cache (~10% van de prijs). Werkt alleen op dict-berichten die wij
+    zelf bouwen; de originele lijst wordt niet gewijzigd.
+    """
+    if not messages or not isinstance(messages[-1], dict):
+        return messages
+    last = dict(messages[-1])
+    content = last.get("content")
+    if isinstance(content, str):
+        last["content"] = [
+            {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
+        ]
+    elif isinstance(content, list) and content and isinstance(content[-1], dict):
+        blocks = list(content)
+        blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
+        last["content"] = blocks
+    else:
+        # SDK-objecten (assistant-beurt) of leeg: niets forceren, gewoon doorsturen.
+        return messages
+    return [*messages[:-1], last]
+
+
 def run_agent_turn(
     client: AnthropicLike,
     *,
@@ -80,7 +107,9 @@ def run_agent_turn(
             context_management={"edits": [{"type": "clear_tool_uses_20250919"}]},
             system=cached_system,
             tools=tools,
-            messages=convo,
+            # Cache-markering op het laatste bericht: de gegroeide geschiedenis
+            # wordt de volgende call uit de cache gelezen i.p.v. vol afgerekend.
+            messages=_with_history_cache(convo),
         )
         convo.append({"role": "assistant", "content": response.content})
 
