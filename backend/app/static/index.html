@@ -309,6 +309,7 @@
           <label>Logo-URL* <input type="text" id="coLogo" placeholder="https://.../logo.png"></label>
           <label>Fallback-foto-URL* <span class="hint" style="font-weight:normal;">(getoond als een blok geen eigen foto heeft)</span> <input type="text" id="coDummy" placeholder="https://.../fallback.png"></label>
           <label>Header-foto-URL <input type="text" id="coHeader" placeholder="optioneel, kan ook via Foto's-tab"></label>
+          <label>Wedstrijden-pagina <input type="text" id="coMatches" placeholder="optioneel, alleen voetbal: URL met alle wedstrijden"></label>
           <label>Facebook <input type="text" id="coFacebook" placeholder="leeg = link naar website"></label>
           <label>Instagram <input type="text" id="coInstagram" placeholder="leeg = link naar website"></label>
           <label>YouTube <input type="text" id="coYoutube" placeholder="leeg = link naar website"></label>
@@ -945,7 +946,9 @@ function companyConfigFromForm() {
   };
   if (cfg.esp === "klaviyo") cfg.klaviyo_list_id = CO("coBrevoList").value.trim();
   const header = CO("coHeader").value.trim();
+  const matchesUrl = CO("coMatches").value.trim();
   if (header) cfg.header_image_url = header;
+  if (matchesUrl) cfg.matches_url = matchesUrl;
   return cfg;
 }
 
@@ -985,6 +988,7 @@ document.getElementById("coPrefill").onclick = async (e) => {
     CO("coLogo").value = c.logo_url || "";
     CO("coDummy").value = c.dummy_image_url || "";
     CO("coHeader").value = c.header_image_url || "";
+    CO("coMatches").value = c.matches_url || "";
     CO("coFacebook").value = c.facebook_url || "";
     CO("coInstagram").value = c.instagram_url || "";
     CO("coYoutube").value = c.youtube_url || "";
@@ -1004,7 +1008,7 @@ document.getElementById("coPrefill").onclick = async (e) => {
 
 function resetCompanyForm() {
   editingCompanyId = null;
-  for (const id of ["coName","coSlug","coWebsite","coEmail","coAdres","coPostcode","coTelefoon","coKvk","coLogo","coDummy","coHeader","coFacebook","coInstagram","coYoutube","coBrevoKey","coBrevoList"]) CO(id).value = "";
+  for (const id of ["coName","coSlug","coWebsite","coEmail","coAdres","coPostcode","coTelefoon","coKvk","coLogo","coDummy","coHeader","coMatches","coFacebook","coInstagram","coYoutube","coBrevoKey","coBrevoList"]) CO(id).value = "";
   CO("coPrimary").value = "#ff7200";
   CO("ctMatches").checked = false; CO("ctClubs").checked = false;
   CO("coEsp").value = "brevo"; updateEspHint();
@@ -1030,6 +1034,7 @@ function fillCompanyForm(t) {
   CO("coPostcode").value = c.brand_postcode_stad || ""; CO("coTelefoon").value = c.brand_telefoon || "";
   CO("coKvk").value = c.brand_kvk || ""; CO("coLogo").value = c.logo_url || "";
   CO("coDummy").value = c.dummy_image_url || ""; CO("coHeader").value = c.header_image_url || "";
+  CO("coMatches").value = c.matches_url || "";
   CO("coFacebook").value = c.facebook_url || ""; CO("coInstagram").value = c.instagram_url || "";
   CO("coYoutube").value = c.youtube_url || "";
   CO("coEsp").value = c.esp || "brevo";

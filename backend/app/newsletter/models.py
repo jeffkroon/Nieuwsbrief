@@ -97,7 +97,6 @@ class NewsletterContent:
     header_title: str | None = None
     header_subtitle: str | None = None
     header_cta_text: str | None = None
-    header_cta_url: str | None = None
     header_image_url: str | None = None  # gekozen bannerfoto; valt anders terug op brand
     # Kleur (hex) van de kop/ondertitel op de banner voor DEZE nieuwsbrief; leeg =
     # de kopkleur uit de stijl-builder. Gevalideerd in code voordat het hier komt.

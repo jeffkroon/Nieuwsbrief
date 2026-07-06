@@ -457,7 +457,6 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
             "message": "Deze pagina heeft geen eigen bannerbeeld. Kies een foto uit "
             "list_images('banner') of vraag de gebruiker om er een te uploaden.",
         }
-    crop = brand.get("banner_crop") or "landscape"
     banner = extraction.normalize_banner_url(og_image, crop=crop)
     try:
         _require_image(ctx, banner)
@@ -554,18 +553,29 @@ def _resolve_price(
     return price
 
 
+def _priced_block(ctx: ToolContext, llm, raw: dict, *fallback_names: str) -> dict:
+    """Gedeelde validatie voor wedstrijd- en clubblokken: prijs + foto.
+
+    Prijs: de URL moet bereikbaar zijn en de live site-prijs wint, tenzij de
+    gebruiker expliciet price_override heeft gezet (zie _resolve_price). Foto:
+    de expliciete verwijzing wint; anders zoeken op de club-/teamnamen.
+    """
+    return {
+        "price": _resolve_price(
+            ctx, llm, raw["url"], raw.get("price"), override=bool(raw.get("price_override"))
+        ),
+        "image_url": _resolve_image_for(ctx, raw.get("image_url"), *fallback_names),
+    }
+
+
 def _validated_matches(ctx: ToolContext, raw_matches: list[dict]) -> list[Match]:
     if not raw_matches:
         return []
     llm = _require_llm(ctx)
     return [
         Match(
-            home=m["home"], away=m["away"], url=m["url"],
-            price=_resolve_price(
-                ctx, llm, m["url"], m.get("price"), override=bool(m.get("price_override"))
-            ),
-            image_url=_resolve_image_for(ctx, m.get("image_url"), m["home"], m["away"]),
-            label=m.get("label"),
+            home=m["home"], away=m["away"], url=m["url"], label=m.get("label"),
+            **_priced_block(ctx, llm, m, m["home"], m["away"]),
         )
         for m in raw_matches
     ]
@@ -658,11 +668,8 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
     return [
         Club(
             name=c["name"], url=c["url"],
-            price=_resolve_price(
-                ctx, llm, c["url"], c.get("price"), override=bool(c.get("price_override"))
-            ),
-            image_url=_resolve_image_for(ctx, c.get("image_url"), c["name"]),
             stadium=c.get("stadium"), city=c.get("city"), label=c.get("label"),
+            **_priced_block(ctx, llm, c, c["name"]),
         )
         for c in raw_clubs
     ]
