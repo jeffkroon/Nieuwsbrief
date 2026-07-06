@@ -814,3 +814,91 @@ def test_header_text_color_must_be_hex(session, cipher) -> None:
     )
     with pytest.raises(ValueError, match="hex-kleur"):
         execute_tool("preview_newsletter", _preview_input(header_text_color="wit"), ctx)
+
+
+# ---------------------------------------------------------------------------
+# update_template_styles (chat-tool, 2026-07-06)
+# ---------------------------------------------------------------------------
+
+
+def _make_tenant_with_template(session):
+    from app.repositories import templates as templates_repo
+
+    slug = f"stijltest-{uuid.uuid4().hex[:6]}"
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug=slug, name=slug, config=CONFIG)
+    )
+    template = templates_repo.create_template(
+        session,
+        tenant_id=tenant.id,
+        name="base template",
+        html="<html>{{STYLE_BUTTON_BG}}</html>",
+        is_default=True,
+        styles={"button_bg": "#000000"},
+    )
+    return tenant, template
+
+
+def test_update_template_styles_applies_and_rejects(session, cipher):
+    tenant, template = _make_tenant_with_template(session)
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+
+    out = execute_tool(
+        "update_template_styles",
+        {"button_bg": "#DE6C58", "link_color": "geen-hex", "font_family": "georgia"},
+        ctx,
+    )
+
+    assert out["toegepast"]["button_bg"] == "#DE6C58"
+    assert out["toegepast"]["font_family"] == "georgia"
+    assert "link_color" in out["geweigerd"]  # ongeldige hex -> gesaneerd
+    # persistent opgeslagen
+    session.expire_all()
+    from app.repositories import templates as templates_repo
+
+    refreshed = templates_repo.get_template(session, template.id)
+    assert refreshed is not None and refreshed.styles["button_bg"] == "#DE6C58"
+
+
+def test_update_template_styles_requires_valid_keys(session, cipher):
+    tenant, _ = _make_tenant_with_template(session)
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    with pytest.raises(ValueError):
+        execute_tool("update_template_styles", {"onzin": "#fff"}, ctx)
+
+
+def test_invalid_style_value_keeps_existing_setting(session, cipher):
+    # Een ongeldige waarde mag een bestaande geldige instelling nooit wissen.
+    tenant, template = _make_tenant_with_template(session)
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    with pytest.raises(ValueError, match="geen geldige stijlwaarden"):
+        execute_tool("update_template_styles", {"button_bg": "rood-is-geen-hex"}, ctx)
+    session.expire_all()
+    from app.repositories import templates as templates_repo
+
+    refreshed = templates_repo.get_template(session, template.id)
+    assert refreshed.styles["button_bg"] == "#000000"  # oude waarde onaangetast
+
+
+def test_spacing_rejected_on_template_without_tokens(session, cipher):
+    # Template zonder spacing-tokens: eerlijk weigeren i.p.v. stil niets doen.
+    tenant, _ = _make_tenant_with_template(session)  # html zonder {{STYLE_SPACING_*}}
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    with pytest.raises(ValueError, match="witruimte"):
+        execute_tool("update_template_styles", {"spacing_banner_intro": 40}, ctx)
+
+
+def test_spacing_applied_on_template_with_tokens(session, cipher):
+    from app.repositories import templates as templates_repo
+
+    slug = f"spacing-{uuid.uuid4().hex[:6]}"
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug=slug, name=slug, config=CONFIG)
+    )
+    templates_repo.create_template(
+        session, tenant_id=tenant.id, name="met-tokens", is_default=True,
+        html="<html><td height=\"{{STYLE_SPACING_BANNER_INTRO}}\"></td></html>",
+    )
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    out = execute_tool("update_template_styles", {"spacing_banner_intro": 40}, ctx)
+    assert out["toegepast"] == {"spacing_banner_intro": 40}

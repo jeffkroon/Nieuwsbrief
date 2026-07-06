@@ -34,7 +34,14 @@ from app.newsletter.models import (
     Section,
 )
 from app.newsletter.renderer import render_newsletter
-from app.newsletter.styles import is_valid_hex_color
+from app.newsletter.styles import (
+    COLOR_KEYS,
+    EMAIL_SAFE_FONTS,
+    FONT_KEY,
+    SPACING_KEYS,
+    is_valid_hex_color,
+    sanitize_styles,
+)
 from app.newsletter.templates import load_template
 from app.repositories import images as images_repo
 from app.repositories import newsletters as newsletters_repo
@@ -840,6 +847,122 @@ TOOL_DEFINITIONS.append(
         "input_schema": _preview_schema,
     }
 )
+
+
+_STYLE_KEY_UITLEG = {
+    "button_bg": "achtergrondkleur van ALLE knoppen (bv. 'Bekijk alle sieraden')",
+    "button_text": "tekstkleur op knoppen",
+    "accent": "accentkleur (o.a. banner-elementen en kaart-titels)",
+    "heading_color": "kopkleur op de headerfoto",
+    "text_color": "kleur van de introtekst",
+    "link_color": "linkkleur in lopende tekst",
+    "page_bg": "achtergrond van de hele e-mail",
+    "footer_bg": "achtergrond van de footer-balk",
+    "footer_text": "tekstkleur in de footer",
+    "card_bg": "achtergrond van een kaart",
+    "card_border": "randkleur van een kaart",
+    "block_border": "randkleur van het wedstrijd-/productblok",
+    "price_color": "kleur van prijsbedragen",
+    "badge_bg": "achtergrond van badge-labels",
+    "home_color": "thuisclubnaam in het wedstrijdblok",
+    "away_color": "uitclubnaam in het wedstrijdblok",
+}
+
+TOOL_DEFINITIONS.append(
+    {
+        "name": "update_template_styles",
+        "description": (
+            "Pas de kleuren en/of het lettertype van de nieuwsbrief-template van dit merk "
+            "PERMANENT aan (geldt voor alle toekomstige nieuwsbrieven met deze template). "
+            "Gebruik dit als de gebruiker vraagt om bv. 'maak de knoppen rood' of een ander "
+            "lettertype. Geef alleen de sleutels mee die moeten wijzigen; hex-kleuren zoals "
+            "'#DE6C58'. Beschikbare kleursleutels: "
+            + "; ".join(f"{k} = {v}" for k, v in _STYLE_KEY_UITLEG.items())
+            + ". Toon daarna altijd een preview zodat de gebruiker het resultaat ziet."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                **{
+                    key: {
+                        "type": "string",
+                        "description": f"Hex-kleur voor: {_STYLE_KEY_UITLEG.get(key, key)}",
+                    }
+                    for key in COLOR_KEYS
+                },
+                FONT_KEY: {
+                    "type": "string",
+                    "enum": sorted(EMAIL_SAFE_FONTS),
+                    "description": "Mail-veilig lettertype voor de hele nieuwsbrief.",
+                },
+                "spacing_banner_intro": {
+                    "type": "integer",
+                    "description": "Witruimte in px tussen de bannerfoto en de introtekst (0-200, standaard 80).",
+                },
+                "spacing_intro_products": {
+                    "type": "integer",
+                    "description": "Witruimte in px tussen de introtekst en de productfoto's (0-200, standaard 80).",
+                },
+            },
+        },
+    }
+)
+
+
+def _tool_update_template_styles(ctx: ToolContext, tool_input: dict) -> dict:
+    """Werk de stijl-laag van de (gekozen of standaard-) template bij.
+
+    De repo saneert (alleen geldige hex + bekende fonts) en commit; wij melden
+    terug welke sleutels zijn toegepast en welke zijn geweigerd zodat de
+    assistent dat aan de gebruiker kan uitleggen."""
+    if ctx.template_id is not None:
+        template = templates_repo.get_template(ctx.session, ctx.template_id)
+    else:
+        template = templates_repo.get_default_template(ctx.session, ctx.tenant_id)
+    if template is None or template.tenant_id != ctx.tenant_id:
+        raise ValueError("geen template gevonden voor dit merk")
+
+    requested = {
+        k: v
+        for k, v in tool_input.items()
+        if k in COLOR_KEYS or k in SPACING_KEYS or k == FONT_KEY
+    }
+    if not requested:
+        raise ValueError("geen geldige stijlsleutels meegegeven")
+
+    # Witruimte werkt alleen als de template de spacing-tokens bevat; anders zou
+    # de wijziging stil niets doen. Eerlijk weigeren in plaats van 'gelukt' claimen.
+    spacing_requested = [k for k in requested if k in SPACING_KEYS]
+    if spacing_requested and "{{STYLE_SPACING_" not in (template.html or ""):
+        raise ValueError(
+            "deze template ondersteunt geen instelbare witruimte (de spacing-tokens "
+            "ontbreken in de layout). Meld dit eerlijk; een beheerder kan de tokens "
+            "via de Templates-tab aan de layout toevoegen."
+        )
+
+    # Saneer de NIEUWE waarden eerst apart: een ongeldige waarde mag nooit een
+    # bestaande geldige instelling wissen (de oude blijft dan gewoon staan).
+    clean_requested = sanitize_styles(requested)
+    rejected = sorted(set(requested) - set(clean_requested))
+    if not clean_requested:
+        raise ValueError(
+            f"geen geldige stijlwaarden: {', '.join(rejected)} geweigerd "
+            "(kleuren als hex zoals '#000000', witruimte 0-200, bekend lettertype)"
+        )
+
+    merged = {**(template.styles or {}), **clean_requested}
+    updated = templates_repo.update_styles(ctx.session, template.id, merged)
+    assert updated is not None  # template bestond zojuist nog
+    applied = {k: updated.styles.get(k) for k in clean_requested if k in updated.styles}
+    return {
+        "template": updated.name,
+        "toegepast": applied,
+        "geweigerd": rejected,  # ongeldige hex, waarde buiten bereik of onbekend lettertype
+        "styles": updated.styles,
+    }
+
+
+_DISPATCH["update_template_styles"] = _tool_update_template_styles
 
 
 def execute_tool(name: str, tool_input: dict, ctx: ToolContext) -> dict:
