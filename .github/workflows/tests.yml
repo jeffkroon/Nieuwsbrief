@@ -1,0 +1,36 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest  # Docker beschikbaar, dus de database-tests draaien echt
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Installeer dependencies
+        run: pip install -r requirements.txt
+
+      - name: Draai de volledige testsuite
+        run: python -m pytest -o addopts="" -q --no-header | tee pytest-output.txt
+
+      - name: Overgeslagen tests zijn een fout
+        # Zonder deze check kunnen database-tests stilletjes worden overgeslagen
+        # (zoals lokaal gebeurt als Docker uitstaat) en glipt kapotte code erdoor.
+        run: |
+          if grep -E "[0-9]+ skipped" pytest-output.txt; then
+            echo "::error::Er zijn tests overgeslagen; de volledige suite moet draaien."
+            exit 1
+          fi

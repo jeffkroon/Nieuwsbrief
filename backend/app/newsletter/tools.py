@@ -40,6 +40,7 @@ from app.newsletter.styles import (
     FONT_KEY,
     SPACING_KEYS,
     is_valid_hex_color,
+    sanitize_styles,
 )
 from app.newsletter.templates import load_template
 from app.repositories import images as images_repo
@@ -929,15 +930,34 @@ def _tool_update_template_styles(ctx: ToolContext, tool_input: dict) -> dict:
     if not requested:
         raise ValueError("geen geldige stijlsleutels meegegeven")
 
-    merged = {**(template.styles or {}), **requested}
+    # Witruimte werkt alleen als de template de spacing-tokens bevat; anders zou
+    # de wijziging stil niets doen. Eerlijk weigeren in plaats van 'gelukt' claimen.
+    spacing_requested = [k for k in requested if k in SPACING_KEYS]
+    if spacing_requested and "{{STYLE_SPACING_" not in (template.html or ""):
+        raise ValueError(
+            "deze template ondersteunt geen instelbare witruimte (de spacing-tokens "
+            "ontbreken in de layout). Meld dit eerlijk; een beheerder kan de tokens "
+            "via de Templates-tab aan de layout toevoegen."
+        )
+
+    # Saneer de NIEUWE waarden eerst apart: een ongeldige waarde mag nooit een
+    # bestaande geldige instelling wissen (de oude blijft dan gewoon staan).
+    clean_requested = sanitize_styles(requested)
+    rejected = sorted(set(requested) - set(clean_requested))
+    if not clean_requested:
+        raise ValueError(
+            f"geen geldige stijlwaarden: {', '.join(rejected)} geweigerd "
+            "(kleuren als hex zoals '#000000', witruimte 0-200, bekend lettertype)"
+        )
+
+    merged = {**(template.styles or {}), **clean_requested}
     updated = templates_repo.update_styles(ctx.session, template.id, merged)
     assert updated is not None  # template bestond zojuist nog
-    applied = {k: updated.styles.get(k) for k in requested if k in updated.styles}
-    rejected = sorted(set(requested) - set(applied))
+    applied = {k: updated.styles.get(k) for k in clean_requested if k in updated.styles}
     return {
         "template": updated.name,
         "toegepast": applied,
-        "geweigerd": rejected,  # ongeldige hex of onbekend lettertype
+        "geweigerd": rejected,  # ongeldige hex, waarde buiten bereik of onbekend lettertype
         "styles": updated.styles,
     }
 

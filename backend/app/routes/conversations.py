@@ -54,6 +54,15 @@ def _run_turn(*, session, client, cipher, conversation, user_text, template_id=N
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, detail="Kan de AI-dienst niet bereiken. Probeer het zo opnieuw."
         ) from exc
+    except RuntimeError as exc:
+        # Bv. de iteratielimiet van de agent-loop: geen kale 500 naar de gebruiker.
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "De assistent had te veel stappen nodig voor deze beurt en is gestopt. "
+                "Stel de vraag iets kleiner of probeer het opnieuw."
+            ),
+        ) from exc
 
 
 @router.post("", response_model=ConversationReply, status_code=status.HTTP_201_CREATED)
