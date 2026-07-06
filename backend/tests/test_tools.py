@@ -817,7 +817,7 @@ def test_header_text_color_must_be_hex(session, cipher) -> None:
 
 
 # ---------------------------------------------------------------------------
-# update_template_styles (chat-tool, 2026-07-06)
+# style_overrides: stijl voor alleen deze nieuwsbrief (template blijft de basis)
 # ---------------------------------------------------------------------------
 
 
@@ -832,123 +832,92 @@ def _make_tenant_with_template(session):
         session,
         tenant_id=tenant.id,
         name="base template",
-        html="<html>{{STYLE_BUTTON_BG}}</html>",
+        html=(
+            "<html><span style='color:{{STYLE_BUTTON_BG}}'></span>"
+            "<i style='color:{{STYLE_CTA_BUTTON_BG}}'></i>"
+            "<p>{{INTRO_1}}</p>{{ unsubscribe }}</html>"
+        ),
         is_default=True,
-        styles={"button_bg": "#000000"},
+        styles={"button_bg": "#b51a00"},
     )
     return tenant, template
 
 
-def test_update_template_styles_applies_and_rejects(session, cipher):
-    tenant, template = _make_tenant_with_template(session)
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+def _ctx(session, cipher, tenant):
+    return ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>ok</html>")),
+    )
 
-    out = execute_tool(
-        "update_template_styles",
-        {"button_bg": "#DE6C58", "link_color": "geen-hex", "font_family": "georgia"},
+
+def test_style_overrides_apply_to_render_not_template(session, cipher):
+    from app.repositories import templates as templates_repo
+
+    tenant, template = _make_tenant_with_template(session)
+    ctx = _ctx(session, cipher, tenant)
+    execute_tool(
+        "preview_newsletter",
+        _preview_input(style_overrides={"button_bg": "#000000"}),
         ctx,
     )
-
-    assert out["toegepast"]["button_bg"] == "#DE6C58"
-    assert out["toegepast"]["font_family"] == "georgia"
-    assert "link_color" in out["geweigerd"]  # ongeldige hex -> gesaneerd
-    # persistent opgeslagen
+    assert "#000000" in ctx.preview_holder[-1]  # render gebruikt de override
     session.expire_all()
-    from app.repositories import templates as templates_repo
-
     refreshed = templates_repo.get_template(session, template.id)
-    assert refreshed is not None and refreshed.styles["button_bg"] == "#DE6C58"
+    assert refreshed.styles == {"button_bg": "#b51a00"}  # template onaangetast
 
 
-def test_update_template_styles_requires_valid_keys(session, cipher):
+def test_style_overrides_pin_other_button_groups(session, cipher):
+    # Productknop zwart voor deze nieuwsbrief: de onderste knop blijft #b51a00.
     tenant, _ = _make_tenant_with_template(session)
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
-    with pytest.raises(ValueError):
-        execute_tool("update_template_styles", {"onzin": "#fff"}, ctx)
+    ctx = _ctx(session, cipher, tenant)
+    execute_tool(
+        "preview_newsletter",
+        _preview_input(style_overrides={"button_bg": "#000000"}),
+        ctx,
+    )
+    html = ctx.preview_holder[-1]
+    assert "color:#000000" in html and "color:#b51a00" in html
 
 
-def test_invalid_style_value_keeps_existing_setting(session, cipher):
-    # Een ongeldige waarde mag een bestaande geldige instelling nooit wissen.
-    tenant, template = _make_tenant_with_template(session)
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
-    with pytest.raises(ValueError, match="geen geldige stijlwaarden"):
-        execute_tool("update_template_styles", {"button_bg": "rood-is-geen-hex"}, ctx)
-    session.expire_all()
-    from app.repositories import templates as templates_repo
-
-    refreshed = templates_repo.get_template(session, template.id)
-    assert refreshed.styles["button_bg"] == "#000000"  # oude waarde onaangetast
+def test_style_overrides_reject_invalid_values(session, cipher):
+    tenant, _ = _make_tenant_with_template(session)
+    ctx = _ctx(session, cipher, tenant)
+    with pytest.raises(ValueError, match="ongeldige stijl-overrides"):
+        execute_tool(
+            "preview_newsletter",
+            _preview_input(style_overrides={"button_bg": "rood"}),
+            ctx,
+        )
 
 
-def test_spacing_rejected_on_template_without_tokens(session, cipher):
-    # Template zonder spacing-tokens: eerlijk weigeren i.p.v. stil niets doen.
-    tenant, _ = _make_tenant_with_template(session)  # html zonder {{STYLE_SPACING_*}}
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+def test_style_overrides_spacing_needs_tokens(session, cipher):
+    tenant, _ = _make_tenant_with_template(session)  # geen spacing-tokens in html
+    ctx = _ctx(session, cipher, tenant)
     with pytest.raises(ValueError, match="witruimte"):
-        execute_tool("update_template_styles", {"spacing_banner_intro": 40}, ctx)
+        execute_tool(
+            "preview_newsletter",
+            _preview_input(style_overrides={"spacing_banner_intro": 40}),
+            ctx,
+        )
 
 
-def test_spacing_applied_on_template_with_tokens(session, cipher):
-    from app.repositories import templates as templates_repo
-
-    slug = f"spacing-{uuid.uuid4().hex[:6]}"
-    tenant = tenants_repo.create_tenant(
-        session, TenantCreate(slug=slug, name=slug, config=CONFIG)
-    )
-    templates_repo.create_template(
-        session, tenant_id=tenant.id, name="met-tokens", is_default=True,
-        html="<html><td height=\"{{STYLE_SPACING_BANNER_INTRO}}\"></td></html>",
-    )
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
-    out = execute_tool("update_template_styles", {"spacing_banner_intro": 40}, ctx)
-    assert out["toegepast"] == {"spacing_banner_intro": 40}
-
-
-def test_rerender_inherits_missing_fields(session, cipher):
-    # Garantie: een her-render met alleen de gewijzigde velden erft de rest
-    # (bv. de bannerfoto) uit de vorige preview van hetzelfde gesprek.
+def test_style_overrides_inherit_within_conversation(session, cipher):
+    # De override erft mee met de her-render (last_preview), dus 'maak de knop
+    # zwart' blijft staan als de gebruiker daarna iets anders wijzigt.
     from app.repositories import conversations as conv_repo
 
-    tenant = _tenant(session)
+    tenant, _ = _make_tenant_with_template(session)
     conversation = conv_repo.create_conversation(session, tenant_id=tenant.id, channel="web")
     ctx = ToolContext(
         session=session, tenant_id=tenant.id, cipher=cipher,
         conversation_id=conversation.id,
         http_client=_http(lambda r: httpx.Response(200, text="<html>ok</html>")),
     )
-    volledig = _preview_input(
-        header_title="Zomer", header_image_url="https://cdn/banner-zomer.png"
-    )
-    execute_tool("preview_newsletter", volledig, ctx)
-    assert "banner-zomer" in ctx.preview_holder[-1]
-
-    # Her-render met alleen een tekstwijziging: banner en kop blijven staan.
-    execute_tool("preview_newsletter", _preview_input(intro_1="nieuwe intro"), ctx)
-    html = ctx.preview_holder[-1]
-    assert "banner-zomer" in html and "Zomer" in html and "nieuwe intro" in html
-
-    # Expliciet overschrijven wint van erven.
     execute_tool(
         "preview_newsletter",
-        _preview_input(header_image_url="https://cdn/banner-herfst.png"),
+        _preview_input(style_overrides={"button_bg": "#000000"}),
         ctx,
     )
-    assert "banner-herfst" in ctx.preview_holder[-1]
-    # confirmed wordt nooit bewaard/geërfd (toestemming blijft expliciet).
-    session.expire_all()
-    stored = conv_repo.get_conversation(session, conversation.id).last_preview
-    assert "confirmed" not in stored and stored["header_image_url"] == "https://cdn/banner-herfst.png"
-
-
-def test_changing_product_button_pins_other_buttons(session, cipher):
-    # "Maak de productknoppen zwart" mag de banner-/onderste knop niet meekleuren.
-    tenant, template = _make_tenant_with_template(session)  # button_bg #000000 in styles
-    from app.repositories import templates as templates_repo
-
-    templates_repo.update_styles(session, template.id, {"button_bg": "#b51a00"})
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
-    out = execute_tool("update_template_styles", {"button_bg": "#000000"}, ctx)
-    assert out["styles"]["button_bg"] == "#000000"
-    # De andere knoppen zijn vastgezet op de kleur die ze effectief hadden.
-    assert out["styles"]["hero_button_bg"] == "#b51a00"
-    assert out["styles"]["cta_button_bg"] == "#b51a00"
+    execute_tool("preview_newsletter", _preview_input(intro_1="nieuwe intro"), ctx)
+    html = ctx.preview_holder[-1]
+    assert "nieuwe intro" in html and "color:#000000" in html

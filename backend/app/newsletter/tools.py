@@ -713,6 +713,46 @@ def _inherit_last_preview(ctx: ToolContext, tool_input: dict) -> dict:
     return merged
 
 
+def _apply_style_overrides(brand: dict, template_html: str, raw: dict | None) -> dict:
+    """Stijl voor alleen deze nieuwsbrief bovenop de template-basis leggen.
+
+    Garanties in code: ongeldige waarden worden hard geweigerd (nooit stil iets
+    anders renderen), witruimte alleen als de template de spacing-tokens heeft,
+    en het wijzigen van de productknop-kleur pint de banner-/onderste knop op
+    hun huidige kleur zodat alleen de gevraagde knopgroep verandert. De
+    template zelf wordt nooit aangepast.
+    """
+    if not raw:
+        return brand
+    if not isinstance(raw, dict):
+        raise ValueError("style_overrides moet een object met stijlsleutels zijn")
+    bekend = {k: v for k, v in raw.items() if k in COLOR_KEYS or k in SPACING_KEYS or k == FONT_KEY}
+    clean = sanitize_styles(bekend)
+    rejected = sorted(set(raw) - set(clean))
+    if rejected:
+        raise ValueError(
+            f"ongeldige stijl-overrides geweigerd: {', '.join(rejected)} "
+            "(kleuren als hex zoals '#000000', witruimte 0-200, bekend lettertype)"
+        )
+    if any(k in clean for k in SPACING_KEYS) and "{{STYLE_SPACING_" not in template_html:
+        raise ValueError(
+            "deze template ondersteunt geen instelbare witruimte (de spacing-tokens "
+            "ontbreken in de layout). Meld dit eerlijk aan de gebruiker."
+        )
+    basis = dict(brand.get("styles") or {})
+    if any(k in clean for k in ("button_bg", "button_text")):
+        current = effective_styles(brand)
+        for pin_key, base in (
+            ("hero_button_bg", "button_bg"),
+            ("hero_button_text", "button_text"),
+            ("cta_button_bg", "button_bg"),
+            ("cta_button_text", "button_text"),
+        ):
+            if base in clean and pin_key not in basis and pin_key not in clean:
+                clean[pin_key] = current[pin_key]
+    return {**brand, "styles": {**basis, **clean}}
+
+
 def _build_newsletter(ctx: ToolContext, tool_input: dict):
     """Valideer wedstrijden/clubs/items, bouw de content, kies de template en render.
 
@@ -753,6 +793,7 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
         sections=tuple(sections),
     )
     template_html, brand = _resolve_template_html(ctx, tenant, brand)
+    brand = _apply_style_overrides(brand, template_html, tool_input.get("style_overrides"))
     html = render_newsletter(template_html, brand, content)
     return tenant, brand, content, matches, clubs, items, html
 
@@ -901,119 +942,29 @@ _STYLE_KEY_UITLEG = {
     "away_color": "uitclubnaam in het wedstrijdblok",
 }
 
-TOOL_DEFINITIONS.append(
-    {
-        "name": "update_template_styles",
-        "description": (
-            "Pas de kleuren en/of het lettertype van de nieuwsbrief-template van dit merk "
-            "PERMANENT aan (geldt voor alle toekomstige nieuwsbrieven met deze template). "
-            "Gebruik dit als de gebruiker vraagt om bv. 'maak de knoppen rood' of een ander "
-            "lettertype. Geef alleen de sleutels mee die moeten wijzigen; hex-kleuren zoals "
-            "'#DE6C58'. Beschikbare kleursleutels: "
-            + "; ".join(f"{k} = {v}" for k, v in _STYLE_KEY_UITLEG.items())
-            + ". Toon daarna altijd een preview zodat de gebruiker het resultaat ziet."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                **{
-                    key: {
-                        "type": "string",
-                        "description": f"Hex-kleur voor: {_STYLE_KEY_UITLEG.get(key, key)}",
-                    }
-                    for key in COLOR_KEYS
-                },
-                FONT_KEY: {
-                    "type": "string",
-                    "enum": sorted(EMAIL_SAFE_FONTS),
-                    "description": "Mail-veilig lettertype voor de hele nieuwsbrief.",
-                },
-                "spacing_banner_intro": {
-                    "type": "integer",
-                    "description": "Witruimte in px tussen de bannerfoto en de introtekst (0-200, standaard 80).",
-                },
-                "spacing_intro_products": {
-                    "type": "integer",
-                    "description": "Witruimte in px tussen de introtekst en de productfoto's (0-200, standaard 80).",
-                },
-            },
-        },
-    }
-)
+# Stijl voor ALLEEN deze nieuwsbrief: de template blijft de vaste basis; deze
+# overrides gaan alleen mee in de render van dit gesprek (en erven mee via
+# last_preview). De template zelf pas je aan in de stijl-builder, niet via chat.
+_STYLE_OVERRIDES_SCHEMA = {
+    "type": "object",
+    "description": (
+        "Kleuren/lettertype/witruimte voor ALLEEN deze nieuwsbrief; de template "
+        "blijft ongewijzigd als basis. Geef alleen de sleutels die moeten "
+        "afwijken; hex-kleuren zoals '#000000'. Sleutels: "
+        + "; ".join(f"{k} = {v}" for k, v in _STYLE_KEY_UITLEG.items())
+        + "; font_family (mail-veilig lettertype); spacing_banner_intro en "
+        "spacing_intro_products (px, 0-200). Render daarna altijd opnieuw."
+    ),
+    "properties": {
+        **{key: {"type": "string"} for key in COLOR_KEYS},
+        FONT_KEY: {"type": "string", "enum": sorted(EMAIL_SAFE_FONTS)},
+        "spacing_banner_intro": {"type": "integer"},
+        "spacing_intro_products": {"type": "integer"},
+    },
+}
+_draft_def["input_schema"]["properties"]["style_overrides"] = _STYLE_OVERRIDES_SCHEMA
+_preview_schema["properties"]["style_overrides"] = _STYLE_OVERRIDES_SCHEMA
 
-
-def _tool_update_template_styles(ctx: ToolContext, tool_input: dict) -> dict:
-    """Werk de stijl-laag van de (gekozen of standaard-) template bij.
-
-    De repo saneert (alleen geldige hex + bekende fonts) en commit; wij melden
-    terug welke sleutels zijn toegepast en welke zijn geweigerd zodat de
-    assistent dat aan de gebruiker kan uitleggen."""
-    if ctx.template_id is not None:
-        template = templates_repo.get_template(ctx.session, ctx.template_id)
-    else:
-        template = templates_repo.get_default_template(ctx.session, ctx.tenant_id)
-    if template is None or template.tenant_id != ctx.tenant_id:
-        raise ValueError("geen template gevonden voor dit merk")
-
-    requested = {
-        k: v
-        for k, v in tool_input.items()
-        if k in COLOR_KEYS or k in SPACING_KEYS or k == FONT_KEY
-    }
-    if not requested:
-        raise ValueError("geen geldige stijlsleutels meegegeven")
-
-    # Witruimte werkt alleen als de template de spacing-tokens bevat; anders zou
-    # de wijziging stil niets doen. Eerlijk weigeren in plaats van 'gelukt' claimen.
-    spacing_requested = [k for k in requested if k in SPACING_KEYS]
-    if spacing_requested and "{{STYLE_SPACING_" not in (template.html or ""):
-        raise ValueError(
-            "deze template ondersteunt geen instelbare witruimte (de spacing-tokens "
-            "ontbreken in de layout). Meld dit eerlijk; een beheerder kan de tokens "
-            "via de Templates-tab aan de layout toevoegen."
-        )
-
-    # Saneer de NIEUWE waarden eerst apart: een ongeldige waarde mag nooit een
-    # bestaande geldige instelling wissen (de oude blijft dan gewoon staan).
-    clean_requested = sanitize_styles(requested)
-    rejected = sorted(set(requested) - set(clean_requested))
-    if not clean_requested:
-        raise ValueError(
-            f"geen geldige stijlwaarden: {', '.join(rejected)} geweigerd "
-            "(kleuren als hex zoals '#000000', witruimte 0-200, bekend lettertype)"
-        )
-
-    # Wijzigt de productknop-kleur en zijn banner-/onderste knop nog niet apart
-    # gezet? Pin ze dan op hun huidige effectieve kleur, zodat alleen de
-    # gevraagde knopgroep verandert (geen stil meekleuren).
-    if any(k in clean_requested for k in ("button_bg", "button_text")):
-        tenant = ctx.session.get(Tenant, ctx.tenant_id)
-        current = effective_styles({**((tenant.config if tenant else {}) or {}),
-                                    "styles": template.styles or {}})
-        for pin_key, base in (
-            ("hero_button_bg", "button_bg"),
-            ("hero_button_text", "button_text"),
-            ("cta_button_bg", "button_bg"),
-            ("cta_button_text", "button_text"),
-        ):
-            if (base in clean_requested
-                    and pin_key not in (template.styles or {})
-                    and pin_key not in clean_requested):
-                clean_requested[pin_key] = current[pin_key]
-
-    merged = {**(template.styles or {}), **clean_requested}
-    updated = templates_repo.update_styles(ctx.session, template.id, merged)
-    assert updated is not None  # template bestond zojuist nog
-    applied = {k: updated.styles.get(k) for k in clean_requested if k in updated.styles}
-    return {
-        "template": updated.name,
-        "toegepast": applied,
-        "geweigerd": rejected,  # ongeldige hex, waarde buiten bereik of onbekend lettertype
-        "styles": updated.styles,
-    }
-
-
-_DISPATCH["update_template_styles"] = _tool_update_template_styles
 
 
 def execute_tool(name: str, tool_input: dict, ctx: ToolContext) -> dict:
