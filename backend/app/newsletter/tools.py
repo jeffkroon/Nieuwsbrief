@@ -531,8 +531,7 @@ def _resolve_image_for(ctx: ToolContext, explicit: str | None, *fallback_names: 
 
 
 def _resolve_price(
-    ctx: ToolContext, llm, url: str, manual: str | None, override: bool = False,
-    vanaf: bool = False,
+    ctx: ToolContext, llm, url: str, manual: str | None, override: bool = False
 ) -> str:
     """URL moet bereikbaar zijn (200). Standaard wint de live gescrapete site-prijs.
 
@@ -548,31 +547,23 @@ def _resolve_price(
         )
     if override and manual:
         return extraction.normalize_price(manual)
-    if vanaf:
-        # Clubpagina met meerdere wedstrijden: 'vanaf' = de laagste prijs (in code).
-        price = extraction.extract_min_price(llm, html, source_url=url)
-    else:
-        price = extraction.extract_price(llm, html, source_url=url)
+    price = extraction.extract_price(llm, html, source_url=url)
     # Geen prijs op de site? Gebruik de handmatig opgegeven vanafprijs (echte prijs wint).
     if price == PRICE_ON_REQUEST and manual:
         price = extraction.normalize_price(manual)
     return price
 
 
-def _priced_block(
-    ctx: ToolContext, llm, raw: dict, *fallback_names: str, vanaf: bool = False
-) -> dict:
+def _priced_block(ctx: ToolContext, llm, raw: dict, *fallback_names: str) -> dict:
     """Gedeelde validatie voor wedstrijd- en clubblokken: prijs + foto.
 
     Prijs: de URL moet bereikbaar zijn en de live site-prijs wint, tenzij de
-    gebruiker expliciet price_override heeft gezet (zie _resolve_price). Voor
-    club-blokken (vanaf=True) is de prijs de LAAGSTE wedstrijdprijs op de
-    pagina. Foto: de expliciete verwijzing wint; anders de club-/teamnamen.
+    gebruiker expliciet price_override heeft gezet (zie _resolve_price). Foto:
+    de expliciete verwijzing wint; anders zoeken op de club-/teamnamen.
     """
     return {
         "price": _resolve_price(
-            ctx, llm, raw["url"], raw.get("price"),
-            override=bool(raw.get("price_override")), vanaf=vanaf,
+            ctx, llm, raw["url"], raw.get("price"), override=bool(raw.get("price_override"))
         ),
         "image_url": _resolve_image_for(ctx, raw.get("image_url"), *fallback_names),
     }
@@ -679,7 +670,7 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
         Club(
             name=c["name"], url=c["url"],
             stadium=c.get("stadium"), city=c.get("city"), label=c.get("label"),
-            **_priced_block(ctx, llm, c, c["name"], vanaf=True),
+            **_priced_block(ctx, llm, c, c["name"]),
         )
         for c in raw_clubs
     ]
