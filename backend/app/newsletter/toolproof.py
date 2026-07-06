@@ -110,6 +110,14 @@ kaart-/productknoppen (bv. "SHOP NU" per product) -> {{STYLE_BUTTON_BG}} + \
 lagen (bgcolor op de td, background in de td-style, én background/color in de \
 <a>-tag); vervang de kleur in ALLE lagen van dezelfde knop door hetzelfde token, \
 anders blijft de zichtbare laag een andere kleur houden.
+- WITRUIMTE: vervang de verticale paddings tussen de hoofd-zones door deze tokens \
+(alleen het getal, "px" laten staan): banner/hero -> introtekst = \
+{{STYLE_SPACING_BANNER_INTRO}}, introtekst -> producten/blokken = \
+{{STYLE_SPACING_INTRO_PRODUCTS}}, producten -> tekst eronder = \
+{{STYLE_SPACING_PRODUCTS_TEXT}}, die tekst -> onderste knop = \
+{{STYLE_SPACING_TEXT_BUTTON}}. Voorbeeld: "padding-top:80px" wordt \
+"padding-top:{{STYLE_SPACING_BANNER_INTRO}}px". Alleen toepassen op de zones die \
+duidelijk herkenbaar zijn; twijfel je, laat de padding staan en meld het in notes.
 
 REGELS:
 - Geef ALLEEN operaties terug, nooit de hele HTML.

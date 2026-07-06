@@ -56,6 +56,18 @@ def validate_template_html(html: str) -> tuple[list[str], list[str]]:
             "{{STYLE_CTA_BUTTON_BG}} of {{STYLE_HERO_BUTTON_BG}}); anders zijn de "
             "knopkleuren niet instelbaar"
         )
+    # Witruimte: meld welke afstanden niet instelbaar zijn (token ontbreekt).
+    from app.newsletter.styles import SPACING_KEYS
+
+    missende_spacing = [
+        k for k in SPACING_KEYS if ("{{STYLE_" + k.upper() + "}}") not in text
+    ]
+    if missende_spacing:
+        warnings.append(
+            "witruimte niet instelbaar voor: " + ", ".join(missende_spacing)
+            + " (het bijbehorende {{STYLE_SPACING_*}}-token ontbreekt; prima als "
+            "dat bewust is)"
+        )
     # Grote CTA-knop zonder eigen kleur-token: dan kleurt hij mee met de
     # productknoppen en is hij niet apart instelbaar (chat/stijl-builder).
     if "{{HOOFD_CTA_TEKST}}" in text and "{{STYLE_CTA_BUTTON_BG}}" not in text:
