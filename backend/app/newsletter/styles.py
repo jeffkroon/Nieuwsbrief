@@ -61,13 +61,15 @@ _COLOR_DEFAULTS: dict[str, str | None] = {
 COLOR_KEYS = tuple(_COLOR_DEFAULTS)
 FONT_KEY = "font_family"
 
-# Witruimte in px — BEWUST alleen deze twee (verzoek 2026-07-06): de ruimte
-# tussen de bannerfoto en de introtekst, en tussen de introtekst en de
-# productfoto's. Defaults = de oude vaste paddings, dus render-identiek
-# zolang niemand iets aanpast.
+# Witruimte in px. Defaults = de oude vaste paddings van de klant-template,
+# dus render-identiek zolang niemand iets aanpast. Token-naam = sleutel in
+# hoofdletters ({{STYLE_SPACING_BANNER_INTRO}} enz.); de override-check in
+# tools.py leunt op die afspraak.
 _SPACING_DEFAULTS: dict[str, int] = {
-    "spacing_banner_intro": 80,
-    "spacing_intro_products": 80,
+    "spacing_banner_intro": 80,     # bannerfoto -> introtekst
+    "spacing_intro_products": 80,   # introtekst -> producten
+    "spacing_products_text": 80,    # producten -> tekst eronder
+    "spacing_text_button": 20,      # die tekst -> onderste knop
 }
 SPACING_KEYS = tuple(_SPACING_DEFAULTS)
 _SPACING_MAX_PX = 200
@@ -163,6 +165,8 @@ _TEMPLATE_TOKENS = {
     "{{STYLE_FOOTER_TEXT}}": "footer_text",
     "{{STYLE_SPACING_BANNER_INTRO}}": "spacing_banner_intro",
     "{{STYLE_SPACING_INTRO_PRODUCTS}}": "spacing_intro_products",
+    "{{STYLE_SPACING_PRODUCTS_TEXT}}": "spacing_products_text",
+    "{{STYLE_SPACING_TEXT_BUTTON}}": "spacing_text_button",
 }
 
 

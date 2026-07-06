@@ -149,3 +149,18 @@ def test_button_groups_split_with_fallback() -> None:
     assert "background:#000000" in cards  # productknop zwart
     # Tekstkleuren volgen button_text zolang niet apart gezet.
     assert st["hero_button_text"] == st["button_text"] == st["cta_button_text"]
+
+
+def test_lower_spacing_keys_flow_through() -> None:
+    from app.newsletter.styles import effective_styles, sanitize_styles, style_replacements
+
+    clean = sanitize_styles({"spacing_products_text": 120, "spacing_text_button": 0})
+    assert clean == {"spacing_products_text": 120, "spacing_text_button": 0}
+    st = effective_styles({"styles": clean})
+    assert st["spacing_products_text"] == 120 and st["spacing_text_button"] == 0
+    # Defaults = de oude vaste paddings.
+    st_default = effective_styles({"styles": {}})
+    assert st_default["spacing_products_text"] == 80 and st_default["spacing_text_button"] == 20
+    tokens = style_replacements({"styles": clean})
+    assert tokens["{{STYLE_SPACING_PRODUCTS_TEXT}}"] == "120"
+    assert tokens["{{STYLE_SPACING_TEXT_BUTTON}}"] == "0"

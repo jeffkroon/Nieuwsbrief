@@ -734,10 +734,16 @@ def _apply_style_overrides(brand: dict, template_html: str, raw: dict | None) ->
             f"ongeldige stijl-overrides geweigerd: {', '.join(rejected)} "
             "(kleuren als hex zoals '#000000', witruimte 0-200, bekend lettertype)"
         )
-    if any(k in clean for k in SPACING_KEYS) and "{{STYLE_SPACING_" not in template_html:
+    # Eerlijkheid per sleutel: elke gevraagde witruimte moet zijn eigen token in
+    # de template hebben, anders zou de wijziging stil niets doen.
+    ontbreekt = [
+        k for k in clean
+        if k in SPACING_KEYS and ("{{STYLE_" + k.upper() + "}}") not in template_html
+    ]
+    if ontbreekt:
         raise ValueError(
-            "deze template ondersteunt geen instelbare witruimte (de spacing-tokens "
-            "ontbreken in de layout). Meld dit eerlijk aan de gebruiker."
+            f"deze template ondersteunt {', '.join(ontbreekt)} niet (het bijbehorende "
+            "spacing-token ontbreekt in de layout). Meld dit eerlijk aan de gebruiker."
         )
     basis = dict(brand.get("styles") or {})
     if any(k in clean for k in ("button_bg", "button_text")):
@@ -952,14 +958,15 @@ _STYLE_OVERRIDES_SCHEMA = {
         "blijft ongewijzigd als basis. Geef alleen de sleutels die moeten "
         "afwijken; hex-kleuren zoals '#000000'. Sleutels: "
         + "; ".join(f"{k} = {v}" for k, v in _STYLE_KEY_UITLEG.items())
-        + "; font_family (mail-veilig lettertype); spacing_banner_intro en "
-        "spacing_intro_products (px, 0-200). Render daarna altijd opnieuw."
+        + "; font_family (mail-veilig lettertype); witruimte in px (0-200): "
+        + ", ".join(SPACING_KEYS)
+        + " (banner->intro, intro->producten, producten->tekst, tekst->onderste "
+        "knop). Render daarna altijd opnieuw."
     ),
     "properties": {
         **{key: {"type": "string"} for key in COLOR_KEYS},
         FONT_KEY: {"type": "string", "enum": sorted(EMAIL_SAFE_FONTS)},
-        "spacing_banner_intro": {"type": "integer"},
-        "spacing_intro_products": {"type": "integer"},
+        **{key: {"type": "integer"} for key in SPACING_KEYS},
     },
 }
 _draft_def["input_schema"]["properties"]["style_overrides"] = _STYLE_OVERRIDES_SCHEMA
