@@ -23,7 +23,9 @@ def test_full_template_has_no_errors() -> None:
 
     errors, warnings = validate_template_html(load_template("voetbalreizenxl-main"))
     assert errors == []
-    assert warnings == []  # de meegeleverde template heeft alle placeholders
+    # De meegeleverde template heeft alle placeholders; alleen de informatieve
+    # witruimte-melding mag verschijnen (die template heeft bewust vaste maten).
+    assert [w for w in warnings if "witruimte niet instelbaar" not in w] == []
 
 
 def test_warns_when_cta_button_lacks_own_token() -> None:
