@@ -8,7 +8,13 @@ import anthropic
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.deps import get_anthropic_client, get_cipher, get_session
+from app.deps import (
+    SessionInfo,
+    current_session_info,
+    get_anthropic_client,
+    get_cipher,
+    get_session,
+)
 from app.ratelimit import SlidingWindowRateLimiter, client_ip
 from app.repositories import conversations as repo
 from app.repositories import tenants as tenants_repo
@@ -65,6 +71,15 @@ def _run_turn(*, session, client, cipher, conversation, user_text, template_id=N
         ) from exc
 
 
+
+
+def _require_conversation_access(info: SessionInfo, tenant_id) -> None:
+    """Klant-sessies mogen alleen gesprekken van hun eigen bedrijf voeren."""
+    if info.role == "admin" or info.tenant_id is None or info.tenant_id == tenant_id:
+        return
+    raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Geen toegang tot dit bedrijf.")
+
+
 @router.post("", response_model=ConversationReply, status_code=status.HTTP_201_CREATED)
 def start_conversation(
     body: ConversationStart,
@@ -72,7 +87,9 @@ def start_conversation(
     cipher: SecretCipher = Depends(get_cipher),
     client=Depends(get_anthropic_client),
     _: None = Depends(chat_rate_limit),
+    info: SessionInfo = Depends(current_session_info),
 ) -> ConversationReply:
+    _require_conversation_access(info, body.tenant_id)
     if tenants_repo.get_tenant(session, body.tenant_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="tenant niet gevonden")
     conversation = repo.create_conversation(
@@ -96,8 +113,11 @@ def continue_conversation(
     cipher: SecretCipher = Depends(get_cipher),
     client=Depends(get_anthropic_client),
     _: None = Depends(chat_rate_limit),
+    info: SessionInfo = Depends(current_session_info),
 ) -> ConversationReply:
     conversation = repo.get_conversation(session, conversation_id)
+    if conversation is not None:
+        _require_conversation_access(info, conversation.tenant_id)
     if conversation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="gesprek niet gevonden")
     turn = _run_turn(

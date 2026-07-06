@@ -81,8 +81,13 @@ def _settings_with_password() -> Settings:
     )
 
 
-def test_login_wrong_password_redirects_with_error() -> None:
+def test_login_wrong_password_redirects_with_error(session) -> None:
+    # get_session overriden: de login doet nu ook een tenant-lookup (klant-logins)
+    # en mag in tests nooit de echte database raken.
+    from app.deps import get_session
+
     real_app.dependency_overrides[get_settings] = _settings_with_password
+    real_app.dependency_overrides[get_session] = lambda: session
     try:
         client = TestClient(real_app)
         resp = client.post(
@@ -91,6 +96,7 @@ def test_login_wrong_password_redirects_with_error() -> None:
         assert resp.status_code == 303 and resp.headers["location"] == "/login?error=1"
     finally:
         real_app.dependency_overrides.pop(get_settings, None)
+        real_app.dependency_overrides.pop(get_session, None)
 
 
 def test_login_correct_sets_cookie() -> None:

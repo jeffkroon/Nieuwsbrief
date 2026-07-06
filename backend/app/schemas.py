@@ -57,6 +57,12 @@ class TenantRead(_ORMModel):
     updated_at: datetime
 
 
+class TenantPasswordSet(BaseModel):
+    """Klant-login-wachtwoord voor een bedrijf (alleen schrijven, nooit teruggeven)."""
+
+    password: str = Field(min_length=8, max_length=128)
+
+
 class TenantPrefillRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     website_url: str = Field(min_length=4)

@@ -7,13 +7,23 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.deps import get_anthropic_client, get_cipher, get_session, require_admin
+from app.deps import (
+    SessionInfo,
+    current_session_info,
+    get_anthropic_client,
+    get_cipher,
+    get_session,
+    require_admin,
+    require_tenant_access,
+)
+from app.services.passwords import hash_password
 from app.repositories import secrets as secrets_repo
 from app.repositories import tenants as repo
 from app.schemas import (
     EspListsRequest,
     EspListsResult,
     TenantCreate,
+    TenantPasswordSet,
     TenantPrefillRequest,
     TenantPrefillResult,
     TenantRead,
@@ -96,11 +106,17 @@ def esp_lists(
 
 
 @router.get("", response_model=list[TenantRead])
-def list_tenants(session: Session = Depends(get_session)) -> list[TenantRead]:
-    return repo.list_tenants(session)
+def list_tenants(
+    session: Session = Depends(get_session),
+    info: SessionInfo = Depends(current_session_info),
+) -> list[TenantRead]:
+    tenants = repo.list_tenants(session)
+    if info.tenant_id is not None:  # klant-login: alleen het eigen bedrijf
+        tenants = [t for t in tenants if t.id == info.tenant_id]
+    return tenants
 
 
-@router.get("/{tenant_id}", response_model=TenantRead)
+@router.get("/{tenant_id}", response_model=TenantRead, dependencies=[Depends(require_tenant_access)])
 def get_tenant(tenant_id: uuid.UUID, session: Session = Depends(get_session)) -> TenantRead:
     tenant = repo.get_tenant(session, tenant_id)
     if tenant is None:
@@ -127,7 +143,30 @@ def delete_tenant(tenant_id: uuid.UUID, session: Session = Depends(get_session))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/{tenant_id}/tone")
+@router.post(
+    "/{tenant_id}/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
+def set_tenant_password(
+    tenant_id: uuid.UUID, body: TenantPasswordSet, session: Session = Depends(get_session)
+) -> Response:
+    """Stel het klant-login-wachtwoord voor dit bedrijf in (alleen beheerders).
+
+    Het wachtwoord wordt alleen als hash opgeslagen en is nergens terug te lezen.
+    """
+    tenant = repo.get_tenant(session, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="tenant niet gevonden")
+    try:
+        tenant.password_hash = hash_password(body.password)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{tenant_id}/tone", dependencies=[Depends(require_tenant_access)])
 def get_tone(tenant_id: uuid.UUID, session: Session = Depends(get_session)) -> dict:
     """De (gecachte) tone of voice van het bedrijf; None als die er nog niet is."""
     tenant = repo.get_tenant(session, tenant_id)
@@ -136,7 +175,7 @@ def get_tone(tenant_id: uuid.UUID, session: Session = Depends(get_session)) -> d
     return {"tone_of_voice": get_cached_tone(tenant)}
 
 
-@router.post("/{tenant_id}/tone/refresh")
+@router.post("/{tenant_id}/tone/refresh", dependencies=[Depends(require_tenant_access)])
 def refresh_tone(
     tenant_id: uuid.UUID,
     session: Session = Depends(get_session),

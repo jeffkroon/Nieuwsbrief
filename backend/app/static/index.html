@@ -329,6 +329,13 @@
           <select id="espListsSelect" class="field" style="display:none; min-width:280px;"></select>
         </div>
         <p class="hint" id="espHint"></p>
+        <h3 class="style-head">Klant-login</h3>
+        <p class="hint">Geef de klant de <b>bedrijfscode</b> (de slug hierboven) als gebruikersnaam en stel hier hun wachtwoord in. Zo'n login ziet alleen dit bedrijf. Minimaal 8 tekens; alleen opnieuw invullen om te wijzigen.</p>
+        <div class="row">
+          <label>Klant-wachtwoord <input type="password" id="coTenantPw" placeholder="alleen invullen om te (her)zetten" autocomplete="new-password"></label>
+          <button class="btn secondary" id="coTenantPwBtn">Wachtwoord instellen</button>
+        </div>
+        <p class="hint" id="coTenantPwStatus"></p>
         <h3 class="style-head">Nieuwsbrief-soorten</h3>
         <p class="hint">Welke soorten nieuwsbrieven maakt dit bedrijf? "Algemeen" (alleen tekst) kan altijd.</p>
         <div class="row">
@@ -854,6 +861,21 @@ function updateEspHint() {
 CO("coEsp").addEventListener("change", updateEspHint);
 updateEspHint();
 
+document.getElementById("coTenantPwBtn").onclick = async (e) => {
+  e.preventDefault();
+  const status = document.getElementById("coTenantPwStatus");
+  const pw = document.getElementById("coTenantPw").value;
+  if (!editingCompanyId) { status.textContent = "Sla het bedrijf eerst op."; return; }
+  if (pw.length < 8) { status.textContent = "Wachtwoord moet minimaal 8 tekens zijn."; return; }
+  const r = await fetch(`/tenants/${editingCompanyId}/password`, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({password: pw}),
+  });
+  status.textContent = r.ok
+    ? "Wachtwoord ingesteld. Gebruikersnaam voor de klant: de bedrijfscode."
+    : "Instellen mislukt: " + ((await r.json().catch(() => ({}))).detail || r.status);
+  if (r.ok) document.getElementById("coTenantPw").value = "";
+};
 document.getElementById("espListsBtn").onclick = async (e) => {
   e.preventDefault();
   const esp = CO("coEsp").value;

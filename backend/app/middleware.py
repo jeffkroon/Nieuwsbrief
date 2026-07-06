@@ -21,28 +21,49 @@ EXEMPT_PATHS = {"/health", "/login", "/logout"}
 DEFAULT_ROLE = "company"
 
 
-def make_session_token(secret: str, role: str = DEFAULT_ROLE) -> str:
-    payload = f"{role}:{int(time.time())}"
+def make_session_token(secret: str, role: str = DEFAULT_ROLE, tenant_id: str = "") -> str:
+    """Token-payload: rol:tenant:tijdstip. Lege tenant = niet aan één bedrijf gebonden
+    (admin, of het gedeelde team-wachtwoord)."""
+    payload = f"{role}:{tenant_id}:{int(time.time())}"
     sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{sig}"
 
 
-def session_role(token: str | None, secret: str, max_age: int = SESSION_MAX_AGE) -> str | None:
-    """Geef de rol uit een geldig token terug, of None bij ongeldig/verlopen."""
+def session_claims(
+    token: str | None, secret: str, max_age: int = SESSION_MAX_AGE
+) -> tuple[str, str | None] | None:
+    """Geef (rol, tenant_id-of-None) uit een geldig token, of None bij ongeldig/verlopen.
+
+    Oude tokens (rol:tijdstip, van vóór de tenant-binding) blijven de resterende
+    cookie-looptijd geldig als ongebonden sessie.
+    """
     if not token or "." not in token:
         return None
     payload, _, sig = token.rpartition(".")
     expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(sig, expected):
         return None
-    role, _, issued_raw = payload.rpartition(":")
+    parts = payload.split(":")
+    if len(parts) == 3:
+        role, tenant_id, issued_raw = parts
+    elif len(parts) == 2:  # oud formaat zonder tenant
+        role, issued_raw = parts
+        tenant_id = ""
+    else:
+        return None
     try:
         issued = int(issued_raw)
     except ValueError:
         return None
     if (time.time() - issued) >= max_age:
         return None
-    return role or DEFAULT_ROLE
+    return (role or DEFAULT_ROLE, tenant_id or None)
+
+
+def session_role(token: str | None, secret: str, max_age: int = SESSION_MAX_AGE) -> str | None:
+    """Geef de rol uit een geldig token terug, of None bij ongeldig/verlopen."""
+    claims = session_claims(token, secret, max_age)
+    return claims[0] if claims else None
 
 
 def valid_session_token(token: str | None, secret: str, max_age: int = SESSION_MAX_AGE) -> bool:
