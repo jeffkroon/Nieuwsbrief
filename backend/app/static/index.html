@@ -222,9 +222,14 @@
           <label>Tekstkleur <input type="color" id="stText" value="#3b3f44"></label>
           <label>Kopkleur (op foto) <input type="color" id="stHeading" value="#ffffff"></label>
           <label>Linkkleur <input type="color" id="stLink" value="#0092ff"></label>
-          <label>Knopkleur <input type="color" id="stButtonBg" value="#ff7200"></label>
-          <label>Knop-tekstkleur <input type="color" id="stButtonText" value="#ffffff"></label>
+          <label>Productknoppen <input type="color" id="stButtonBg" value="#ff7200"></label>
+          <label>Productknop-tekst <input type="color" id="stButtonText" value="#ffffff"></label>
+          <label>Banner-knop <input type="color" id="stHeroBtnBg" value="#ff7200"></label>
+          <label>Banner-knoptekst <input type="color" id="stHeroBtnText" value="#ffffff"></label>
+          <label>Onderste knop <input type="color" id="stCtaBtnBg" value="#ff7200"></label>
+          <label>Onderste knoptekst <input type="color" id="stCtaBtnText" value="#ffffff"></label>
         </div>
+        <p class="hint">De banner-knop en de onderste knop volgen de productknop-kleur totdat je ze hier (of via de chat) een eigen kleur geeft.</p>
         <h3 class="style-head">Kaarten & prijs</h3>
         <div class="style-grid">
           <label>Naam op kaart (accent) <input type="color" id="stAccent" value="#ff7200"></label>
@@ -582,6 +587,10 @@ const STYLE_INPUTS = {
   link_color: document.getElementById("stLink"),
   button_bg: document.getElementById("stButtonBg"),
   button_text: document.getElementById("stButtonText"),
+  hero_button_bg: document.getElementById("stHeroBtnBg"),
+  hero_button_text: document.getElementById("stHeroBtnText"),
+  cta_button_bg: document.getElementById("stCtaBtnBg"),
+  cta_button_text: document.getElementById("stCtaBtnText"),
   accent: document.getElementById("stAccent"),
   card_border: document.getElementById("stCardBorder"),
   card_bg: document.getElementById("stCardBg"),
@@ -597,6 +606,8 @@ const STYLE_INPUTS = {
 const STYLE_DEFAULTS = {
   font_family: "arial", text_color: "#3b3f44", heading_color: "#ffffff", link_color: "#0092ff",
   button_bg: "#ff7200", button_text: "#ffffff", accent: "#ff7200",
+  hero_button_bg: "#ff7200", hero_button_text: "#ffffff",
+  cta_button_bg: "#ff7200", cta_button_text: "#ffffff",
   card_border: "#e8e8e8", card_bg: "#ffffff", price_color: "#1a3a6e", badge_bg: "#1a3a6e",
   home_color: "#00aeef", away_color: "#1a3a6e", block_border: "#ff7200",
   page_bg: "#ffffff", footer_bg: "#6a6a6b", footer_text: "#ffffff",
@@ -620,6 +631,13 @@ function readStyleInputs() {
 
 function applyStyleInputs(styles) {
   for (const k in STYLE_INPUTS) STYLE_INPUTS[k].value = styles[k] || STYLE_DEFAULTS[k];
+  // Banner-/onderste knop volgen de productknop zolang ze zelf niet gezet zijn.
+  const btnBg = styles.button_bg || STYLE_DEFAULTS.button_bg;
+  const btnText = styles.button_text || STYLE_DEFAULTS.button_text;
+  if (!styles.hero_button_bg) STYLE_INPUTS.hero_button_bg.value = btnBg;
+  if (!styles.hero_button_text) STYLE_INPUTS.hero_button_text.value = btnText;
+  if (!styles.cta_button_bg) STYLE_INPUTS.cta_button_bg.value = btnBg;
+  if (!styles.cta_button_text) STYLE_INPUTS.cta_button_text.value = btnText;
 }
 
 async function loadTemplates() {

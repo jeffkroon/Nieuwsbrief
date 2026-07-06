@@ -367,9 +367,9 @@ def _section_button(section: Section, st: dict) -> str:
         '<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="100%" '
         'style="table-layout:fixed;"><tbody><tr><td align="center" style="padding:10px 20px 24px;">'
         '<table cellspacing="0" cellpadding="0" border="0" role="presentation" '
-        f'style="background:{st["button_bg"]}; border-radius:4px; border-collapse:separate;">'
+        f'style="background:{st["cta_button_bg"]}; border-radius:4px; border-collapse:separate;">'
         '<tbody><tr><td align="center" style="padding:13px 30px; border-radius:4px;">'
-        f'<a href="{section.url}" target="_blank" style="color:{st["button_text"]}; '
+        f'<a href="{section.url}" target="_blank" style="color:{st["cta_button_text"]}; '
         f'font-family:{st["font"]}; font-size:14px; font-weight:bold; text-decoration:none; '
         f'white-space:nowrap; display:inline-block;">{section.text}</a>'
         "</td></tr></tbody></table></td></tr></tbody></table>"
@@ -428,14 +428,16 @@ def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
     De tekst is instelbaar (header_cta_text); de LINK is altijd dezelfde als de
     hoofd-knop (main_cta_url), zodat beide knoppen naar dezelfde plek gaan.
     """
-    text = content.header_cta_text or "Bekijk alle wedstrijden"
+    # Fallback op de hoofd-knoptekst (verplicht veld): de knop heeft dus ALTIJD
+    # tekst, ook voor niet-voetbalklanten (geen hardcoded voetbaltekst meer).
+    text = content.header_cta_text or content.main_cta_text
     url = content.main_cta_url  # verplicht veld; de knop op de foto volgt de hoofd-knop
     st = effective_styles(brand)
     return (
         '<table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation" '
-        f'style="margin:0 auto; background:{st["button_bg"]}; border-radius:4px; border-collapse:separate;">'
+        f'style="margin:0 auto; background:{st["hero_button_bg"]}; border-radius:4px; border-collapse:separate;">'
         '<tbody><tr><td class="hero-cta" style="padding:13px 24px; border-radius:4px;">'
-        f'<a href="{url}" target="_blank" style="color:{st["button_text"]}; font-family:{st["font"]}; '
+        f'<a href="{url}" target="_blank" style="color:{st["hero_button_text"]}; font-family:{st["font"]}; '
         'font-size:15px; font-weight:bold; text-decoration:none; white-space:nowrap; display:inline-block;">'
         f"{text}</a></td></tr></tbody></table>"
     )

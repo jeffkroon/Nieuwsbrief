@@ -30,8 +30,11 @@ RECOMMENDED: dict[str, str] = {
     # Stijl-placeholders: zonder deze doet de kleuren-/lettertype-builder niets op die plekken.
     "{{STYLE_FONT}}": "lettertype uit de stijl-builder (anders is het lettertype niet instelbaar)",
     "{{STYLE_TEXT_COLOR}}": "tekstkleur uit de stijl-builder (anders is de tekstkleur niet instelbaar)",
-    "{{STYLE_BUTTON_BG}}": "knopkleur uit de stijl-builder (anders is de knopkleur niet instelbaar)",
 }
+
+# Knopkleur: één van de drie knop-tokens volstaat (kaart-knoppen worden in code
+# gerenderd en gebruiken button_bg zonder token).
+_BUTTON_TOKENS = ("{{STYLE_BUTTON_BG}}", "{{STYLE_CTA_BUTTON_BG}}", "{{STYLE_HERO_BUTTON_BG}}")
 
 
 def validate_template_html(html: str) -> tuple[list[str], list[str]]:
@@ -47,6 +50,18 @@ def validate_template_html(html: str) -> tuple[list[str], list[str]]:
         for marker, desc in RECOMMENDED.items()
         if marker not in text
     ]
+    if not any(tok in text for tok in _BUTTON_TOKENS):
+        warnings.append(
+            "aanbevolen ontbreekt: een knopkleur-token ({{STYLE_BUTTON_BG}}, "
+            "{{STYLE_CTA_BUTTON_BG}} of {{STYLE_HERO_BUTTON_BG}}); anders zijn de "
+            "knopkleuren niet instelbaar"
+        )
+    # Banner met titel maar zonder knop: de bannerknop kan dan nooit renderen.
+    if "{{HEADER_TITEL}}" in text and "{{HEADER_CTA}}" not in text:
+        warnings.append(
+            "aanbevolen ontbreekt: {{HEADER_CTA}} (de knop op de banner); zonder dit "
+            "token heeft de banner nooit een knop"
+        )
     # Afmeldlink: een van beide ESP-tags volstaat (wettelijk verplicht voor e-mail).
     if not any(tag in text for tag in UNSUBSCRIBE_TAGS):
         warnings.append(

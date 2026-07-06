@@ -120,3 +120,32 @@ def test_style_replacements_include_spacing_tokens_as_strings() -> None:
     repl = style_replacements({**BRAND, "styles": {"spacing_banner_intro": 24}})
     assert repl["{{STYLE_SPACING_BANNER_INTRO}}"] == "24"
     assert repl["{{STYLE_SPACING_INTRO_PRODUCTS}}"] == "80"
+
+
+def test_button_groups_split_with_fallback() -> None:
+    # Nieuw: banner-, kaart- en onderste knop apart; fallback = alles volgt button_bg.
+    from app.newsletter.renderer import _render_hero_cta, _section_button, render_cards
+    from app.newsletter.models import Item, Match, NewsletterContent, Section
+    from app.newsletter.styles import effective_styles
+
+    brand = {
+        "primary_color": "#ff7200", "brand_name": "x", "brand_email": "x@x.nl",
+        "website_url": "https://x", "logo_url": "https://c/l.png",
+        "dummy_image_url": "https://c/d.png",
+        "styles": {"button_bg": "#000000", "hero_button_bg": "#ffffff",
+                   "cta_button_bg": "#d62828"},
+    }
+    content = NewsletterContent(
+        theme="t", subject="s", intro_1="a", intro_2="b",
+        main_cta_text="SHOP", main_cta_url="https://x/c",
+        slot_cta_text="S", slot_cta_url="https://x/c", matches=(),
+    )
+    hero = _render_hero_cta(brand, content)
+    assert "background:#ffffff" in hero  # bannerknop wit
+    st = effective_styles(brand)
+    knop = _section_button(Section(kind="button", text="K", url="https://x/c"), st)
+    assert "background:#d62828" in knop  # onderste knop rood
+    cards = render_cards((), (), brand, (Item(title="R", url="https://x/p", button_text="SHOP NU"),))
+    assert "background:#000000" in cards  # productknop zwart
+    # Tekstkleuren volgen button_text zolang niet apart gezet.
+    assert st["hero_button_text"] == st["button_text"] == st["cta_button_text"]
