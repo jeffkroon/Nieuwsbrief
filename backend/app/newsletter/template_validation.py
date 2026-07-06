@@ -56,6 +56,13 @@ def validate_template_html(html: str) -> tuple[list[str], list[str]]:
             "{{STYLE_CTA_BUTTON_BG}} of {{STYLE_HERO_BUTTON_BG}}); anders zijn de "
             "knopkleuren niet instelbaar"
         )
+    # Grote CTA-knop zonder eigen kleur-token: dan kleurt hij mee met de
+    # productknoppen en is hij niet apart instelbaar (chat/stijl-builder).
+    if "{{HOOFD_CTA_TEKST}}" in text and "{{STYLE_CTA_BUTTON_BG}}" not in text:
+        warnings.append(
+            "aanbevolen ontbreekt: {{STYLE_CTA_BUTTON_BG}} op de grote knop "
+            "(anders is de onderste knop niet los van de productknoppen te kleuren)"
+        )
     # Banner met titel maar zonder knop: de bannerknop kan dan nooit renderen.
     if "{{HEADER_TITEL}}" in text and "{{HEADER_CTA}}" not in text:
         warnings.append(

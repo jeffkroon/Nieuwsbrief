@@ -24,3 +24,17 @@ def test_full_template_has_no_errors() -> None:
     errors, warnings = validate_template_html(load_template("voetbalreizenxl-main"))
     assert errors == []
     assert warnings == []  # de meegeleverde template heeft alle placeholders
+
+
+def test_warns_when_cta_button_lacks_own_token() -> None:
+    # Een grote knop zonder cta-token kleurt mee met de productknoppen; waarschuw.
+    _, warnings = validate_template_html(
+        "<html><a style='background:{{STYLE_BUTTON_BG}}'>{{HOOFD_CTA_TEKST}}</a>"
+        "{{ unsubscribe }}<!-- ##CARDS## --></html>"
+    )
+    assert any("STYLE_CTA_BUTTON_BG" in w for w in warnings)
+    _, warnings = validate_template_html(
+        "<html><a style='background:{{STYLE_CTA_BUTTON_BG}}'>{{HOOFD_CTA_TEKST}}</a>"
+        "{{ unsubscribe }}<!-- ##CARDS## --></html>"
+    )
+    assert not any("STYLE_CTA_BUTTON_BG" in w for w in warnings)

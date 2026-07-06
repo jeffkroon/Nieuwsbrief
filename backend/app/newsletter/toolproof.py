@@ -101,8 +101,15 @@ automatisch weggelaten). Gebruik deze boven losse velden; losse velden \
 
 STIJL (kleuren/lettertype uit de stijl-builder):
 - {{STYLE_FONT}}, {{STYLE_TEXT_COLOR}}, {{STYLE_HEADING_COLOR}}, {{STYLE_LINK_COLOR}}, \
-{{STYLE_PAGE_BG}}, {{STYLE_BUTTON_BG}}, {{STYLE_BUTTON_TEXT}}, {{STYLE_ACCENT}}, \
-{{STYLE_FOOTER_BG}}, {{STYLE_FOOTER_TEXT}}
+{{STYLE_PAGE_BG}}, {{STYLE_ACCENT}}, {{STYLE_FOOTER_BG}}, {{STYLE_FOOTER_TEXT}}
+- KNOPPEN hebben drie aparte kleurgroepen; kies per knop het juiste token-paar: \
+kaart-/productknoppen (bv. "SHOP NU" per product) -> {{STYLE_BUTTON_BG}} + \
+{{STYLE_BUTTON_TEXT}}; de grote knop onderaan/midden (bv. "bekijk de collectie") -> \
+{{STYLE_CTA_BUTTON_BG}} + {{STYLE_CTA_BUTTON_TEXT}}; de knop op de bannerfoto wordt \
+{{HEADER_CTA}} (hele knop vervangen). LET OP: een knop bestaat vaak uit MEERDERE \
+lagen (bgcolor op de td, background in de td-style, én background/color in de \
+<a>-tag); vervang de kleur in ALLE lagen van dezelfde knop door hetzelfde token, \
+anders blijft de zichtbare laag een andere kleur houden.
 
 REGELS:
 - Geef ALLEEN operaties terug, nooit de hele HTML.
@@ -111,10 +118,11 @@ precies, inclusief spaties, aanhalingstekens en hoofdletters) en lang genoeg zij
 uniek te zijn. Kort ze NOOIT af met "..." of iets dergelijks.
 - Gebruik "replace" voor korte stukken. Gebruik "replace_range" voor grote secties: \
 alles vanaf "from" tot aan (exclusief) "to" wordt vervangen door "replace".
-- Vervang knopkleuren door {{STYLE_BUTTON_BG}} en {{STYLE_BUTTON_TEXT}}, gewone \
-tekstkleur door {{STYLE_TEXT_COLOR}}, linkkleuren door {{STYLE_LINK_COLOR}}, de \
-pagina-achtergrond door {{STYLE_PAGE_BG}}, de footer door {{STYLE_FOOTER_BG}} en \
-{{STYLE_FOOTER_TEXT}}, en font-family van lopende tekst door {{STYLE_FONT}}.
+- Vervang knopkleuren per knopgroep (zie STIJL hierboven: kaartknoppen, grote \
+CTA-knop, bannerknop) en in ALLE lagen van dezelfde knop. Gewone tekstkleur wordt \
+{{STYLE_TEXT_COLOR}}, linkkleuren {{STYLE_LINK_COLOR}}, de pagina-achtergrond \
+{{STYLE_PAGE_BG}}, de footer {{STYLE_FOOTER_BG}} en {{STYLE_FOOTER_TEXT}}, en \
+font-family van lopende tekst {{STYLE_FONT}}.
 - Laat ESP-tags exact staan: Brevo-tags ({{ unsubscribe }}, {{ contact.EMAIL }}) en \
 Klaviyo-tags ({% unsubscribe %}, {% current_year %}, {{ organization.name }}, \
 {{ organization.full_address }} en vergelijkbaar). Voeg zelf geen afmeldlink toe.
