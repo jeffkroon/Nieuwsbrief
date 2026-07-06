@@ -55,17 +55,6 @@ _COLOR_DEFAULTS: dict[str, str | None] = {
 COLOR_KEYS = tuple(_COLOR_DEFAULTS)
 FONT_KEY = "font_family"
 
-# Witruimte in px — BEWUST alleen deze twee (verzoek 2026-07-06): de ruimte
-# tussen de bannerfoto en de introtekst, en tussen de introtekst en de
-# productfoto's. Defaults = de oude vaste paddings, dus render-identiek
-# zolang niemand iets aanpast.
-_SPACING_DEFAULTS: dict[str, int] = {
-    "spacing_banner_intro": 80,
-    "spacing_intro_products": 80,
-}
-SPACING_KEYS = tuple(_SPACING_DEFAULTS)
-_SPACING_MAX_PX = 200
-
 _HEX = re.compile(r"^#[0-9a-fA-F]{3,8}$")
 
 
@@ -89,14 +78,6 @@ def sanitize_styles(raw: dict | None) -> dict:
     font = raw.get(FONT_KEY)
     if isinstance(font, str) and font.strip().lower() in EMAIL_SAFE_FONTS:
         clean[FONT_KEY] = font.strip().lower()
-    for key in SPACING_KEYS:
-        value = raw.get(key)
-        if isinstance(value, bool):  # bool is een int-subtype; expliciet weren
-            continue
-        if isinstance(value, str) and value.strip().isdigit():
-            value = int(value.strip())
-        if isinstance(value, int) and 0 <= value <= _SPACING_MAX_PX:
-            clean[key] = value
     return clean
 
 
@@ -118,9 +99,6 @@ def effective_styles(brand: dict) -> dict:
         return styles.get(key) or default
 
     result = {key: pick(key) for key in COLOR_KEYS}
-    for key, default_px in _SPACING_DEFAULTS.items():
-        value = styles.get(key)
-        result[key] = value if isinstance(value, int) and not isinstance(value, bool) else default_px
     result["font"] = EMAIL_SAFE_FONTS.get(font_key, DEFAULT_FONT_STACK)
     # Footer valt terug op de merk-footerkleur als er geen eigen keuze is.
     if not styles.get("footer_bg") and brand_footer:
@@ -141,12 +119,10 @@ _TEMPLATE_TOKENS = {
     "{{STYLE_ACCENT}}": "accent",
     "{{STYLE_FOOTER_BG}}": "footer_bg",
     "{{STYLE_FOOTER_TEXT}}": "footer_text",
-    "{{STYLE_SPACING_BANNER_INTRO}}": "spacing_banner_intro",
-    "{{STYLE_SPACING_INTRO_PRODUCTS}}": "spacing_intro_products",
 }
 
 
 def style_replacements(brand: dict) -> dict[str, str]:
     """Placeholder->waarde map voor de {{STYLE_*}}-tokens in de layout-HTML."""
     st = effective_styles(brand)
-    return {token: str(st[key]) for token, key in _TEMPLATE_TOKENS.items()}
+    return {token: st[key] for token, key in _TEMPLATE_TOKENS.items()}
