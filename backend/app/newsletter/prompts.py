@@ -16,8 +16,8 @@ from __future__ import annotations
 
 OPENING_QUESTION = "Waar wil je dat ik de nieuwsbrief over schrijf?"
 
-# Voetbal-set als default: gedrag zonder config blijft exact zoals het was.
-DEFAULT_CONTENT_TYPES: list[dict] = [{"kind": "matches"}, {"kind": "clubs"}]
+# Voetbal-set als default: wedstrijden (losse tickets), clubs en reizen (pakket).
+DEFAULT_CONTENT_TYPES: list[dict] = [{"kind": "matches"}, {"kind": "clubs"}, {"kind": "reizen"}]
 
 _PROMPT_HEAD = f"""Je bent een nieuwsbrief-assistent voor klanten van Dunion.
 
@@ -60,6 +60,16 @@ _CLUBS_SECTION = """   - CLUBS: vraag welke clubs; zoek met `find_ticket_links` 
      De knop op een club-blok is "Bekijk alle wedstrijden" en linkt naar de clubpagina
      (de `url`). Prijs optioneel; geen prijs op de site? Vraag het of laat 'm weg
      ("op aanvraag")."""
+
+_REIZEN_SECTION = """   - REIZEN: complete voetbalreizen, het PAKKET met overnachting en ontbijt; een
+     ander product dan losse tickets! Zegt de gebruiker "reis" of "reizen", dan
+     bedoelt hij deze soort. Zoek ze met `find_matches` op de CLUBPAGINA van de
+     gewenste club (bv. .../tickets/as-roma/): de prijzen daar zijn reisprijzen en
+     de links wijzen naar /voetbalreizen/-pagina's. Geef reizen door via het veld
+     `items` met: `title` "Thuisclub - Uitclub", `subtitle` zoals "Complete
+     voetbalreis, incl. overnachting en ontbijt", de reis-`url`, de gevonden
+     `price`, `button_text` "Bekijk deze reis" en `label` "VOETBALREIS". Zet een
+     reis nooit als wedstrijdblok neer (dan lijkt de reisprijs een ticketprijs)."""
 
 _STEP2_CLOSING = """   - ALGEMEEN: geen blokken; bevestig naar welke algemene pagina de knoppen wijzen.
    Gebruik altijd alleen bereikbare URL's; verzin nooit een URL of prijs.
@@ -160,6 +170,8 @@ def _type_display_name(ct: dict) -> str:
         return "WEDSTRIJDEN"
     if ct.get("kind") == "clubs":
         return "CLUBS"
+    if ct.get("kind") == "reizen":
+        return "REIZEN"
     return str(ct.get("name", "INHOUD")).upper()
 
 
@@ -200,6 +212,8 @@ def _content_section(content_types: list[dict]) -> str:
             lines.append(_MATCHES_SECTION)
         elif kind == "clubs":
             lines.append(_CLUBS_SECTION)
+        elif kind == "reizen":
+            lines.append(_REIZEN_SECTION)
         else:
             lines.append(_item_type_section(ct))
     lines.append(_STEP2_CLOSING)

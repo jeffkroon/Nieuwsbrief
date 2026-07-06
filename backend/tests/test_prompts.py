@@ -108,3 +108,15 @@ def test_template_without_header_title_warns_agent() -> None:
                        "has_header_title": True}
     )
     assert "GEEN kop of ondertitel" not in met
+
+
+def test_reizen_is_third_football_kind() -> None:
+    # Voetbal-default heeft nu drie soorten; 'reis' wordt nooit meer stilletjes
+    # als losse-ticketwedstrijd geinterpreteerd.
+    p = build_system_prompt()
+    assert "WEDSTRIJDEN, CLUBS, REIZEN" in p
+    assert "overnachting" in p and "Bekijk deze reis" in p
+    assert "VOETBALREIS" in p
+    # Expliciete config met alleen reizen werkt ook.
+    alleen_reizen = build_system_prompt(content_types=[{"kind": "reizen"}])
+    assert "REIZEN" in alleen_reizen and "find_matches" in alleen_reizen
