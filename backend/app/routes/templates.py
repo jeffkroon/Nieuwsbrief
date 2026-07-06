@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.deps import get_anthropic_client, get_session, require_admin
+from app.deps import get_anthropic_client, get_session, require_admin, require_tenant_access
 from app.newsletter.models import Club, Match, NewsletterContent, Section
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.styles import sanitize_styles
@@ -38,7 +38,11 @@ from app.schemas import (
     TemplateValidation,
 )
 
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["templates"])
+router = APIRouter(
+    prefix="/tenants/{tenant_id}", tags=["templates"],
+    # Klant-sessies kunnen alleen bij hun eigen bedrijf (admins/team bij alles).
+    dependencies=[Depends(require_tenant_access)],
+)
 
 STARTER_TEMPLATE = "voetbalreizenxl-main"
 

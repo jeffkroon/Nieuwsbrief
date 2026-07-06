@@ -53,6 +53,8 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
     brevo_list_id: Mapped[int | None] = mapped_column(Integer)
+    # PBKDF2-hash van het bedrijfswachtwoord (klant-login); None = nog geen login.
+    password_hash: Mapped[str | None] = mapped_column(Text)
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())

@@ -7,13 +7,17 @@ import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.deps import get_session, get_storage
+from app.deps import get_session, get_storage, require_tenant_access
 from app.repositories import images as repo
 from app.repositories import tenants as tenants_repo
 from app.schemas import ImageCategoriesRead, ImageCategoriesSet, ImageRead
 from app.services.storage import ImageStorage, StorageError
 
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["images"])
+router = APIRouter(
+    prefix="/tenants/{tenant_id}", tags=["images"],
+    # Klant-sessies kunnen alleen bij hun eigen bedrijf (admins/team bij alles).
+    dependencies=[Depends(require_tenant_access)],
+)
 
 
 def _require_tenant(session: Session, tenant_id: uuid.UUID):
