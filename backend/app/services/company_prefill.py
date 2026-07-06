@@ -17,13 +17,13 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from app.newsletter import extraction
+from app.newsletter.styles import is_valid_hex_color
 
 _SOCIAL_PATTERNS = {
     "facebook_url": re.compile(r'https?://(?:www\.)?facebook\.com/[^\s"\'<>)]+', re.I),
     "instagram_url": re.compile(r'https?://(?:www\.)?instagram\.com/[^\s"\'<>)]+', re.I),
     "youtube_url": re.compile(r'https?://(?:www\.)?youtube\.com/[^\s"\'<>)]+', re.I),
 }
-_HEX = re.compile(r"^#[0-9a-fA-F]{3,8}$")
 
 _DETAILS_SCHEMA = {
     "type": "object",
@@ -78,7 +78,7 @@ def _find_theme_color(html: str) -> str | None:
     ) or re.search(
         r'(?is)<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']theme-color["\']', html
     )
-    if m and _HEX.match(m.group(1).strip()):
+    if m and is_valid_hex_color(m.group(1).strip()):
         return m.group(1).strip()
     return None
 

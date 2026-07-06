@@ -55,20 +55,53 @@ def club_image_url(club: str, brand: dict) -> str:
     return url or brand["dummy_image_url"]
 
 
-def render_banner(match: Match, brand: dict) -> str:
-    """Bouw het HTML-tabelblok voor één wedstrijd. De link is de echte ticket-URL."""
-    st = effective_styles(brand)
+def _price_parts(price: str) -> tuple[str, str]:
+    """Splits een prijs in ("v.a.", bedrag) voor de prijs-pil.
+
+    De prijs bevat al een euroteken (bv "€ 249"); geen extra € toevoegen.
+    Bij "op aanvraag" tonen we geen "v.a." en geen bedrag-opmaak.
+    """
+    if price == PRICE_ON_REQUEST:
+        return "", "op aanvraag"
+    return "v.a.", price
+
+
+def _price_pill(price_va: str, price_amount: str, price_c: str) -> str:
+    """De ronde prijs-pil ("v.a." + bedrag) in de wedstrijd- en clubbanners."""
+    return f"""<table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
+      style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">
+    <tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">
+      <span class="price-va" style="display:block; font-family:Arial,sans-serif; font-size:11px; color:#666; line-height:1.4;">{price_va}</span>
+      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:{price_c}; line-height:1.2;">{price_amount}</span>
+    </td></tr></tbody></table>"""
+
+
+def _banner_title(text: str, color: str) -> str:
+    """De grote titelregel (22px, hoofdletters) van club- en itembanners."""
+    return f"""<p class="home-name"
+      style="margin:0 0 6px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:22px; font-weight:900; color:{color}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{text.upper()}</p>"""
+
+
+def _subtitle_line(text: str | None) -> str:
+    """Optionele kleine regel onder de titel (stadion/stad of item-subtitel)."""
+    if not text:
+        return ""
+    return (
+        f'<p class="club-venue" style="margin:0 0 10px 0; font-family:Arial,Helvetica,sans-serif; '
+        f'font-size:11px; color:#888888; line-height:1.3;">{text}</p>'
+    )
+
+
+def _banner_shell(
+    *, st: dict, img_url: str, img_alt: str, body: str, button_text: str, button_url: str
+) -> str:
+    """Gedeelde omlijsting van alle bannerblokken.
+
+    Buitentabel met rand, foto-kolom links, de titelregels/prijs (body) rechts,
+    de knop eronder en de vaste spacer na het blok.
+    """
     color = st["block_border"]
     btn_bg, btn_text = st["button_bg"], st["button_text"]
-    home_c, away_c, price_c = st["home_color"], st["away_color"], st["price_color"]
-    img_url = match.image_url or club_image_url(match.home, brand)
-    link = match.url
-    # De prijs bevat al een euroteken (bv "€ 249"); geen extra € toevoegen.
-    # Bij "op aanvraag" tonen we geen "v.a." en geen bedrag-opmaak.
-    if match.price == PRICE_ON_REQUEST:
-        price_va, price_amount = "", "op aanvraag"
-    else:
-        price_va, price_amount = "v.a.", match.price
     return f"""
 <table cellspacing="0" cellpadding="0" border="0" role="presentation" width="584" align="center"
   class="banner-wrap"
@@ -76,84 +109,62 @@ def render_banner(match: Match, brand: dict) -> str:
 <tbody><tr>
   <td width="220" class="img-col"
     style="width:220px; overflow:hidden; padding:0; border-radius:4px 0 0 4px; vertical-align:middle; background-color:#ffffff;">
-    <img src="{img_url}" width="220" height="220" border="0" alt="{match.home}"
+    <img src="{img_url}" width="220" height="220" border="0" alt="{img_alt}"
       class="banner-img" style="display:block; width:220px; height:220px;">
   </td>
   <td valign="middle" align="center" class="content-col"
     style="padding:18px 16px 18px 12px; text-align:center; vertical-align:middle; background-color:#ffffff; border-radius:0 4px 4px 0;">
-    <p class="home-name"
+    {body}
+    <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
+      style="background:{btn_bg}; border-radius:4px; border-collapse:separate;">
+    <tbody><tr><td class="cta-btn" style="padding:12px 18px; border-radius:4px;">
+      <a href="{button_url}" target="_blank"
+        style="color:{btn_text}; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">{button_text}</a>
+    </td></tr></tbody></table>
+  </td>
+</tr></tbody></table>
+<table cellspacing="0" cellpadding="0" border="0" width="100%" style="table-layout:fixed;">
+<tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
+
+
+def render_banner(match: Match, brand: dict) -> str:
+    """Bouw het HTML-tabelblok voor één wedstrijd. De link is de echte ticket-URL."""
+    st = effective_styles(brand)
+    home_c, away_c = st["home_color"], st["away_color"]
+    price_va, price_amount = _price_parts(match.price)
+    body = f"""<p class="home-name"
       style="margin:0 0 4px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:20px; font-weight:900; color:{home_c}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{match.home.upper()}</p>
     <p class="vs-line"
       style="margin:0 0 4px 0; font-family:Arial,sans-serif; font-size:11px; color:#aaaaaa; letter-spacing:2px;">&#8212; VS &#8212;</p>
     <p class="away-name"
       style="margin:0 0 12px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:20px; font-weight:900; color:{away_c}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{match.away.upper()}</p>
-    <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
-      style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">
-    <tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">
-      <span class="price-va" style="display:block; font-family:Arial,sans-serif; font-size:11px; color:#666; line-height:1.4;">{price_va}</span>
-      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:{price_c}; line-height:1.2;">{price_amount}</span>
-    </td></tr></tbody></table>
-    <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
-      style="background:{btn_bg}; border-radius:4px; border-collapse:separate;">
-    <tbody><tr><td class="cta-btn" style="padding:12px 18px; border-radius:4px;">
-      <a href="{link}" target="_blank"
-        style="color:{btn_text}; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">Bestel tickets</a>
-    </td></tr></tbody></table>
-  </td>
-</tr></tbody></table>
-<table cellspacing="0" cellpadding="0" border="0" width="100%" style="table-layout:fixed;">
-<tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
+    {_price_pill(price_va, price_amount, st["price_color"])}"""
+    return _banner_shell(
+        st=st,
+        img_url=match.image_url or club_image_url(match.home, brand),
+        img_alt=match.home,
+        body=body,
+        button_text="Bestel tickets",
+        button_url=match.url,
+    )
 
 
 def render_club_banner(club: Club, brand: dict) -> str:
     """Bouw een club-blok: clubnaam, foto, prijs en een link naar de clubpagina."""
     st = effective_styles(brand)
-    color = st["block_border"]
-    btn_bg, btn_text = st["button_bg"], st["button_text"]
-    away_c, price_c = st["away_color"], st["price_color"]
-    img_url = club.image_url or club_image_url(club.name, brand)
-    if club.price == PRICE_ON_REQUEST:
-        price_va, price_amount = "", "op aanvraag"
-    else:
-        price_va, price_amount = "v.a.", club.price
+    price_va, price_amount = _price_parts(club.price)
     venue = " · ".join(p for p in (club.stadium, club.city) if p)
-    venue_html = (
-        f'<p class="club-venue" style="margin:0 0 10px 0; font-family:Arial,Helvetica,sans-serif; '
-        f'font-size:11px; color:#888888; line-height:1.3;">{venue}</p>'
-        if venue
-        else ""
+    body = f"""{_banner_title(club.name, st["away_color"])}
+    {_subtitle_line(venue)}
+    {_price_pill(price_va, price_amount, st["price_color"])}"""
+    return _banner_shell(
+        st=st,
+        img_url=club.image_url or club_image_url(club.name, brand),
+        img_alt=club.name,
+        body=body,
+        button_text="Bekijk alle wedstrijden",
+        button_url=club.url,
     )
-    return f"""
-<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="584" align="center"
-  class="banner-wrap"
-  style="table-layout:fixed; width:584px; border:3px solid {color}; border-radius:6px; border-collapse:separate; background-color:#ffffff;">
-<tbody><tr>
-  <td width="220" class="img-col"
-    style="width:220px; overflow:hidden; padding:0; border-radius:4px 0 0 4px; vertical-align:middle; background-color:#ffffff;">
-    <img src="{img_url}" width="220" height="220" border="0" alt="{club.name}"
-      class="banner-img" style="display:block; width:220px; height:220px;">
-  </td>
-  <td valign="middle" align="center" class="content-col"
-    style="padding:18px 16px 18px 12px; text-align:center; vertical-align:middle; background-color:#ffffff; border-radius:0 4px 4px 0;">
-    <p class="home-name"
-      style="margin:0 0 6px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:22px; font-weight:900; color:{away_c}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{club.name.upper()}</p>
-    {venue_html}
-    <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
-      style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">
-    <tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">
-      <span class="price-va" style="display:block; font-family:Arial,sans-serif; font-size:11px; color:#666; line-height:1.4;">{price_va}</span>
-      <span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; font-weight:bold; color:{price_c}; line-height:1.2;">{price_amount}</span>
-    </td></tr></tbody></table>
-    <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
-      style="background:{btn_bg}; border-radius:4px; border-collapse:separate;">
-    <tbody><tr><td class="cta-btn" style="padding:12px 18px; border-radius:4px;">
-      <a href="{club.url}" target="_blank"
-        style="color:{btn_text}; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">Bekijk alle wedstrijden</a>
-    </td></tr></tbody></table>
-  </td>
-</tr></tbody></table>
-<table cellspacing="0" cellpadding="0" border="0" width="100%" style="table-layout:fixed;">
-<tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
 
 
 def render_item_banner(item: Item, brand: dict) -> str:
@@ -163,52 +174,28 @@ def render_item_banner(item: Item, brand: dict) -> str:
     komt uit het item zelf (bv. "Lees de case" of "Bekijk aanbieding").
     """
     st = effective_styles(brand)
-    color = st["block_border"]
-    btn_bg, btn_text = st["button_bg"], st["button_text"]
-    title_c, price_c = st["away_color"], st["price_color"]
-    img_url = item.image_url or club_image_url(item.title, brand)
-    subtitle_html = (
-        f'<p class="club-venue" style="margin:0 0 10px 0; font-family:Arial,Helvetica,sans-serif; '
-        f'font-size:11px; color:#888888; line-height:1.3;">{item.subtitle}</p>'
-        if item.subtitle
-        else ""
-    )
     price_html = ""
     if item.price:
+        # Prijs zonder "v.a."-regel: items tonen alleen het (letterlijke) bedrag.
         price_html = (
             '<table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation" '
             'style="margin:0 auto 12px auto; border:2px solid #dddddd; border-radius:50px; background:#ffffff;">'
             '<tbody><tr><td align="center" class="price-pill" style="width:90px; padding:9px 12px; text-align:center;">'
             f'<span class="price-amount" style="display:block; font-family:Arial,sans-serif; font-size:17px; '
-            f'font-weight:bold; color:{price_c}; line-height:1.2;">{item.price}</span>'
+            f'font-weight:bold; color:{st["price_color"]}; line-height:1.2;">{item.price}</span>'
             "</td></tr></tbody></table>"
         )
-    return f"""
-<table cellspacing="0" cellpadding="0" border="0" role="presentation" width="584" align="center"
-  class="banner-wrap"
-  style="table-layout:fixed; width:584px; border:3px solid {color}; border-radius:6px; border-collapse:separate; background-color:#ffffff;">
-<tbody><tr>
-  <td width="220" class="img-col"
-    style="width:220px; overflow:hidden; padding:0; border-radius:4px 0 0 4px; vertical-align:middle; background-color:#ffffff;">
-    <img src="{img_url}" width="220" height="220" border="0" alt="{item.title}"
-      class="banner-img" style="display:block; width:220px; height:220px;">
-  </td>
-  <td valign="middle" align="center" class="content-col"
-    style="padding:18px 16px 18px 12px; text-align:center; vertical-align:middle; background-color:#ffffff; border-radius:0 4px 4px 0;">
-    <p class="home-name"
-      style="margin:0 0 6px 0; font-family:Impact,'Arial Black',Arial,sans-serif; font-size:22px; font-weight:900; color:{title_c}; text-transform:uppercase; letter-spacing:1px; line-height:1.1;">{item.title.upper()}</p>
-    {subtitle_html}
-    {price_html}
-    <table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation"
-      style="background:{btn_bg}; border-radius:4px; border-collapse:separate;">
-    <tbody><tr><td class="cta-btn" style="padding:12px 18px; border-radius:4px;">
-      <a href="{item.url}" target="_blank"
-        style="color:{btn_text}; font-family:Arial,sans-serif; font-size:14px; font-weight:bold; text-decoration:none; white-space:nowrap;">{item.button_text}</a>
-    </td></tr></tbody></table>
-  </td>
-</tr></tbody></table>
-<table cellspacing="0" cellpadding="0" border="0" width="100%" style="table-layout:fixed;">
-<tbody><tr><td height="8" style="font-size:8px; line-height:8px;">&nbsp;</td></tr></tbody></table>"""
+    body = f"""{_banner_title(item.title, st["away_color"])}
+    {_subtitle_line(item.subtitle)}
+    {price_html}"""
+    return _banner_shell(
+        st=st,
+        img_url=item.image_url or club_image_url(item.title, brand),
+        img_alt=item.title,
+        body=body,
+        button_text=item.button_text,
+        button_url=item.url,
+    )
 
 
 def _card_cell(
@@ -442,12 +429,7 @@ def _render_hero_cta(brand: dict, content: NewsletterContent) -> str:
     hoofd-knop (main_cta_url), zodat beide knoppen naar dezelfde plek gaan.
     """
     text = content.header_cta_text or "Bekijk alle wedstrijden"
-    url = (
-        content.main_cta_url
-        or content.header_cta_url
-        or brand.get("matches_url")
-        or brand.get("base_tickets_url")
-    )
+    url = content.main_cta_url  # verplicht veld; de knop op de foto volgt de hoofd-knop
     st = effective_styles(brand)
     return (
         '<table align="center" cellspacing="0" cellpadding="0" border="0" role="presentation" '
