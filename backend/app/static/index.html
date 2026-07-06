@@ -347,6 +347,7 @@
         <div class="row">
           <label><input type="checkbox" id="ctMatches"> Wedstrijden (voetbal)</label>
           <label><input type="checkbox" id="ctClubs"> Clubs (voetbal)</label>
+          <label><input type="checkbox" id="ctReizen"> Reizen (voetbal, pakket met overnachting)</label>
         </div>
         <div id="ctRows" style="margin-top:8px;"></div>
         <button class="btn secondary" id="ctAdd" style="margin-top:8px;">+ Eigen soort toevoegen</button>
@@ -858,6 +859,7 @@ function readContentTypes() {
   const types = [];
   if (CO("ctMatches").checked) types.push({ kind: "matches" });
   if (CO("ctClubs").checked) types.push({ kind: "clubs" });
+  if (CO("ctReizen").checked) types.push({ kind: "reizen" });
   for (const row of document.querySelectorAll("#ctRows .ct-row")) {
     const name = row.querySelector(".ct-name").value.trim();
     if (!name) continue;
@@ -1028,7 +1030,7 @@ function resetCompanyForm() {
   editingCompanyId = null;
   for (const id of ["coName","coSlug","coWebsite","coEmail","coAdres","coPostcode","coTelefoon","coKvk","coLogo","coDummy","coHeader","coMatches","coFacebook","coInstagram","coYoutube","coBrevoKey","coBrevoList"]) CO(id).value = "";
   CO("coPrimary").value = "#ff7200";
-  CO("ctMatches").checked = false; CO("ctClubs").checked = false;
+  CO("ctMatches").checked = false; CO("ctClubs").checked = false; CO("ctReizen").checked = false;
   CO("coEsp").value = "brevo"; updateEspHint();
   const espSel = document.getElementById("espListsSelect");
   espSel.innerHTML = ""; espSel.style.display = "none";
@@ -1061,6 +1063,7 @@ function fillCompanyForm(t) {
   for (const ct of c.content_types || []) {
     if (ct.kind === "matches") CO("ctMatches").checked = true;
     else if (ct.kind === "clubs") CO("ctClubs").checked = true;
+    else if (ct.kind === "reizen") CO("ctReizen").checked = true;
     else addCtRow(ct);
   }
   document.getElementById("companyFormTitle").textContent = `Bewerken: ${t.name}`;
