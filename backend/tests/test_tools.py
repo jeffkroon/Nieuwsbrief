@@ -893,7 +893,7 @@ def test_style_overrides_reject_invalid_values(session, cipher):
 def test_style_overrides_spacing_needs_tokens(session, cipher):
     tenant, _ = _make_tenant_with_template(session)  # geen spacing-tokens in html
     ctx = _ctx(session, cipher, tenant)
-    with pytest.raises(ValueError, match="witruimte"):
+    with pytest.raises(ValueError, match="spacing_banner_intro"):
         execute_tool(
             "preview_newsletter",
             _preview_input(style_overrides={"spacing_banner_intro": 40}),
@@ -921,3 +921,28 @@ def test_style_overrides_inherit_within_conversation(session, cipher):
     execute_tool("preview_newsletter", _preview_input(intro_1="nieuwe intro"), ctx)
     html = ctx.preview_holder[-1]
     assert "nieuwe intro" in html and "color:#000000" in html
+
+
+def test_spacing_honesty_is_per_key(session, cipher):
+    # Template heeft alleen het banner-token: die sleutel mag, de nieuwe onderste
+    # sleutels worden per stuk eerlijk geweigerd.
+    from app.repositories import templates as templates_repo
+
+    slug = f"perkey-{uuid.uuid4().hex[:6]}"
+    tenant = tenants_repo.create_tenant(session, TenantCreate(slug=slug, name=slug, config=CONFIG))
+    templates_repo.create_template(
+        session, tenant_id=tenant.id, name="deels", is_default=True,
+        html="<html><td height=\"{{STYLE_SPACING_BANNER_INTRO}}\"></td>{{ unsubscribe }}</html>",
+    )
+    ctx = _ctx(session, cipher, tenant)
+    execute_tool(  # ondersteunde sleutel: geen fout
+        "preview_newsletter",
+        _preview_input(style_overrides={"spacing_banner_intro": 40}),
+        ctx,
+    )
+    with pytest.raises(ValueError, match="spacing_text_button"):
+        execute_tool(
+            "preview_newsletter",
+            _preview_input(style_overrides={"spacing_text_button": 40}),
+            ctx,
+        )
