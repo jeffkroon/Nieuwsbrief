@@ -159,3 +159,41 @@ def test_iteration_limit_raises() -> None:
             dispatch=lambda n, i: {"ok": True},
             max_iterations=3,
         )
+
+def test_history_gets_cache_marker_without_mutating_input() -> None:
+    # Het laatste bericht krijgt een cache-markering zodat de geschiedenis de
+    # volgende call uit de cache komt; de doorgegeven lijst blijft onaangetast.
+    fake = FakeAnthropic([FakeResponse([FakeText("klaar")], "end_turn")])
+    original = [{"role": "user", "content": "hallo"}]
+    run_agent_turn(fake, system="s", messages=original, tools=[], dispatch=lambda n, i: {})
+    sent = fake.messages.calls[0]["messages"]
+    assert sent[-1]["content"][0]["text"] == "hallo"
+    assert sent[-1]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert original == [{"role": "user", "content": "hallo"}]  # geen mutatie
+
+
+def test_tool_results_get_cache_marker() -> None:
+    # Na een tool-stap staat de markering op het laatste tool_result-blok.
+    fake = FakeAnthropic(
+        [
+            FakeResponse([FakeToolUse("tu_1", "get_brand_config", {})], "tool_use"),
+            FakeResponse([FakeText("klaar")], "end_turn"),
+        ]
+    )
+    run_agent_turn(
+        fake, system="s", messages=[{"role": "user", "content": "hoi"}],
+        tools=[], dispatch=lambda n, i: {"ok": True},
+    )
+    second_call = fake.messages.calls[1]["messages"]
+    last_block = second_call[-1]["content"][-1]
+    assert last_block["type"] == "tool_result"
+    assert last_block["cache_control"] == {"type": "ephemeral"}
+    # Maximaal 1 markering in de berichten (plus 1 op system = ruim binnen de limiet van 4).
+    markers = sum(
+        1
+        for m in second_call
+        if isinstance(m.get("content"), list)
+        for b in m["content"]
+        if isinstance(b, dict) and "cache_control" in b
+    )
+    assert markers == 1
