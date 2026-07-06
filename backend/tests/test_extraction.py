@@ -172,3 +172,32 @@ def test_normalize_banner_url_leaves_other_hosts_alone() -> None:
 
     url = "https://cdn.anders.test/banner.png?width=9999"
     assert normalize_banner_url(url) == url
+
+
+def test_price_amount_parses_dutch_notation() -> None:
+    from app.newsletter.extraction import price_amount
+
+    assert price_amount("€ 99") == 99.0
+    assert price_amount("€ 1.299,50") == 1299.50
+    assert price_amount("99,-") == 99.0
+    assert price_amount("op aanvraag") is None
+
+
+def test_extract_min_price_takes_lowest_match_price() -> None:
+    from app.newsletter.extraction import extract_min_price
+
+    # Clubpagina met drie wedstrijden: 'vanaf' = de laagste (in code, niet het model).
+    llm = FakeLLM({"matches": [
+        {"home": "AS Roma", "away": "Lazio", "url": "https://x/derby", "price": "200,-"},
+        {"home": "AS Roma", "away": "Empoli", "url": "https://x/empoli", "price": "€ 99"},
+        {"home": "AS Roma", "away": "Inter", "url": "https://x/inter", "price": None},
+    ]})
+    assert extract_min_price(llm, "<html>club</html>", source_url="https://x/roma") == "€ 99"
+
+
+def test_extract_min_price_falls_back_to_single_price() -> None:
+    from app.newsletter.extraction import extract_min_price
+
+    # Geen wedstrijden gevonden: terugval op de enkele-pagina-prijs.
+    llm = FakeLLM({"matches": [], "price": "149,-"})
+    assert extract_min_price(llm, "<html>x</html>", source_url="https://x") == "€ 149"
