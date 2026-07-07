@@ -71,6 +71,24 @@ class Tenant(Base):
     )
 
 
+class User(Base):
+    """Klant-gebruiker: koppelt een Supabase-Auth-account aan één bedrijf.
+
+    id = het Supabase auth-user-id (bewust geen FK naar het auth-schema, zodat
+    de testdatabase zonder Supabase-auth-schema blijft werken). Identiteit
+    (wachtwoord, reset-mails) leeft bij Supabase; autorisatie leeft hier.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
 class TenantSecret(Base):
     """Versleutelde secret per tenant (bv. Brevo API-key).
 

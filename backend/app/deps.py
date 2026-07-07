@@ -79,6 +79,17 @@ def get_cipher() -> SecretCipher:
 
 
 @lru_cache
+def get_supabase_auth():
+    """Supabase Auth-laag (JWKS-verificatie + uitnodigen). Faalt duidelijk zonder config."""
+    from app.services.supabase_auth import SupabaseAuth
+
+    settings = get_settings()
+    if not settings.supabase_url:
+        raise RuntimeError("SUPABASE_URL ontbreekt in de omgeving")
+    return SupabaseAuth(settings.supabase_url, settings.supabase_service_role_key)
+
+
+@lru_cache
 def get_storage():
     """Bouwt de Supabase Storage-client. Faalt duidelijk als config ontbreekt."""
     from app.services.storage import SupabaseStorage

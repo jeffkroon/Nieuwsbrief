@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wachtwoord instellen — Nieuwsbrief Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23FF7200'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Arial' font-size='17' font-weight='800' fill='white'%3ED%3C/text%3E%3C/svg%3E">
+<style>
+  :root { --accent: #FF7200; --accent-hover: #e86300; --text: #16181d; --muted: #69707d; --border: #e4e7ec; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+         background: #141b2d; color: var(--text);
+         min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  body::before { content: ""; position: fixed; inset: 0;
+         background: radial-gradient(900px 420px at 15% -10%, rgba(255,114,0,.16), transparent 60%),
+                     radial-gradient(700px 380px at 95% 110%, rgba(255,161,77,.10), transparent 60%); }
+  .card { position: relative; background: #ffffff; border-radius: 16px; padding: 38px 34px;
+          width: 100%; max-width: 392px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+  .brand { display: flex; align-items: center; gap: 12px; justify-content: center; margin-bottom: 22px; }
+  .brand .logo { width: 42px; height: 42px; border-radius: 11px;
+          background: linear-gradient(135deg, var(--accent), #ffa14d); display: flex;
+          align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 800; }
+  .brand .name { font-size: 16px; font-weight: 700; line-height: 1.25; }
+  .brand .name small { display: block; font-weight: 500; font-size: 11.5px; color: var(--muted); }
+  p.sub { margin: 0 0 22px; text-align: center; color: var(--muted); font-size: 13.5px; }
+  label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  input { width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px;
+          font-size: 14.5px; margin-bottom: 15px; font-family: inherit; }
+  input:focus { outline: 2px solid #fff3e9; border-color: var(--accent); }
+  button { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 10px;
+           padding: 12px; font-size: 14.5px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 4px; }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: .6; cursor: default; }
+  .error { background: #fdecea; color: #b3261e; border-radius: 8px; padding: 10px 12px; font-size: 13px;
+           margin-bottom: 15px; display: none; }
+  .foot { margin-top: 18px; text-align: center; font-size: 12px; color: var(--muted); }
+  .foot a { color: var(--muted); }
+</style>
+</head>
+<body>
+  <form class="card" id="pwForm">
+    <div class="brand">
+      <div class="logo">D</div>
+      <div class="name">Nieuwsbrief Studio<small>door Dunion</small></div>
+    </div>
+    <p class="sub" id="subtitle">Kies een wachtwoord voor je account</p>
+    <div class="error" id="error"></div>
+    <div id="fields">
+      <label for="password">Nieuw wachtwoord</label>
+      <input id="password" type="password" autocomplete="new-password" minlength="8" autofocus required>
+      <label for="password2">Herhaal wachtwoord</label>
+      <input id="password2" type="password" autocomplete="new-password" minlength="8" required>
+      <button type="submit" id="submitBtn">Wachtwoord instellen</button>
+    </div>
+    <p class="foot"><a href="/login">Terug naar inloggen</a></p>
+  </form>
+<script>
+  const errorBox = document.getElementById("error");
+  function showError(msg) { errorBox.textContent = msg; errorBox.style.display = "block"; }
+
+  // Supabase stuurt het token in het URL-fragment: #access_token=...&type=invite|recovery
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const accessToken = hash.get("access_token");
+  const linkType = hash.get("type");
+  if (linkType === "recovery") {
+    document.getElementById("subtitle").textContent = "Kies een nieuw wachtwoord";
+  }
+  if (hash.get("error_description")) {
+    showError("Deze link is ongeldig of verlopen: " + hash.get("error_description")
+      + ". Vraag een nieuwe aan via 'Wachtwoord vergeten?' op de loginpagina.");
+    document.getElementById("fields").style.display = "none";
+  } else if (!accessToken) {
+    showError("Geen geldige uitnodigingslink. Open de link uit de e-mail opnieuw, of vraag een nieuwe aan.");
+    document.getElementById("fields").style.display = "none";
+  }
+
+  document.getElementById("pwForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorBox.style.display = "none";
+    const pw = document.getElementById("password").value;
+    if (pw.length < 8) { showError("Het wachtwoord moet minimaal 8 tekens zijn."); return; }
+    if (pw !== document.getElementById("password2").value) { showError("De wachtwoorden komen niet overeen."); return; }
+    const btn = document.getElementById("submitBtn");
+    btn.disabled = true;
+    try {
+      const cfg = await (await fetch("/auth/config")).json();
+      if (!cfg.supabase_url || !cfg.publishable_key) {
+        showError("Accounts zijn nog niet ingeschakeld. Neem contact op met Dunion.");
+        return;
+      }
+      const res = await fetch(`${cfg.supabase_url}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": cfg.publishable_key,
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ password: pw }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        showError("Wachtwoord instellen mislukt: "
+          + (body.msg || body.message || body.error_description || res.status)
+          + ". Is de link verlopen? Vraag dan een nieuwe aan via 'Wachtwoord vergeten?'.");
+        return;
+      }
+      location.href = "/login?reset=1";
+    } catch (netErr) {
+      showError("Netwerkfout: " + netErr.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

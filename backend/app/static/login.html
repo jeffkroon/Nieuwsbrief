@@ -30,9 +30,15 @@
   button { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 10px;
            padding: 12px; font-size: 14.5px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 4px; }
   button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: .6; cursor: default; }
   .error { background: #fdecea; color: #b3261e; border-radius: 8px; padding: 10px 12px; font-size: 13px;
            margin-bottom: 15px; display: none; }
+  .info { background: #e8f4ec; color: #1e6b3a; border-radius: 8px; padding: 10px 12px; font-size: 13px;
+          margin-bottom: 15px; display: none; }
   .foot { margin-top: 18px; text-align: center; font-size: 12px; color: var(--muted); }
+  .forgot { display: block; margin-top: 12px; text-align: center; font-size: 12.5px; color: var(--muted);
+            text-decoration: underline; cursor: pointer; background: none; border: none; padding: 0; width: auto; margin-left: auto; margin-right: auto; }
+  .forgot:hover { color: var(--accent); background: none; }
 </style>
 </head>
 <body>
@@ -43,22 +49,108 @@
     </div>
     <p class="sub">Log in om verder te gaan</p>
     <div class="error" id="error">Onjuiste inloggegevens, probeer opnieuw.</div>
-    <div class="error" id="error-rate">Te veel pogingen. Wacht een paar minuten en probeer opnieuw.</div>
+    <div class="info" id="info"></div>
     <label for="username">Gebruiker</label>
     <input id="username" name="username" type="text" autocomplete="username" value="dunion" required>
-    <p style="margin:4px 0 0; font-size:12px; color:#888;">Klant? Vul hier je bedrijfscode in.</p>
+    <p style="margin:4px 0 0; font-size:12px; color:#888;">Klant? Vul je e-mailadres in (of je bedrijfscode).</p>
     <label for="password">Wachtwoord</label>
     <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
-    <button type="submit">Inloggen</button>
+    <button type="submit" id="submitBtn">Inloggen</button>
+    <button type="button" class="forgot" id="forgotBtn">Wachtwoord vergeten?</button>
     <p class="foot">Beveiligde omgeving van Dunion Online Marketing</p>
   </form>
 <script>
-  const err = new URLSearchParams(location.search).get("error");
-  if (err === "2") {
-    document.getElementById("error-rate").style.display = "block";
-  } else if (err) {
-    document.getElementById("error").style.display = "block";
+  const errorBox = document.getElementById("error");
+  const infoBox = document.getElementById("info");
+  function showError(msg) {
+    infoBox.style.display = "none";
+    errorBox.textContent = msg;
+    errorBox.style.display = "block";
   }
+  function showInfo(msg) {
+    errorBox.style.display = "none";
+    infoBox.textContent = msg;
+    infoBox.style.display = "block";
+  }
+
+  const err = new URLSearchParams(location.search).get("error");
+  if (err === "2") showError("Te veel pogingen. Wacht een paar minuten en probeer opnieuw.");
+  else if (err) showError("Onjuiste inloggegevens, probeer opnieuw.");
+  if (new URLSearchParams(location.search).get("reset") === "1") {
+    showInfo("Je wachtwoord is ingesteld. Log in met je e-mailadres.");
+  }
+
+  let authConfig = null;
+  async function getAuthConfig() {
+    if (authConfig) return authConfig;
+    authConfig = await (await fetch("/auth/config")).json();
+    return authConfig;
+  }
+
+  // E-mailadres als gebruikersnaam = Supabase-login; anders de klassieke POST /login.
+  document.querySelector("form.card").addEventListener("submit", async (e) => {
+    const username = document.getElementById("username").value.trim();
+    if (!username.includes("@")) return; // klassieke flow: formulier post gewoon door
+    e.preventDefault();
+    const btn = document.getElementById("submitBtn");
+    btn.disabled = true;
+    try {
+      const cfg = await getAuthConfig();
+      if (!cfg.supabase_url || !cfg.publishable_key) {
+        showError("Inloggen met e-mail is nog niet ingeschakeld. Gebruik je bedrijfscode, of neem contact op met Dunion.");
+        return;
+      }
+      const tokenRes = await fetch(`${cfg.supabase_url}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": cfg.publishable_key },
+        body: JSON.stringify({ email: username, password: document.getElementById("password").value }),
+      });
+      if (!tokenRes.ok) {
+        showError("Onjuiste inloggegevens, probeer opnieuw.");
+        return;
+      }
+      const { access_token } = await tokenRes.json();
+      const sessionRes = await fetch("/login/supabase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token }),
+      });
+      if (!sessionRes.ok) {
+        const body = await sessionRes.json().catch(() => ({}));
+        showError(body.detail || "Inloggen mislukt, probeer het opnieuw.");
+        return;
+      }
+      location.href = "/";
+    } catch (netErr) {
+      showError("Netwerkfout: " + netErr.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("forgotBtn").addEventListener("click", async () => {
+    const email = document.getElementById("username").value.trim();
+    if (!email.includes("@")) {
+      showError("Vul eerst je e-mailadres in bij Gebruiker, en klik dan op 'Wachtwoord vergeten?'. Log je in met een bedrijfscode? Vraag Dunion dan om een nieuw wachtwoord.");
+      return;
+    }
+    try {
+      const cfg = await getAuthConfig();
+      if (!cfg.supabase_url || !cfg.publishable_key) {
+        showError("Wachtwoord-reset is nog niet ingeschakeld. Neem contact op met Dunion.");
+        return;
+      }
+      const redirect = encodeURIComponent(location.origin + "/welkom");
+      await fetch(`${cfg.supabase_url}/auth/v1/recover?redirect_to=${redirect}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": cfg.publishable_key },
+        body: JSON.stringify({ email }),
+      });
+      showInfo("Als dit e-mailadres bij ons bekend is, ontvang je binnen enkele minuten een e-mail om een nieuw wachtwoord in te stellen.");
+    } catch (netErr) {
+      showError("Netwerkfout: " + netErr.message);
+    }
+  });
 </script>
 </body>
 </html>

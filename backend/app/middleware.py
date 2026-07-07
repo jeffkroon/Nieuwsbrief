@@ -17,7 +17,7 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 
 COOKIE_NAME = "nb_session"
 SESSION_MAX_AGE = 7 * 24 * 3600  # 7 dagen
-EXEMPT_PATHS = {"/health", "/login", "/logout"}
+EXEMPT_PATHS = {"/health", "/login", "/logout", "/welkom", "/auth/config"}
 DEFAULT_ROLE = "company"
 
 
