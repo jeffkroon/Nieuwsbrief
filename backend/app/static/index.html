@@ -350,8 +350,9 @@
           <button class="btn secondary" id="coUserLinkBtn">Maak link om zelf te delen</button>
         </div>
         <div class="row" id="coUserLinkRow" style="display:none;">
-          <input type="text" id="coUserLink" readonly style="flex:1; min-width:280px;">
+          <input type="password" id="coUserLink" readonly style="flex:1; min-width:280px;">
           <button class="btn secondary" id="coUserLinkCopy">Kopieer</button>
+          <button class="btn secondary" id="coUserLinkToggle">Toon</button>
         </div>
         <div id="coUserList"></div>
         <p class="hint" id="coUserStatus"></p>
@@ -940,6 +941,22 @@ async function loadTenantUsers() {
   }
 }
 
+function clearInviteLink() {
+  const field = document.getElementById("coUserLink");
+  field.value = "";
+  field.type = "password";
+  document.getElementById("coUserLinkToggle").textContent = "Toon";
+  document.getElementById("coUserLinkRow").style.display = "none";
+}
+
+document.getElementById("coUserLinkToggle").onclick = (e) => {
+  e.preventDefault();
+  const field = document.getElementById("coUserLink");
+  const masked = field.type === "password";
+  field.type = masked ? "text" : "password";
+  e.target.textContent = masked ? "Verberg" : "Toon";
+};
+
 document.getElementById("coUserLinkBtn").onclick = async (e) => {
   e.preventDefault();
   const status = document.getElementById("coUserStatus");
@@ -948,6 +965,7 @@ document.getElementById("coUserLinkBtn").onclick = async (e) => {
   if (!/.+@.+\..+/.test(email)) { status.textContent = "Vul een geldig e-mailadres in."; return; }
   const btn = document.getElementById("coUserLinkBtn");
   btn.disabled = true;
+  clearInviteLink();
   status.textContent = "Link maken...";
   try {
     const r = await fetch(`/tenants/${editingCompanyId}/users/link`, {
@@ -991,6 +1009,7 @@ document.getElementById("coUserInviteBtn").onclick = async (e) => {
   if (!/.+@.+\..+/.test(email)) { status.textContent = "Vul een geldig e-mailadres in."; return; }
   const btn = document.getElementById("coUserInviteBtn");
   btn.disabled = true;
+  clearInviteLink();
   status.textContent = "Uitnodiging versturen...";
   try {
     const r = await fetch(`/tenants/${editingCompanyId}/users`, {
@@ -1153,8 +1172,7 @@ function resetCompanyForm() {
   document.getElementById("coUserList").innerHTML = "";
   document.getElementById("coUserEmail").value = "";
   document.getElementById("coUserStatus").textContent = "";
-  document.getElementById("coUserLink").value = "";
-  document.getElementById("coUserLinkRow").style.display = "none";
+  clearInviteLink();
   document.getElementById("companyFormTitle").textContent = "Nieuw bedrijf toevoegen";
   document.getElementById("companyReset").style.display = "none";
   companyStatus.textContent = "";

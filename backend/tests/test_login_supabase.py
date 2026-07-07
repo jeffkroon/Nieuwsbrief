@@ -225,6 +225,26 @@ def test_invite_link_is_admin_only(client, session, fake_supabase) -> None:
         app.dependency_overrides.pop(current_session_info, None)
 
 
+def test_invite_link_race_on_unique_email_gives_409_and_cleans_up(
+    client, session, fake_supabase, monkeypatch
+) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    from app.routes import tenants as tenants_routes
+
+    tenant = _tenant(session, f"lnkrace-{uuid.uuid4().hex[:6]}")
+    new_id = uuid.uuid4()
+    fake_supabase.next_invite_id = new_id
+
+    def lose_the_race(*args, **kwargs):
+        raise IntegrityError("insert", {}, Exception("unique_violation"))
+
+    monkeypatch.setattr(tenants_routes.users_repo, "create_user", lose_the_race)
+    resp = client.post(f"/tenants/{tenant.id}/users/link", json={"email": "race@b.nl"})
+    assert resp.status_code == 409
+    assert fake_supabase.deleted == [new_id]
+
+
 def test_invite_race_on_unique_email_gives_409_and_cleans_up(
     client, session, fake_supabase, monkeypatch
 ) -> None:
