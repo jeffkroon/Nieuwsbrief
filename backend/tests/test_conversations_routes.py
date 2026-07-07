@@ -229,3 +229,33 @@ def test_klaviyo_tenant_prompt_says_klaviyo(client, session, fake_anthropic) -> 
     client.post("/conversations", json={"tenant_id": str(tenant.id), "message": "hoi"})
     system_text = fake.messages.calls[0]["system"][0]["text"]
     assert "Klaviyo" in system_text and "Brevo" not in system_text
+
+
+def test_template_choice_is_remembered_per_conversation(client, session, fake_anthropic) -> None:
+    # Eerste beurt kiest een template; het vervolgbericht stuurt geen keuze mee
+    # maar valt NIET terug op de standaard: de gekozen template blijft gelden.
+    from app.repositories import templates as templates_repo
+
+    tenant = _tenant(session)
+    templates_repo.create_template(
+        session, tenant_id=tenant.id, name="Standaard", is_default=True,
+        html="<html>{{ unsubscribe }}</html>",
+    )
+    gekozen = templates_repo.create_template(
+        session, tenant_id=tenant.id, name="Speciale Shell",
+        html="<html><!-- ##SECTIES## -->{{ unsubscribe }}</html>",
+    )
+    fake = fake_anthropic(
+        [
+            FakeResponse([FakeText("ok")], "end_turn"),
+            FakeResponse([FakeText("ok")], "end_turn"),
+        ]
+    )
+    start = client.post(
+        "/conversations",
+        json={"tenant_id": str(tenant.id), "message": "hoi", "template_id": str(gekozen.id)},
+    ).json()
+    client.post(f"/conversations/{start['conversation_id']}/messages", json={"message": "verder"})
+    # De tweede beurt (zonder template_id) gebruikt nog steeds de gekozen template.
+    system_text = fake.messages.calls[1]["system"][0]["text"]
+    assert '"Speciale Shell"' in system_text and "OPZET-SECTIES" in system_text

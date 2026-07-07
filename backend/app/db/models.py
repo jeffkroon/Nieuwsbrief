@@ -115,6 +115,11 @@ class Conversation(Base):
     # Laatste preview-/draft-invoer van de agent: een her-render erft ontbrekende
     # velden hieruit, zodat "wijzig één ding" nooit andere velden kwijtraakt.
     last_preview: Mapped[dict | None] = mapped_column(JSONB)
+    # Gekozen template van dit gesprek: eenmaal gekozen blijft die gelden, ook
+    # als een vervolgbericht de keuze niet opnieuw meestuurt.
+    template_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(f"{SCHEMA}.templates.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 

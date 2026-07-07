@@ -68,6 +68,12 @@ def run_conversation_turn(
     user_text: str,
     template_id: uuid.UUID | None = None,
 ) -> TurnReply:
+    # Template-keuze onthouden: expliciet meegestuurd wint en wordt bewaard;
+    # zonder keuze geldt de eerder gekozen template van dit gesprek.
+    if template_id is not None and template_id != conversation.template_id:
+        conversation.template_id = template_id
+    template_id = template_id or conversation.template_id
+
     repo.add_message(session, conversation.id, "user", user_text)
 
     history = repo.list_messages(session, conversation.id)
