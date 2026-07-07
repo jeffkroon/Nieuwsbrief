@@ -71,6 +71,13 @@ class TenantUserRead(BaseModel):
     created_at: datetime
 
 
+class TenantUserInviteLink(BaseModel):
+    """Antwoord bij een zelf te delen uitnodigingslink (eenmalig getoond)."""
+
+    user: TenantUserRead
+    invite_link: str
+
+
 class TenantPasswordSet(BaseModel):
     """Klant-login-wachtwoord voor een bedrijf (alleen schrijven, nooit teruggeven)."""
 

@@ -107,6 +107,37 @@ class SupabaseAuth:
         except (KeyError, ValueError) as exc:
             raise SupabaseAuthError("Supabase gaf geen gebruikers-id terug.") from exc
 
+    def generate_invite_link(self, email: str, *, redirect_to: str) -> tuple[uuid.UUID, str]:
+        """Maak het account aan en geef (auth-user-id, uitnodigingslink) terug.
+
+        Anders dan invite_user stuurt Supabase hier GEEN mail; de beheerder
+        deelt de link zelf. De link is een wachtwoord-kies-token: wie hem heeft
+        kan het account overnemen, dus behandel hem als een wachtwoord.
+        """
+        resp = self._post(
+            "/auth/v1/admin/generate_link",
+            {"type": "invite", "email": email, "redirect_to": redirect_to},
+        )
+        if resp.status_code not in (200, 201):
+            detail = ""
+            try:
+                body = resp.json()
+                detail = body.get("msg") or body.get("message") or body.get("error_description") or ""
+            except ValueError:
+                pass
+            raise SupabaseAuthError(
+                f"Link maken mislukt (status {resp.status_code}){': ' + detail if detail else ''}"
+            )
+        data = resp.json()
+        link = data.get("action_link") or ""
+        raw_id = data.get("id") or (data.get("user") or {}).get("id") or ""
+        if not link:
+            raise SupabaseAuthError("Supabase gaf geen uitnodigingslink terug.")
+        try:
+            return uuid.UUID(raw_id), link
+        except ValueError as exc:
+            raise SupabaseAuthError("Supabase gaf geen gebruikers-id terug.") from exc
+
     def delete_auth_user(self, user_id: uuid.UUID) -> None:
         """Verwijder het Supabase-account (best effort; fouten niet fataal)."""
         url = f"{self._base}/auth/v1/admin/users/{user_id}"

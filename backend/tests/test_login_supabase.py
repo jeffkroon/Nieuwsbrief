@@ -45,6 +45,10 @@ class FakeSupabase:
     def delete_auth_user(self, user_id: uuid.UUID) -> None:
         self.deleted.append(user_id)
 
+    def generate_invite_link(self, email: str, *, redirect_to: str) -> tuple[uuid.UUID, str]:
+        self.invited.append({"email": email, "redirect_to": redirect_to, "via": "link"})
+        return self.next_invite_id, f"https://project.supabase.co/auth/v1/verify?token=x&redirect_to={redirect_to}"
+
 
 @pytest.fixture
 def fake_supabase():
@@ -179,6 +183,66 @@ def test_duplicate_email_gives_409(client, session, fake_supabase) -> None:
     resp = client.post(f"/tenants/{tenant.id}/users", json={"email": "klant@bedrijf.nl"})
     assert resp.status_code == 409
     assert fake_supabase.invited == []  # geen mail gestuurd
+
+
+def test_admin_creates_shareable_invite_link(client, session, fake_supabase) -> None:
+    tenant = _tenant(session, f"lnk-{uuid.uuid4().hex[:6]}")
+    new_id = uuid.uuid4()
+    fake_supabase.next_invite_id = new_id
+
+    resp = client.post(f"/tenants/{tenant.id}/users/link", json={"email": "Klant@Bedrijf.nl"})
+
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["user"]["email"] == "klant@bedrijf.nl"
+    assert data["invite_link"].startswith("https://project.supabase.co/auth/v1/verify")
+    assert fake_supabase.invited[0]["via"] == "link"
+    assert fake_supabase.invited[0]["redirect_to"].endswith("/welkom")
+    # Rij staat in mail.users; daarna gewoon zichtbaar in de lijst.
+    listed = client.get(f"/tenants/{tenant.id}/users").json()
+    assert [u["email"] for u in listed] == ["klant@bedrijf.nl"]
+
+
+def test_invite_link_duplicate_email_gives_409(client, session, fake_supabase) -> None:
+    tenant = _tenant(session, f"lnkdup-{uuid.uuid4().hex[:6]}")
+    users_repo.create_user(
+        session, user_id=uuid.uuid4(), tenant_id=tenant.id, email="klant@bedrijf.nl"
+    )
+    resp = client.post(f"/tenants/{tenant.id}/users/link", json={"email": "klant@bedrijf.nl"})
+    assert resp.status_code == 409
+    assert fake_supabase.invited == []
+
+
+def test_invite_link_is_admin_only(client, session, fake_supabase) -> None:
+    tenant = _tenant(session, f"lnkadm-{uuid.uuid4().hex[:6]}")
+    app.dependency_overrides[current_session_info] = lambda: SessionInfo(
+        role="company", tenant_id=tenant.id
+    )
+    try:
+        resp = client.post(f"/tenants/{tenant.id}/users/link", json={"email": "a@b.nl"})
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_session_info, None)
+
+
+def test_invite_link_race_on_unique_email_gives_409_and_cleans_up(
+    client, session, fake_supabase, monkeypatch
+) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    from app.routes import tenants as tenants_routes
+
+    tenant = _tenant(session, f"lnkrace-{uuid.uuid4().hex[:6]}")
+    new_id = uuid.uuid4()
+    fake_supabase.next_invite_id = new_id
+
+    def lose_the_race(*args, **kwargs):
+        raise IntegrityError("insert", {}, Exception("unique_violation"))
+
+    monkeypatch.setattr(tenants_routes.users_repo, "create_user", lose_the_race)
+    resp = client.post(f"/tenants/{tenant.id}/users/link", json={"email": "race@b.nl"})
+    assert resp.status_code == 409
+    assert fake_supabase.deleted == [new_id]
 
 
 def test_invite_race_on_unique_email_gives_409_and_cleans_up(

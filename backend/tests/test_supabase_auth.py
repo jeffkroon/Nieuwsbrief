@@ -159,6 +159,42 @@ def test_invite_without_service_key_fails_clearly(keypair) -> None:
         auth.invite_user("klant@bedrijf.nl", redirect_to="https://app/welkom")
 
 
+def test_generate_invite_link_returns_id_and_link(keypair) -> None:
+    _, public = keypair
+    new_id = uuid.uuid4()
+    http = _FakeHttp(httpx.Response(200, json={
+        "id": str(new_id),
+        "action_link": "https://project.supabase.co/auth/v1/verify?token=x&type=invite",
+    }))
+    auth = _auth(public, service_role_key="service-key", http_client=http)
+
+    user_id, link = auth.generate_invite_link("klant@bedrijf.nl", redirect_to="https://app/welkom")
+
+    assert user_id == new_id
+    assert link.startswith("https://project.supabase.co/auth/v1/verify")
+    call = http.posts[0]
+    assert call["url"] == f"{SUPABASE_URL}/auth/v1/admin/generate_link"
+    assert call["json"] == {
+        "type": "invite",
+        "email": "klant@bedrijf.nl",
+        "redirect_to": "https://app/welkom",
+    }
+
+
+def test_generate_invite_link_surfaces_errors(keypair) -> None:
+    _, public = keypair
+    http = _FakeHttp(httpx.Response(422, json={"msg": "email bestaat al"}))
+    auth = _auth(public, service_role_key="service-key", http_client=http)
+    with pytest.raises(SupabaseAuthError, match="email bestaat al"):
+        auth.generate_invite_link("klant@bedrijf.nl", redirect_to="https://app/welkom")
+
+    # Antwoord zonder link is ook een nette fout.
+    http2 = _FakeHttp(httpx.Response(200, json={"id": str(uuid.uuid4())}))
+    auth2 = _auth(public, service_role_key="service-key", http_client=http2)
+    with pytest.raises(SupabaseAuthError, match="geen uitnodigingslink"):
+        auth2.generate_invite_link("klant@bedrijf.nl", redirect_to="https://app/welkom")
+
+
 def test_delete_auth_user_is_best_effort(keypair) -> None:
     _, public = keypair
     http = _FakeHttp(httpx.Response(500, json={}))
