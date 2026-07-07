@@ -57,6 +57,20 @@ class TenantRead(_ORMModel):
     updated_at: datetime
 
 
+class TenantUserInvite(BaseModel):
+    """Klant-gebruiker uitnodigen per e-mail (Supabase stuurt de mail)."""
+
+    email: str = Field(min_length=5, max_length=254, pattern=r".+@.+\..+")
+
+
+class TenantUserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: str
+    created_at: datetime
+
+
 class TenantPasswordSet(BaseModel):
     """Klant-login-wachtwoord voor een bedrijf (alleen schrijven, nooit teruggeven)."""
 

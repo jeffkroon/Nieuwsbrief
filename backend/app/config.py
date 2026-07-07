@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
+    # Publieke (anon/publishable) key: mag in de frontend, nodig voor klant-login.
+    supabase_publishable_key: str | None = None
     images_bucket: str = "tenant-images"
     # Optioneel wachtwoord-slot (sessie-cookie). Leeg = geen slot (lokaal/dev).
     access_user: str = "dunion"

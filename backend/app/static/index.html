@@ -342,6 +342,14 @@
           <button class="btn secondary" id="coTenantPwBtn">Wachtwoord instellen</button>
         </div>
         <p class="hint" id="coTenantPwStatus"></p>
+        <h3 class="style-head">Klant-accounts</h3>
+        <p class="hint">De nieuwe manier van inloggen: nodig de klant uit per e-mail. Die kiest zelf een wachtwoord en logt in met het e-mailadres; zo'n account ziet alleen dit bedrijf. Het bedrijfscode-wachtwoord hierboven blijft werken als overgang.</p>
+        <div class="row">
+          <label>E-mailadres <input type="text" id="coUserEmail" placeholder="klant@bedrijf.nl" autocomplete="off"></label>
+          <button class="btn secondary" id="coUserInviteBtn">Uitnodigen</button>
+        </div>
+        <div id="coUserList"></div>
+        <p class="hint" id="coUserStatus"></p>
         <h3 class="style-head">Nieuwsbrief-soorten</h3>
         <p class="hint">Welke soorten nieuwsbrieven maakt dit bedrijf? "Algemeen" (alleen tekst) kan altijd.</p>
         <div class="row">
@@ -897,6 +905,64 @@ document.getElementById("coTenantPwBtn").onclick = async (e) => {
     : "Instellen mislukt: " + ((await r.json().catch(() => ({}))).detail || r.status);
   if (r.ok) document.getElementById("coTenantPw").value = "";
 };
+
+async function loadTenantUsers() {
+  const list = document.getElementById("coUserList");
+  list.innerHTML = "";
+  if (!editingCompanyId) return;
+  let users = [];
+  try { users = await (await fetch(`/tenants/${editingCompanyId}/users`)).json(); }
+  catch (e) { return; }
+  if (!Array.isArray(users)) return;
+  for (const u of users) {
+    const el = document.createElement("div");
+    el.className = "company-item";
+    const mail = document.createElement("span");
+    mail.textContent = u.email;
+    const spacer = document.createElement("span");
+    spacer.style.marginLeft = "auto";
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "verwijderen";
+    del.onclick = async (e) => {
+      e.preventDefault();
+      if (!confirm(`Account ${u.email} verwijderen? Deze gebruiker kan dan niet meer inloggen.`)) return;
+      await fetch(`/tenants/${editingCompanyId}/users/${u.id}`, { method: "DELETE" });
+      loadTenantUsers();
+    };
+    el.append(mail, spacer, del);
+    list.appendChild(el);
+  }
+}
+
+document.getElementById("coUserInviteBtn").onclick = async (e) => {
+  e.preventDefault();
+  const status = document.getElementById("coUserStatus");
+  const email = document.getElementById("coUserEmail").value.trim();
+  if (!editingCompanyId) { status.textContent = "Sla het bedrijf eerst op, en bewerk het daarna om accounts uit te nodigen."; return; }
+  if (!/.+@.+\..+/.test(email)) { status.textContent = "Vul een geldig e-mailadres in."; return; }
+  const btn = document.getElementById("coUserInviteBtn");
+  btn.disabled = true;
+  status.textContent = "Uitnodiging versturen...";
+  try {
+    const r = await fetch(`/tenants/${editingCompanyId}/users`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({email}),
+    });
+    if (r.ok) {
+      status.textContent = `Uitnodiging verstuurd naar ${email}. De klant kiest via de mail een wachtwoord.`;
+      document.getElementById("coUserEmail").value = "";
+      loadTenantUsers();
+    } else {
+      status.textContent = "Uitnodigen mislukt: " + ((await r.json().catch(() => ({}))).detail || r.status);
+    }
+  } catch (err) {
+    status.textContent = "Netwerkfout: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
 document.getElementById("espListsBtn").onclick = async (e) => {
   e.preventDefault();
   const esp = CO("coEsp").value;
@@ -1036,6 +1102,9 @@ function resetCompanyForm() {
   espSel.innerHTML = ""; espSel.style.display = "none";
   CO("coSlug").disabled = false;
   document.getElementById("ctRows").innerHTML = "";
+  document.getElementById("coUserList").innerHTML = "";
+  document.getElementById("coUserEmail").value = "";
+  document.getElementById("coUserStatus").textContent = "";
   document.getElementById("companyFormTitle").textContent = "Nieuw bedrijf toevoegen";
   document.getElementById("companyReset").style.display = "none";
   companyStatus.textContent = "";
@@ -1068,6 +1137,7 @@ function fillCompanyForm(t) {
   }
   document.getElementById("companyFormTitle").textContent = `Bewerken: ${t.name}`;
   document.getElementById("companyReset").style.display = "inline-block";
+  loadTenantUsers();
 }
 
 async function refreshTenantSelect() {

@@ -14,6 +14,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 MAIL_TABLES = (
+    "mail.users",
     "mail.tenant_secrets",
     "mail.messages",
     "mail.newsletters",
@@ -85,8 +86,10 @@ def client(session: Session, cipher) -> Iterator:
 
 @pytest.fixture(autouse=True)
 def _reset_chat_limiter():
-    """De chat-rate-limiter is module-globaal; zonder reset lekt hij tussen tests."""
+    """De rate-limiters zijn module-globaal; zonder reset lekken ze tussen tests."""
+    from app.routes import auth as _auth
     from app.routes import conversations as _conv
 
     _conv._chat_limiter.reset()
+    _auth._login_limiter.reset()
     yield
