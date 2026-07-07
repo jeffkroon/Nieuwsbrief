@@ -307,29 +307,28 @@
           <span class="hint">Naam + website volstaan: contactgegevens, logo, kleur, socials en nieuwsbrief-soorten worden van de site gehaald. Daarna even checken en opslaan.</span>
         </div>
         <details class="co-sec" id="secContact">
-          <summary>Contact & footer</summary>
+          <summary>Footer van de nieuwsbrief</summary>
           <div class="co-sec-body">
-            <p class="hint">Alleen e-mail is verplicht; lege velden worden weggelaten uit de footer. De AI-knop hierboven vult dit meestal al in.</p>
+            <p class="hint">Dit komt onderin elke nieuwsbrief te staan: contactgegevens en de social-icoontjes. Alleen e-mail is verplicht; lege velden worden weggelaten. De AI-knop hierboven vult dit meestal al in.</p>
             <div class="company-grid">
               <label>E-mail* <input type="text" id="coEmail" placeholder="info@bedrijf.nl"></label>
               <label>Adres <input type="text" id="coAdres" placeholder="optioneel"></label>
               <label>Postcode + stad <input type="text" id="coPostcode" placeholder="optioneel"></label>
               <label>Telefoon <input type="text" id="coTelefoon" placeholder="optioneel"></label>
               <label>KVK-nummer <input type="text" id="coKvk" placeholder="optioneel"></label>
+              <label>Facebook <input type="text" id="coFacebook" placeholder="leeg = link naar website"></label>
+              <label>Instagram <input type="text" id="coInstagram" placeholder="leeg = link naar website"></label>
+              <label>YouTube <input type="text" id="coYoutube" placeholder="leeg = link naar website"></label>
             </div>
           </div>
         </details>
         <details class="co-sec" id="secBeeld">
-          <summary>Afbeeldingen & socials</summary>
+          <summary>Beeldmateriaal</summary>
           <div class="co-sec-body">
+            <p class="hint">Bannerfoto's beheer je via de Foto's-tab; hier staan alleen het logo en de reservefoto.</p>
             <div class="company-grid">
               <label>Logo-URL* <input type="text" id="coLogo" placeholder="https://.../logo.png"></label>
               <label>Fallback-foto-URL* <span class="hint" style="font-weight:normal;">(getoond als een blok geen eigen foto heeft)</span> <input type="text" id="coDummy" placeholder="https://.../fallback.png"></label>
-              <label>Header-foto-URL <input type="text" id="coHeader" placeholder="optioneel, kan ook via Foto's-tab"></label>
-              <label>Wedstrijden-pagina <input type="text" id="coMatches" placeholder="optioneel, alleen voetbal: URL met alle wedstrijden"></label>
-              <label>Facebook <input type="text" id="coFacebook" placeholder="leeg = link naar website"></label>
-              <label>Instagram <input type="text" id="coInstagram" placeholder="leeg = link naar website"></label>
-              <label>YouTube <input type="text" id="coYoutube" placeholder="leeg = link naar website"></label>
             </div>
           </div>
         </details>
@@ -388,6 +387,9 @@
               <label><input type="checkbox" id="ctMatches"> Wedstrijden (voetbal)</label>
               <label><input type="checkbox" id="ctClubs"> Clubs (voetbal)</label>
               <label><input type="checkbox" id="ctReizen"> Reizen (voetbal, pakket met overnachting)</label>
+            </div>
+            <div class="row" id="ctMatchesUrlRow" style="display:none; margin-top:8px;">
+              <label style="flex:1;">Wedstrijden-pagina <input type="text" id="coMatches" placeholder="URL van de pagina met alle wedstrijden"></label>
             </div>
             <div id="ctRows" style="margin-top:8px;"></div>
             <button class="btn secondary" id="ctAdd" style="margin-top:8px;">+ Eigen soort toevoegen</button>
@@ -897,6 +899,15 @@ function addCtRow(vals = {}) {
 }
 document.getElementById("ctAdd").onclick = (e) => { e.preventDefault(); addCtRow(); };
 
+function updateMatchesUrlRow() {
+  const voetbal = CO("ctMatches").checked || CO("ctClubs").checked || CO("ctReizen").checked;
+  const hasUrl = CO("coMatches").value.trim() !== "";
+  document.getElementById("ctMatchesUrlRow").style.display = (voetbal || hasUrl) ? "flex" : "none";
+}
+for (const id of ["ctMatches", "ctClubs", "ctReizen"]) {
+  CO(id).addEventListener("change", updateMatchesUrlRow);
+}
+
 function readContentTypes() {
   const types = [];
   if (CO("ctMatches").checked) types.push({ kind: "matches" });
@@ -1126,9 +1137,7 @@ function companyConfigFromForm() {
     esp: CO("coEsp").value,
   };
   if (cfg.esp === "klaviyo") cfg.klaviyo_list_id = CO("coBrevoList").value.trim();
-  const header = CO("coHeader").value.trim();
   const matchesUrl = CO("coMatches").value.trim();
-  if (header) cfg.header_image_url = header;
   if (matchesUrl) cfg.matches_url = matchesUrl;
   return cfg;
 }
@@ -1168,7 +1177,6 @@ document.getElementById("coPrefill").onclick = async (e) => {
     CO("coKvk").value = c.brand_kvk || "";
     CO("coLogo").value = c.logo_url || "";
     CO("coDummy").value = c.dummy_image_url || "";
-    CO("coHeader").value = c.header_image_url || "";
     CO("coMatches").value = c.matches_url || "";
     CO("coFacebook").value = c.facebook_url || "";
     CO("coInstagram").value = c.instagram_url || "";
@@ -1180,6 +1188,7 @@ document.getElementById("coPrefill").onclick = async (e) => {
     companyStatus.textContent = (r.notes && r.notes.length)
       ? "Ingevuld. Nog even checken: " + r.notes.join("; ")
       : "Ingevuld vanaf de website. Controleer de velden en klik op Bedrijf opslaan.";
+    updateMatchesUrlRow();
     for (const id of ["secContact", "secBeeld", "secSoorten"]) document.getElementById(id).open = true;
   } catch (err) {
     companyStatus.textContent = "Netwerkfout: " + err.message;
@@ -1190,7 +1199,7 @@ document.getElementById("coPrefill").onclick = async (e) => {
 
 function resetCompanyForm() {
   editingCompanyId = null;
-  for (const id of ["coName","coSlug","coWebsite","coEmail","coAdres","coPostcode","coTelefoon","coKvk","coLogo","coDummy","coHeader","coMatches","coFacebook","coInstagram","coYoutube","coBrevoKey","coBrevoList"]) CO(id).value = "";
+  for (const id of ["coName","coSlug","coWebsite","coEmail","coAdres","coPostcode","coTelefoon","coKvk","coLogo","coDummy","coMatches","coFacebook","coInstagram","coYoutube","coBrevoKey","coBrevoList"]) CO(id).value = "";
   CO("coPrimary").value = "#ff7200";
   CO("ctMatches").checked = false; CO("ctClubs").checked = false; CO("ctReizen").checked = false;
   CO("coEsp").value = "brevo"; updateEspHint();
@@ -1205,6 +1214,7 @@ function resetCompanyForm() {
   document.getElementById("companyFormTitle").textContent = "Nieuw bedrijf toevoegen";
   document.getElementById("companyReset").style.display = "none";
   companyStatus.textContent = "";
+  updateMatchesUrlRow();
   for (const el of document.querySelectorAll("details.co-sec")) el.open = false;
 }
 document.getElementById("companyReset").onclick = resetCompanyForm;
@@ -1220,7 +1230,7 @@ function fillCompanyForm(t) {
   CO("coEmail").value = c.brand_email || ""; CO("coAdres").value = c.brand_adres || "";
   CO("coPostcode").value = c.brand_postcode_stad || ""; CO("coTelefoon").value = c.brand_telefoon || "";
   CO("coKvk").value = c.brand_kvk || ""; CO("coLogo").value = c.logo_url || "";
-  CO("coDummy").value = c.dummy_image_url || ""; CO("coHeader").value = c.header_image_url || "";
+  CO("coDummy").value = c.dummy_image_url || "";
   CO("coMatches").value = c.matches_url || "";
   CO("coFacebook").value = c.facebook_url || ""; CO("coInstagram").value = c.instagram_url || "";
   CO("coYoutube").value = c.youtube_url || "";
@@ -1233,6 +1243,7 @@ function fillCompanyForm(t) {
     else if (ct.kind === "reizen") CO("ctReizen").checked = true;
     else addCtRow(ct);
   }
+  updateMatchesUrlRow();
   document.getElementById("companyFormTitle").textContent = `Bewerken: ${t.name}`;
   document.getElementById("companyReset").style.display = "inline-block";
   loadTenantUsers();
