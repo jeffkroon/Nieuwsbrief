@@ -346,7 +346,12 @@
         <p class="hint">De nieuwe manier van inloggen: nodig de klant uit per e-mail. Die kiest zelf een wachtwoord en logt in met het e-mailadres; zo'n account ziet alleen dit bedrijf. Het bedrijfscode-wachtwoord hierboven blijft werken als overgang.</p>
         <div class="row">
           <label>E-mailadres <input type="text" id="coUserEmail" placeholder="klant@bedrijf.nl" autocomplete="off"></label>
-          <button class="btn secondary" id="coUserInviteBtn">Uitnodigen</button>
+          <button class="btn secondary" id="coUserInviteBtn">Uitnodigen per mail</button>
+          <button class="btn secondary" id="coUserLinkBtn">Maak link om zelf te delen</button>
+        </div>
+        <div class="row" id="coUserLinkRow" style="display:none;">
+          <input type="text" id="coUserLink" readonly style="flex:1; min-width:280px;">
+          <button class="btn secondary" id="coUserLinkCopy">Kopieer</button>
         </div>
         <div id="coUserList"></div>
         <p class="hint" id="coUserStatus"></p>
@@ -935,6 +940,49 @@ async function loadTenantUsers() {
   }
 }
 
+document.getElementById("coUserLinkBtn").onclick = async (e) => {
+  e.preventDefault();
+  const status = document.getElementById("coUserStatus");
+  const email = document.getElementById("coUserEmail").value.trim();
+  if (!editingCompanyId) { status.textContent = "Sla het bedrijf eerst op, en bewerk het daarna om accounts uit te nodigen."; return; }
+  if (!/.+@.+\..+/.test(email)) { status.textContent = "Vul een geldig e-mailadres in."; return; }
+  const btn = document.getElementById("coUserLinkBtn");
+  btn.disabled = true;
+  status.textContent = "Link maken...";
+  try {
+    const r = await fetch(`/tenants/${editingCompanyId}/users/link`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({email}),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      document.getElementById("coUserLink").value = data.invite_link;
+      document.getElementById("coUserLinkRow").style.display = "flex";
+      status.textContent = `Link voor ${email} klaar. Deel hem alleen met de klant zelf: wie de link heeft kan het account overnemen. Hij wordt maar 1 keer getoond.`;
+      document.getElementById("coUserEmail").value = "";
+      loadTenantUsers();
+    } else {
+      status.textContent = "Link maken mislukt: " + ((await r.json().catch(() => ({}))).detail || r.status);
+    }
+  } catch (err) {
+    status.textContent = "Netwerkfout: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+document.getElementById("coUserLinkCopy").onclick = async (e) => {
+  e.preventDefault();
+  const field = document.getElementById("coUserLink");
+  try {
+    await navigator.clipboard.writeText(field.value);
+    document.getElementById("coUserStatus").textContent = "Link gekopieerd.";
+  } catch (err) {
+    field.select();
+    document.getElementById("coUserStatus").textContent = "Kopieren geblokkeerd door de browser; de link is geselecteerd, kopieer met Cmd+C.";
+  }
+};
+
 document.getElementById("coUserInviteBtn").onclick = async (e) => {
   e.preventDefault();
   const status = document.getElementById("coUserStatus");
@@ -1105,6 +1153,8 @@ function resetCompanyForm() {
   document.getElementById("coUserList").innerHTML = "";
   document.getElementById("coUserEmail").value = "";
   document.getElementById("coUserStatus").textContent = "";
+  document.getElementById("coUserLink").value = "";
+  document.getElementById("coUserLinkRow").style.display = "none";
   document.getElementById("companyFormTitle").textContent = "Nieuw bedrijf toevoegen";
   document.getElementById("companyReset").style.display = "none";
   companyStatus.textContent = "";

@@ -31,6 +31,7 @@ from app.schemas import (
     TenantCreate,
     TenantPasswordSet,
     TenantUserInvite,
+    TenantUserInviteLink,
     TenantUserRead,
     TenantPrefillRequest,
     TenantPrefillResult,
@@ -203,6 +204,52 @@ def invite_tenant_user(
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail="dit e-mailadres heeft al een account"
         ) from exc
+
+
+@router.post(
+    "/{tenant_id}/users/link",
+    response_model=TenantUserInviteLink,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
+def create_tenant_user_invite_link(
+    tenant_id: uuid.UUID,
+    body: TenantUserInvite,
+    request: Request,
+    session: Session = Depends(get_session),
+    supabase=Depends(get_supabase_auth),
+) -> TenantUserInviteLink:
+    """Maak een uitnodigingslink om zelf te delen (Supabase stuurt geen mail).
+
+    Zelfde koppeling als de mail-invite: account + rij in mail.users; de link
+    laat de klant eenmalig een wachtwoord kiezen via /welkom.
+    """
+    if repo.get_tenant(session, tenant_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="tenant niet gevonden")
+    email = body.email.strip().lower()
+    if users_repo.get_user_by_email(session, email) is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="dit e-mailadres heeft al een account"
+        )
+    settings = get_settings()
+    base_url = (settings.app_base_url or str(request.base_url)).rstrip("/")
+    try:
+        auth_user_id, invite_link = supabase.generate_invite_link(
+            email, redirect_to=f"{base_url}/welkom"
+        )
+    except SupabaseAuthError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    try:
+        user = users_repo.create_user(
+            session, user_id=auth_user_id, tenant_id=tenant_id, email=email
+        )
+    except IntegrityError as exc:
+        session.rollback()
+        supabase.delete_auth_user(auth_user_id)
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="dit e-mailadres heeft al een account"
+        ) from exc
+    return TenantUserInviteLink(user=user, invite_link=invite_link)
 
 
 @router.delete(
