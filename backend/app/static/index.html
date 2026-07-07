@@ -90,6 +90,12 @@
   .company-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
   .company-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
   .company-grid input[type=color] { width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
+  .co-sec { border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; background: #fff; }
+  .co-sec > summary { cursor: pointer; padding: 11px 14px; font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; list-style: none; display: flex; align-items: center; gap: 8px; user-select: none; }
+  .co-sec > summary::-webkit-details-marker { display: none; }
+  .co-sec > summary::before { content: "\25B8"; font-size: 10px; transition: transform .15s; }
+  .co-sec[open] > summary::before { transform: rotate(90deg); }
+  .co-sec .co-sec-body { padding: 2px 14px 14px; }
   .ct-row { display: grid; grid-template-columns: 1fr 1fr 1.4fr auto auto; gap: 8px; align-items: center; margin-top: 6px; }
   .ct-row .del { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 12px; }
   .company-item, .tmpl-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
@@ -300,71 +306,93 @@
           <button class="btn" id="coPrefill">Vul automatisch in vanaf de website (AI)</button>
           <span class="hint">Naam + website volstaan: contactgegevens, logo, kleur, socials en nieuwsbrief-soorten worden van de site gehaald. Daarna even checken en opslaan.</span>
         </div>
-        <h3 class="style-head">Gegevens voor de footer</h3>
-        <p class="hint">Alleen e-mail is verplicht; lege velden worden gewoon weggelaten uit de footer.</p>
-        <div class="company-grid">
-          <label>E-mail* <input type="text" id="coEmail" placeholder="info@bedrijf.nl"></label>
-          <label>Adres <input type="text" id="coAdres" placeholder="optioneel"></label>
-          <label>Postcode + stad <input type="text" id="coPostcode" placeholder="optioneel"></label>
-          <label>Telefoon <input type="text" id="coTelefoon" placeholder="optioneel"></label>
-          <label>KVK-nummer <input type="text" id="coKvk" placeholder="optioneel"></label>
-        </div>
-        <h3 class="style-head">Afbeeldingen & socials</h3>
-        <div class="company-grid">
-          <label>Logo-URL* <input type="text" id="coLogo" placeholder="https://.../logo.png"></label>
-          <label>Fallback-foto-URL* <span class="hint" style="font-weight:normal;">(getoond als een blok geen eigen foto heeft)</span> <input type="text" id="coDummy" placeholder="https://.../fallback.png"></label>
-          <label>Header-foto-URL <input type="text" id="coHeader" placeholder="optioneel, kan ook via Foto's-tab"></label>
-          <label>Wedstrijden-pagina <input type="text" id="coMatches" placeholder="optioneel, alleen voetbal: URL met alle wedstrijden"></label>
-          <label>Facebook <input type="text" id="coFacebook" placeholder="leeg = link naar website"></label>
-          <label>Instagram <input type="text" id="coInstagram" placeholder="leeg = link naar website"></label>
-          <label>YouTube <input type="text" id="coYoutube" placeholder="leeg = link naar website"></label>
-        </div>
-        <h3 class="style-head">Verzendplatform</h3>
-        <div class="company-grid">
-          <label>Platform
-            <select id="coEsp" class="field">
-              <option value="brevo">Brevo</option>
-              <option value="klaviyo">Klaviyo</option>
-            </select>
-          </label>
-          <label>API-key <input type="password" id="coBrevoKey" placeholder="alleen invullen om te (her)zetten"></label>
-          <label>Lijst-ID <input type="text" id="coBrevoList" placeholder="of kies hieronder"></label>
-        </div>
-        <div class="row" style="margin-top:8px;">
-          <button class="btn secondary" id="espListsBtn">Haal lijsten op met de API-key</button>
-          <select id="espListsSelect" class="field" style="display:none; min-width:280px;"></select>
-        </div>
-        <p class="hint" id="espHint"></p>
-        <h3 class="style-head">Klant-login</h3>
-        <p class="hint">Geef de klant de <b>bedrijfscode</b> (de slug hierboven) als gebruikersnaam en stel hier hun wachtwoord in. Zo'n login ziet alleen dit bedrijf. Minimaal 8 tekens; alleen opnieuw invullen om te wijzigen.</p>
-        <div class="row">
-          <label>Klant-wachtwoord <input type="password" id="coTenantPw" placeholder="alleen invullen om te (her)zetten" autocomplete="new-password"></label>
-          <button class="btn secondary" id="coTenantPwBtn">Wachtwoord instellen</button>
-        </div>
-        <p class="hint" id="coTenantPwStatus"></p>
-        <h3 class="style-head">Klant-accounts</h3>
-        <p class="hint">De nieuwe manier van inloggen: nodig de klant uit per e-mail. Die kiest zelf een wachtwoord en logt in met het e-mailadres; zo'n account ziet alleen dit bedrijf. Het bedrijfscode-wachtwoord hierboven blijft werken als overgang.</p>
-        <div class="row">
-          <label>E-mailadres <input type="text" id="coUserEmail" placeholder="klant@bedrijf.nl" autocomplete="off"></label>
-          <button class="btn secondary" id="coUserInviteBtn">Uitnodigen per mail</button>
-          <button class="btn secondary" id="coUserLinkBtn">Maak link om zelf te delen</button>
-        </div>
-        <div class="row" id="coUserLinkRow" style="display:none;">
-          <input type="password" id="coUserLink" readonly style="flex:1; min-width:280px;">
-          <button class="btn secondary" id="coUserLinkCopy">Kopieer</button>
-          <button class="btn secondary" id="coUserLinkToggle">Toon</button>
-        </div>
-        <div id="coUserList"></div>
-        <p class="hint" id="coUserStatus"></p>
-        <h3 class="style-head">Nieuwsbrief-soorten</h3>
-        <p class="hint">Welke soorten nieuwsbrieven maakt dit bedrijf? "Algemeen" (alleen tekst) kan altijd.</p>
-        <div class="row">
-          <label><input type="checkbox" id="ctMatches"> Wedstrijden (voetbal)</label>
-          <label><input type="checkbox" id="ctClubs"> Clubs (voetbal)</label>
-          <label><input type="checkbox" id="ctReizen"> Reizen (voetbal, pakket met overnachting)</label>
-        </div>
-        <div id="ctRows" style="margin-top:8px;"></div>
-        <button class="btn secondary" id="ctAdd" style="margin-top:8px;">+ Eigen soort toevoegen</button>
+        <details class="co-sec" id="secContact">
+          <summary>Contact & footer</summary>
+          <div class="co-sec-body">
+            <p class="hint">Alleen e-mail is verplicht; lege velden worden weggelaten uit de footer. De AI-knop hierboven vult dit meestal al in.</p>
+            <div class="company-grid">
+              <label>E-mail* <input type="text" id="coEmail" placeholder="info@bedrijf.nl"></label>
+              <label>Adres <input type="text" id="coAdres" placeholder="optioneel"></label>
+              <label>Postcode + stad <input type="text" id="coPostcode" placeholder="optioneel"></label>
+              <label>Telefoon <input type="text" id="coTelefoon" placeholder="optioneel"></label>
+              <label>KVK-nummer <input type="text" id="coKvk" placeholder="optioneel"></label>
+            </div>
+          </div>
+        </details>
+        <details class="co-sec" id="secBeeld">
+          <summary>Afbeeldingen & socials</summary>
+          <div class="co-sec-body">
+            <div class="company-grid">
+              <label>Logo-URL* <input type="text" id="coLogo" placeholder="https://.../logo.png"></label>
+              <label>Fallback-foto-URL* <span class="hint" style="font-weight:normal;">(getoond als een blok geen eigen foto heeft)</span> <input type="text" id="coDummy" placeholder="https://.../fallback.png"></label>
+              <label>Header-foto-URL <input type="text" id="coHeader" placeholder="optioneel, kan ook via Foto's-tab"></label>
+              <label>Wedstrijden-pagina <input type="text" id="coMatches" placeholder="optioneel, alleen voetbal: URL met alle wedstrijden"></label>
+              <label>Facebook <input type="text" id="coFacebook" placeholder="leeg = link naar website"></label>
+              <label>Instagram <input type="text" id="coInstagram" placeholder="leeg = link naar website"></label>
+              <label>YouTube <input type="text" id="coYoutube" placeholder="leeg = link naar website"></label>
+            </div>
+          </div>
+        </details>
+        <details class="co-sec" id="secEsp">
+          <summary>Verzendplatform</summary>
+          <div class="co-sec-body">
+            <div class="company-grid">
+              <label>Platform
+                <select id="coEsp" class="field">
+                  <option value="brevo">Brevo</option>
+                  <option value="klaviyo">Klaviyo</option>
+                </select>
+              </label>
+              <label>API-key <input type="password" id="coBrevoKey" placeholder="alleen invullen om te (her)zetten"></label>
+              <label>Lijst-ID <input type="text" id="coBrevoList" placeholder="of kies hieronder"></label>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button class="btn secondary" id="espListsBtn">Haal lijsten op met de API-key</button>
+              <select id="espListsSelect" class="field" style="display:none; min-width:280px;"></select>
+            </div>
+            <p class="hint" id="espHint"></p>
+          </div>
+        </details>
+        <details class="co-sec" id="secToegang">
+          <summary>Klant-toegang</summary>
+          <div class="co-sec-body">
+            <p class="hint">Nodig de klant uit per e-mail: die kiest zelf een wachtwoord en ziet na het inloggen alleen dit bedrijf.</p>
+            <div class="row">
+              <label>E-mailadres <input type="text" id="coUserEmail" placeholder="klant@bedrijf.nl" autocomplete="off"></label>
+              <button class="btn secondary" id="coUserInviteBtn">Uitnodigen per mail</button>
+              <button class="btn secondary" id="coUserLinkBtn">Maak link om zelf te delen</button>
+            </div>
+            <div class="row" id="coUserLinkRow" style="display:none;">
+              <input type="password" id="coUserLink" readonly style="flex:1; min-width:280px;">
+              <button class="btn secondary" id="coUserLinkCopy">Kopieer</button>
+              <button class="btn secondary" id="coUserLinkToggle">Toon</button>
+            </div>
+            <div id="coUserList"></div>
+            <p class="hint" id="coUserStatus"></p>
+            <details style="margin-top:10px;">
+              <summary class="hint" style="cursor:pointer;">Verouderd: wachtwoord per bedrijfscode (overgangsregeling)</summary>
+              <p class="hint">Gebruikersnaam = de bedrijfscode (de slug hierboven). Minimaal 8 tekens; alleen invullen om te (her)zetten.</p>
+              <div class="row">
+                <label>Klant-wachtwoord <input type="password" id="coTenantPw" placeholder="alleen invullen om te (her)zetten" autocomplete="new-password"></label>
+                <button class="btn secondary" id="coTenantPwBtn">Wachtwoord instellen</button>
+              </div>
+              <p class="hint" id="coTenantPwStatus"></p>
+            </details>
+          </div>
+        </details>
+        <details class="co-sec" id="secSoorten">
+          <summary>Nieuwsbrief-soorten</summary>
+          <div class="co-sec-body">
+            <p class="hint">Welke soorten nieuwsbrieven maakt dit bedrijf? "Algemeen" (alleen tekst) kan altijd.</p>
+            <div class="row">
+              <label><input type="checkbox" id="ctMatches"> Wedstrijden (voetbal)</label>
+              <label><input type="checkbox" id="ctClubs"> Clubs (voetbal)</label>
+              <label><input type="checkbox" id="ctReizen"> Reizen (voetbal, pakket met overnachting)</label>
+            </div>
+            <div id="ctRows" style="margin-top:8px;"></div>
+            <button class="btn secondary" id="ctAdd" style="margin-top:8px;">+ Eigen soort toevoegen</button>
+          </div>
+        </details>
         <div class="row" style="margin-top:16px;">
           <button class="btn" id="companySave">Bedrijf opslaan</button>
           <button class="btn secondary" id="companyReset" style="display:none;">Annuleer bewerken</button>
@@ -1152,6 +1180,7 @@ document.getElementById("coPrefill").onclick = async (e) => {
     companyStatus.textContent = (r.notes && r.notes.length)
       ? "Ingevuld. Nog even checken: " + r.notes.join("; ")
       : "Ingevuld vanaf de website. Controleer de velden en klik op Bedrijf opslaan.";
+    for (const id of ["secContact", "secBeeld", "secSoorten"]) document.getElementById(id).open = true;
   } catch (err) {
     companyStatus.textContent = "Netwerkfout: " + err.message;
   } finally {
@@ -1176,6 +1205,7 @@ function resetCompanyForm() {
   document.getElementById("companyFormTitle").textContent = "Nieuw bedrijf toevoegen";
   document.getElementById("companyReset").style.display = "none";
   companyStatus.textContent = "";
+  for (const el of document.querySelectorAll("details.co-sec")) el.open = false;
 }
 document.getElementById("companyReset").onclick = resetCompanyForm;
 
