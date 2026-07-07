@@ -19,6 +19,9 @@ from app.deps import (
 )
 from app.services.passwords import hash_password
 from app.repositories import secrets as secrets_repo
+from sqlalchemy.exc import IntegrityError
+
+from app.config import get_settings
 from app.repositories import tenants as repo
 from app.repositories import users as users_repo
 from app.services.supabase_auth import SupabaseAuthError
@@ -183,14 +186,23 @@ def invite_tenant_user(
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail="dit e-mailadres heeft al een account"
         )
-    redirect_to = str(request.base_url).rstrip("/") + "/welkom"
+    settings = get_settings()
+    base_url = (settings.app_base_url or str(request.base_url)).rstrip("/")
     try:
-        auth_user_id = supabase.invite_user(email, redirect_to=redirect_to)
+        auth_user_id = supabase.invite_user(email, redirect_to=f"{base_url}/welkom")
     except SupabaseAuthError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    return users_repo.create_user(
-        session, user_id=auth_user_id, tenant_id=tenant_id, email=email
-    )
+    try:
+        return users_repo.create_user(
+            session, user_id=auth_user_id, tenant_id=tenant_id, email=email
+        )
+    except IntegrityError as exc:
+        # Race: tweede invite voor hetzelfde adres won de unique-constraint niet.
+        session.rollback()
+        supabase.delete_auth_user(auth_user_id)
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="dit e-mailadres heeft al een account"
+        ) from exc
 
 
 @router.delete(

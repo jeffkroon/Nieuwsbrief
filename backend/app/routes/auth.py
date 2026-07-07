@@ -124,7 +124,11 @@ def login_supabase(
         identity = supabase.verify_access_token(token)
     except SupabaseAuthError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=401)
-    user = users_repo.get_user(session, uuid.UUID(identity["sub"]))
+    try:
+        auth_user_id = uuid.UUID(identity["sub"])
+    except ValueError:
+        return JSONResponse({"detail": "Ongeldig account-id in het login-token."}, status_code=401)
+    user = users_repo.get_user(session, auth_user_id)
     if user is None:
         return JSONResponse(
             {"detail": "Dit account is nog niet aan een bedrijf gekoppeld. "

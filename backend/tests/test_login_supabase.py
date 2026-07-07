@@ -94,6 +94,13 @@ def test_unknown_supabase_user_gets_403(client, fake_supabase, with_lock) -> Non
     assert "niet aan een bedrijf gekoppeld" in resp.json()["detail"]
 
 
+def test_non_uuid_sub_gets_401_not_500(client, fake_supabase, with_lock) -> None:
+    fake_supabase.identity = {"sub": "geen-uuid", "email": "x@y.nl"}
+    resp = client.post("/login/supabase", json={"access_token": "geldig-token"})
+    assert resp.status_code == 401
+    assert "Ongeldig account-id" in resp.json()["detail"]
+
+
 def test_invalid_token_gets_401(client, fake_supabase, with_lock) -> None:
     fake_supabase.verify_error = SupabaseAuthError("De sessie is verlopen; log opnieuw in.")
     resp = client.post("/login/supabase", json={"access_token": "rot-token"})
@@ -172,6 +179,28 @@ def test_duplicate_email_gives_409(client, session, fake_supabase) -> None:
     resp = client.post(f"/tenants/{tenant.id}/users", json={"email": "klant@bedrijf.nl"})
     assert resp.status_code == 409
     assert fake_supabase.invited == []  # geen mail gestuurd
+
+
+def test_invite_race_on_unique_email_gives_409_and_cleans_up(
+    client, session, fake_supabase, monkeypatch
+) -> None:
+    """Twee gelijktijdige invites: de verliezer van de unique-constraint krijgt
+    een 409 en het zojuist aangemaakte Supabase-account wordt opgeruimd."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.routes import tenants as tenants_routes
+
+    tenant = _tenant(session, f"race-{uuid.uuid4().hex[:6]}")
+    new_id = uuid.uuid4()
+    fake_supabase.next_invite_id = new_id
+
+    def lose_the_race(*args, **kwargs):
+        raise IntegrityError("insert", {}, Exception("unique_violation"))
+
+    monkeypatch.setattr(tenants_routes.users_repo, "create_user", lose_the_race)
+    resp = client.post(f"/tenants/{tenant.id}/users", json={"email": "race@b.nl"})
+    assert resp.status_code == 409
+    assert fake_supabase.deleted == [new_id]  # wees-account opgeruimd
 
 
 def test_invite_on_unknown_tenant_gives_404(client, fake_supabase) -> None:

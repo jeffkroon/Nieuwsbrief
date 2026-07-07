@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     supabase_service_role_key: str | None = None
     # Publieke (anon/publishable) key: mag in de frontend, nodig voor klant-login.
     supabase_publishable_key: str | None = None
+    # Publieke basis-URL van de app; gebruikt voor redirect-links in
+    # uitnodigingsmails. Zonder deze valt de code terug op de Host-header.
+    app_base_url: str | None = None
     images_bucket: str = "tenant-images"
     # Optioneel wachtwoord-slot (sessie-cookie). Leeg = geen slot (lokaal/dev).
     access_user: str = "dunion"
