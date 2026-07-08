@@ -14,9 +14,15 @@ Werkwijze (garanties in code, niet in het model):
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, replace
 
 from app.newsletter.card_block import CARD_TPL_START, has_card_block
+from app.newsletter.custom_fields import (
+    SECTION_END,
+    SECTION_START,
+    find_custom_slots,
+)
 from app.newsletter.models import Item, NewsletterContent, Section
 from app.newsletter.renderer import (
     BANNER_MARKER,
@@ -80,15 +86,26 @@ behoud dan EEN rij-wrapper en zet er <!-- ##KAART_RIJ## --> voor en \
 <!-- /##KAART_RIJ## --> na (met de voorbeeldkaart erbinnen). Verwijder alle overige \
 kaarten en rijen met replace_range. De code herhaalt de voorbeeldkaart per product, \
 twee per rij.
+- EIGEN TEKSTSECTIES BEHOUDEN met invulvakken (voorkeur voor al het redactionele!): \
+heeft de template eigen inhoudssecties die NIET op de vaste placeholders passen \
+(artikelen, kolommen, interviews, Q&A, aankondigingen), GOOI ZE NIET WEG en bouw ze \
+NIET om. Vervang alleen de concrete teksten door vrije invulvakken: {{VAK_<NAAM>}} \
+(hoofdletters, beschrijvend, bv. {{VAK_ARTIKEL_TITEL}}, {{VAK_QA_VRAAG_1}}). Zet \
+<!-- ##SECTIE## --> vóór en <!-- /##SECTIE## --> ná elke afzonderlijke sectie: een \
+sectie waarvan geen enkel vak inhoud krijgt wordt dan automatisch uit de mail \
+weggelaten. Nooit nesten; elk blok eerst sluiten. Ook onbekende placeholders die al \
+in de input staan (bv. {{artikel_titel}}) zet je zo om naar {{VAK_*}}-vakken of, als \
+er een duidelijke match is, naar onze vaste placeholders.
 - <!-- ##CARDS## --> of <!-- ##BANNERS## -->: vervangt de HELE sectie door \
-inhoudsblokken in ONS standaard-ontwerp. Alleen gebruiken als de template GEEN eigen \
-kaart-ontwerp heeft dat behouden kan worden. Kies ##CARDS## bij een grid van kaarten \
-naast elkaar, ##BANNERS## bij brede blokken onder elkaar. Gebruik hiervoor \
-replace_range over de complete sectie.
+inhoudsblokken in ONS standaard-ontwerp. LAATSTE REDMIDDEL: alleen als de template \
+GEEN eigen kaart-ontwerp heeft EN de sectie ook niet als {{VAK_*}}-tekstsectie te \
+behouden is. Kies ##CARDS## bij een grid van kaarten naast elkaar, ##BANNERS## bij \
+brede blokken onder elkaar. Gebruik hiervoor replace_range over de complete sectie.
 - <!-- ##SECTIES## -->: alleen voor "schil"-templates waar de HELE variabele \
 middenzone (hero + teksten + blokken + knoppen samen) per nieuwsbrief opnieuw wordt \
 samengesteld in de chat. Vervang dan die complete middenzone door deze ene marker en \
-laat head en footer staan. Gebruik dit alleen als losse placeholders niet passen.
+laat head en footer staan. LAATSTE REDMIDDEL: alleen als losse placeholders én \
+{{VAK_*}}-vakken allebei niet passen.
 
 BEDRIJFSGEGEVENS (per bedrijf ingevuld):
 - {{BRAND_NAME}}, {{WEBSITE_URL}}, {{LOGO_URL}}, {{FACEBOOK_URL}}, {{INSTAGRAM_URL}}, \
@@ -120,6 +137,9 @@ anders blijft de zichtbare laag een andere kleur houden.
 duidelijk herkenbaar zijn; twijfel je, laat de padding staan en meld het in notes.
 
 REGELS:
+- JOUW ENIGE TAAK is concrete inhoud vervangen door placeholders. Het ONTWERP van de \
+template (layout, secties, structuur, CSS) verander je NOOIT; je verwijdert geen \
+secties behalve overtollige kopieën van de voorbeeldkaart/-rij.
 - Geef ALLEEN operaties terug, nooit de hele HTML.
 - "find", "from" en "to" moeten LETTERLIJK en byte-exact uit de input komen (kopieer \
 precies, inclusief spaties, aanhalingstekens en hoofdletters) en lang genoeg zijn om \
@@ -274,10 +294,38 @@ def verify_toolproof(html: str) -> tuple[list[str], list[str]]:
     """Render met sentinel-content en check dat elke aanwezige placeholder doorstroomt."""
     passed: list[str] = []
     failed: list[str] = []
+    if html.count(SECTION_START) != html.count(SECTION_END):
+        return [], [
+            "##SECTIE##-markers zijn niet in balans "
+            f"({html.count(SECTION_START)}x start, {html.count(SECTION_END)}x einde)"
+        ]
+    slots = find_custom_slots(html)
+    content = _SENTINEL_CONTENT
+    if slots:
+        content = replace(
+            _SENTINEL_CONTENT,
+            custom_fields=tuple((naam, f"TP-VAK-{naam}") for naam in slots),
+        )
     try:
-        rendered = render_newsletter(html, _SENTINEL_BRAND, _SENTINEL_CONTENT)
+        rendered = render_newsletter(html, _SENTINEL_BRAND, content)
     except ValueError as exc:
         return [], [f"render mislukt: {exc}"]
+
+    for naam in slots:
+        if f"TP-VAK-{naam}" in rendered:
+            passed.append(f"invulvak {naam} stroomt door")
+        else:
+            failed.append(f"invulvak {naam} staat in de template maar komt niet in de render")
+    if slots:
+        # Zonder inhoud moeten de vak-secties geruisloos wegvallen.
+        try:
+            kaal = render_newsletter(html, _SENTINEL_BRAND, _SENTINEL_CONTENT)
+        except ValueError as exc:
+            return passed, failed + [f"render zonder invulvakken mislukt: {exc}"]
+        if SECTION_START in kaal or "{{VAK_" in kaal:
+            failed.append("lege invulvak-secties vallen niet netjes weg")
+        else:
+            passed.append("lege invulvak-secties vallen netjes weg")
 
     for placeholder, sentinel in _PLACEHOLDER_SENTINELS.items():
         if placeholder not in html:
@@ -328,8 +376,41 @@ def verify_toolproof(html: str) -> tuple[list[str], list[str]]:
     return passed, failed
 
 
+_UNSAFE_CSS = re.compile(
+    r"display\s*:\s*(?:grid|flex)|:root\b|var\(--|aspect-ratio\s*:|position\s*:\s*absolute",
+    re.IGNORECASE,
+)
+_FOREIGN_PLACEHOLDER = re.compile(r"\{\{\s*([a-z][a-z0-9_.]*)\s*\}\}")
+_ESP_TAG_PREFIXES = ("contact.", "unsubscribe", "organization.", "current_year", "mirror")
+
+
+def analyze_input(raw_html: str) -> list[str]:
+    """Eerlijke voor-checks op de aangeleverde HTML; uitkomsten gaan mee in notes."""
+    notes: list[str] = []
+    vreemd = sorted({
+        naam for naam in _FOREIGN_PLACEHOLDER.findall(raw_html or "")
+        if not naam.startswith(_ESP_TAG_PREFIXES)
+    })
+    if vreemd:
+        kop = ", ".join(vreemd[:8]) + ("..." if len(vreemd) > 8 else "")
+        notes.append(
+            f"De input bevat eigen placeholders ({kop}); die kent het systeem niet. "
+            "Ze zijn waar mogelijk omgezet naar onze placeholders of {{VAK_*}}-invulvakken; "
+            "controleer het resultaat."
+        )
+    if _UNSAFE_CSS.search(raw_html or ""):
+        notes.append(
+            "Let op: de layout leunt op CSS die veel e-mailclients niet ondersteunen "
+            "(grid/flexbox/CSS-variabelen/absolute positionering). Toolproof vervangt "
+            "inhoud, geen layout; voor betrouwbare weergave in Outlook/Gmail is een "
+            "tabel-gebaseerde opbouw nodig."
+        )
+    return notes
+
+
 def make_toolproof(llm, raw_html: str) -> ToolproofResult:
-    """Volledige pipeline: voorstellen -> toepassen -> valideren -> sentinel-verificatie."""
+    """Volledige pipeline: voor-analyse -> voorstellen -> toepassen -> valideren -> verificatie."""
+    input_notes = analyze_input(raw_html)
     proposal = propose_replacements(llm, raw_html)
     html, applied, failed = apply_replacements(raw_html, proposal.get("operations", []))
     _, warnings = validate_template_html(html)
@@ -341,5 +422,5 @@ def make_toolproof(llm, raw_html: str) -> ToolproofResult:
         checks_passed=checks_passed,
         checks_failed=checks_failed,
         warnings=warnings,
-        notes=[n for n in proposal.get("notes", []) if isinstance(n, str)],
+        notes=input_notes + [n for n in proposal.get("notes", []) if isinstance(n, str)],
     )

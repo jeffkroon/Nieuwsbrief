@@ -99,3 +99,58 @@ def test_make_toolproof_not_ok_when_ops_fail() -> None:
     result = make_toolproof(llm, STATIC_HTML)
     assert result.ok is False
     assert result.failed
+
+
+# -- invulvakken ({{VAK_*}}) in de toolproof-verificatie ------------------------
+
+
+def test_verify_checks_custom_slots_flow() -> None:
+    html = (
+        "<html><body>{{INTRO_1}}{{INTRO_2}}"
+        "<!-- ##SECTIE## --><div>{{VAK_ARTIKEL}}</div><!-- /##SECTIE## -->"
+        "</body></html>"
+    )
+    passed, failed = verify_toolproof(html)
+    assert failed == []
+    assert any("invulvak ARTIKEL stroomt door" in p for p in passed)
+    assert any("vallen netjes weg" in p for p in passed)
+
+
+def test_verify_fails_on_unbalanced_section_markers() -> None:
+    html = "<html><body><!-- ##SECTIE## -->{{VAK_X}}</body></html>"
+    passed, failed = verify_toolproof(html)
+    assert passed == []
+    assert failed and "niet in balans" in failed[0]
+
+
+def test_verify_fails_on_nested_sections() -> None:
+    html = (
+        "<html><body><!-- ##SECTIE## -->{{VAK_A}}"
+        "<!-- ##SECTIE## -->{{VAK_B}}<!-- /##SECTIE## -->"
+        "<!-- /##SECTIE## --></body></html>"
+    )
+    _, failed = verify_toolproof(html)
+    assert failed and "render mislukt" in failed[0]
+
+
+def test_analyze_input_flags_foreign_placeholders_and_unsafe_css() -> None:
+    from app.newsletter.toolproof import analyze_input
+
+    origineel = (
+        "<style>:root { --clr: #fff; } .grid { display: grid; }</style>"
+        "<p>{{bedrijfsnaam}} en {{artikel_titel}}</p>"
+        "<p>{{ unsubscribe }} {{ contact.EMAIL }}</p>"
+    )
+    notes = analyze_input(origineel)
+    assert any("eigen placeholders" in n and "bedrijfsnaam" in n for n in notes)
+    assert any("e-mailclients niet ondersteunen" in n for n in notes)
+    # ESP-tags zijn geen 'eigen placeholders'.
+    assert not any("unsubscribe" in n for n in notes)
+    assert analyze_input("<p>{{INTRO_1}}</p>") == []
+
+
+def test_make_toolproof_includes_input_notes() -> None:
+    llm = FakeLLM({"operations": OPS, "notes": ["ai-note"]})
+    result = make_toolproof(llm, STATIC_HTML.replace("<body>", "<body style='display:grid'>"))
+    assert any("e-mailclients" in n for n in result.notes)
+    assert "ai-note" in result.notes
