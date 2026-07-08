@@ -192,3 +192,30 @@ def test_recording_failure_never_breaks_the_call(session) -> None:
     tracked = TrackingLLM(_FakeAnthropicClient(), _BrokenSession(), purpose="chat")
     resp = tracked.messages.create(model="claude-haiku-4-5", max_tokens=10)
     assert resp is not None  # de Claude-call zelf slaagt gewoon
+
+
+def test_draft_clears_validation_cache_for_live_validation() -> None:
+    """Het definitieve concept mag nooit op gecachte validaties leunen."""
+    import pytest
+
+    from app.newsletter.tools import ToolContext, _tool_create_newsletter_draft, _validation_cache
+
+    _validation_cache.clear()
+    _validation_cache.set(("price", "https://x.test/p"), "€ 99")
+
+    class _NoSecretSession:
+        def get(self, *a, **k):
+            return None
+
+    ctx = ToolContext(session=_NoSecretSession(), tenant_id=uuid.uuid4(), cipher=None)
+    # Zonder confirmed weigert de tool VOOR de build: cache blijft dan staan
+    # (er wordt immers niets gerenderd).
+    with pytest.raises(ValueError, match="toestemming"):
+        _tool_create_newsletter_draft(ctx, {})
+    assert _validation_cache.get(("price", "https://x.test/p"))[0] is True
+
+    # Met confirmed strandt hij verderop (geen tenant), maar de cache is dan
+    # al geleegd: het concept valideert altijd vers.
+    with pytest.raises(ValueError):
+        _tool_create_newsletter_draft(ctx, {"confirmed": True})
+    assert _validation_cache.get(("price", "https://x.test/p"))[0] is False

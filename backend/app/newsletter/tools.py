@@ -920,6 +920,10 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
             "Nog geen toestemming om het concept aan te maken. Vat de nieuwsbrief samen, "
             "vraag de gebruiker eerst om toestemming, en roep dit pas aan met confirmed=true."
         )
+    # Harde garantie: het DEFINITIEVE concept valideert altijd live. De
+    # validatie-cache is er voor preview-re-renders; hier legen we hem, zodat
+    # prijzen/links in het concept nooit ouder zijn dan dit moment.
+    _validation_cache.clear()
     tenant = _load_tenant(ctx)
     esp = (tenant.config or {}).get("esp", "brevo")
     esp_label = "Klaviyo" if esp == "klaviyo" else "Brevo"

@@ -41,6 +41,7 @@ from app.schemas import (
 )
 from app.services.brevo import BrevoClient, BrevoError
 from app.services.company_prefill import prefill_company
+from app.services.llm_usage import TrackingLLM
 from app.services.crypto import SecretCipher
 from app.services.klaviyo import KlaviyoClient, KlaviyoError
 from app.services.tone import analyze_and_store_tone, get_cached_tone
@@ -80,8 +81,6 @@ def prefill_tenant(
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
     try:
-        from app.services.llm_usage import TrackingLLM
-
         result = prefill_company(
             TrackingLLM(client, session, purpose="prefill"),
             name=body.name.strip(), website_url=url,
