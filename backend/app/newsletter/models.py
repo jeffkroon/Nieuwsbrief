@@ -93,6 +93,9 @@ class NewsletterContent:
     # Opzet-composer: gevuld = de secties worden in deze volgorde gerenderd op de
     # ##SECTIES##-marker; leeg = de vaste placeholder-opzet van de template.
     sections: tuple[Section, ...] = ()
+    # Template-eigen invulvakken ({{VAK_*}}): (naam, tekst)-paren; alleen gevuld
+    # met informatie van de gebruiker. Lege ##SECTIE##-blokken vervallen in code.
+    custom_fields: tuple[tuple[str, str], ...] = ()
     preview_text: str | None = None
     header_title: str | None = None
     header_subtitle: str | None = None

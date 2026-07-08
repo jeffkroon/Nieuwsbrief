@@ -33,6 +33,7 @@ from app.newsletter.models import (
     NewsletterContent,
     Section,
 )
+from app.newsletter.custom_fields import find_custom_slots, normalize_custom_fields
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.styles import (
     COLOR_KEYS,
@@ -243,6 +244,16 @@ TOOL_DEFINITIONS = [
                         },
                         "required": ["title", "url"],
                     },
+                },
+                "custom_fields": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                    "description": "Template-eigen invulvakken: sommige templates hebben vrije "
+                    "tekstvakken ({{VAK_*}}). De preview-uitvoer meldt welke vakken de gekozen "
+                    "template heeft. Vul per vak de tekst, sleutel = vaknaam (bv. 'ARTIKEL_TITEL'). "
+                    "ALLEEN vullen met informatie die de gebruiker gaf of die je met tools hebt "
+                    "opgehaald; NOOIT zelf inhoud verzinnen. Vakken die je leeg laat zijn veilig: "
+                    "een sectie zonder inhoud wordt automatisch uit de mail weggelaten.",
                 },
                 "sections": {
                     "type": "array",
@@ -671,6 +682,20 @@ def _validated_sections(ctx: ToolContext, raw_sections: list[dict]) -> list[Sect
     return sections
 
 
+def _validated_custom_fields(raw) -> dict[str, str]:
+    """Valideer de template-eigen invulvakken: plat object van tekst naar tekst."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("custom_fields moet een object zijn: {\"VAKNAAM\": \"tekst\"}")
+    for key, value in raw.items():
+        if not isinstance(value, (str, int, float)):
+            raise ValueError(
+                f"custom_fields[{key!r}] moet tekst zijn, geen {type(value).__name__}"
+            )
+    return normalize_custom_fields({k: str(v) for k, v in raw.items()})
+
+
 def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
     if not raw_clubs:
         return []
@@ -787,6 +812,7 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
             f"header_text_color moet een hex-kleur zijn (bv. '#ffffff'), "
             f"niet {header_text_color!r}"
         )
+    custom_fields = _validated_custom_fields(tool_input.get("custom_fields"))
     content = NewsletterContent(
         theme=tool_input["theme"],
         subject=tool_input["subject"],
@@ -806,17 +832,29 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
         clubs=tuple(clubs),
         items=tuple(items),
         sections=tuple(sections),
+        custom_fields=tuple(sorted(custom_fields.items())),
     )
     template_html, brand = _resolve_template_html(ctx, tenant, brand)
     brand = _apply_style_overrides(brand, template_html, tool_input.get("style_overrides"))
     html = render_newsletter(template_html, brand, content)
-    return tenant, brand, content, matches, clubs, items, html
+    slots = find_custom_slots(template_html)
+    unfilled = [naam for naam in slots if not custom_fields.get(naam)]
+    return tenant, brand, content, matches, clubs, items, html, unfilled
 
 
 def _tool_preview_newsletter(ctx: ToolContext, tool_input: dict) -> dict:
-    _, _, content, matches, clubs, items, html = _build_newsletter(ctx, tool_input)
+    _, _, content, matches, clubs, items, html, unfilled = _build_newsletter(ctx, tool_input)
     ctx.preview_holder.append(html)  # frontend toont dit in het voorbeeldpaneel
+    result_extra = {}
+    if unfilled:
+        result_extra["invulvakken_nog_leeg"] = unfilled
+        result_extra["invulvakken_hint"] = (
+            "Deze template heeft eigen invulvakken die nog leeg zijn; die secties zijn uit "
+            "de preview weggelaten. Vul ze via custom_fields (alleen met informatie van de "
+            "gebruiker; vraag ernaar als iets ontbreekt), of laat ze bewust leeg."
+        )
     return {
+        **result_extra,
         "status": "preview",
         "subject": content.subject,
         "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
@@ -844,7 +882,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
             "(zet die via de Bedrijven-tab of PUT /tenants/{id}/secrets)"
         )
 
-    tenant, brand, content, matches, clubs, items, html = _build_newsletter(ctx, tool_input)
+    tenant, brand, content, matches, clubs, items, html, _unfilled = _build_newsletter(ctx, tool_input)
     if esp == "klaviyo":
         client = ctx.klaviyo_factory(api_key)
         list_id = brand.get("klaviyo_list_id")
