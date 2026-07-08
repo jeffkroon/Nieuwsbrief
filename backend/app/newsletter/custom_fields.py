@@ -31,12 +31,21 @@ def find_custom_slots(html: str) -> list[str]:
 
 
 def normalize_custom_fields(raw: dict) -> dict[str, str]:
-    """Sleutels naar VAK-vorm (hoofdletters, zonder 'VAK_'-prefix), waarden gestript."""
+    """Sleutels naar VAK-vorm (hoofdletters, zonder 'VAK_'-prefix), waarden gestript.
+
+    Botsende sleutels na normalisatie (bv. 'vak_titel' en 'TITEL') zijn een harde
+    fout: nooit stil de ene waarde door de andere laten winnen.
+    """
     clean: dict[str, str] = {}
     for key, value in (raw or {}).items():
         name = str(key).strip().upper()
         if name.startswith("VAK_"):
             name = name[len("VAK_"):]
+        if name in clean:
+            raise ValueError(
+                f"custom_fields bevat twee sleutels die allebei op {name!r} uitkomen; "
+                "gebruik elke vaknaam maar één keer"
+            )
         clean[name] = str(value).strip()
     return clean
 
@@ -50,8 +59,10 @@ def fill_custom_fields(html: str, fields: dict[str, str]) -> str:
 
     Volgorde per sectieblok: heeft geen enkel vak erbinnen inhoud, dan verdwijnt
     het hele blok (inclusief markers); anders blijft het blok staan (zonder
-    markers) met de vakken ingevuld. Vakken buiten sectieblokken worden gewoon
-    ingevuld; een leeg vak wordt een lege string.
+    markers) met de vakken ingevuld. LET OP: de wegval-garantie geldt alleen
+    binnen een ##SECTIE##-blok; een vak daarbuiten wordt bij leeg gewoon een
+    lege tekst (de omliggende markup blijft staan). Geneste blokken zijn een
+    harde fout: liever falen dan kapotte HTML versturen.
     """
     fields = normalize_custom_fields(fields)
     parts: list[str] = []
@@ -64,6 +75,11 @@ def fill_custom_fields(html: str, fields: dict[str, str]) -> str:
         if end == -1:
             break  # niet-afgesloten blok: laat staan, geen halve verwijderingen
         inner = rest[start + len(SECTION_START):end]
+        if SECTION_START in inner:
+            raise ValueError(
+                "geneste ##SECTIE##-blokken worden niet ondersteund; sluit elk blok "
+                "eerst af met <!-- /##SECTIE## --> voordat een nieuw blok begint"
+            )
         parts.append(_fill(rest[:start], fields))
         slots = SLOT_PATTERN.findall(inner)
         if any(fields.get(name) for name in slots):

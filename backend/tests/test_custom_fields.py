@@ -77,6 +77,21 @@ def test_multiple_sections_drop_independently() -> None:
     assert out == "[B:vol]"
 
 
+def test_nested_sections_fail_hard() -> None:
+    html = (
+        "<!-- ##SECTIE## --> buiten {{VAK_A}} "
+        "<!-- ##SECTIE## --> binnen {{VAK_B}} <!-- /##SECTIE## -->"
+        " rest <!-- /##SECTIE## -->"
+    )
+    with pytest.raises(ValueError, match="geneste"):
+        fill_custom_fields(html, {"A": "x"})
+
+
+def test_colliding_keys_fail_hard() -> None:
+    with pytest.raises(ValueError, match="TITEL"):
+        normalize_custom_fields({"vak_titel": "een", "TITEL": "twee"})
+
+
 def test_unclosed_section_left_untouched() -> None:
     html = "x <!-- ##SECTIE## --> {{VAK_A}} zonder einde"
     out = fill_custom_fields(html, {"A": "vol"})

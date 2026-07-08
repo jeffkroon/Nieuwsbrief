@@ -253,7 +253,8 @@ TOOL_DEFINITIONS = [
                     "template heeft. Vul per vak de tekst, sleutel = vaknaam (bv. 'ARTIKEL_TITEL'). "
                     "ALLEEN vullen met informatie die de gebruiker gaf of die je met tools hebt "
                     "opgehaald; NOOIT zelf inhoud verzinnen. Vakken die je leeg laat zijn veilig: "
-                    "een sectie zonder inhoud wordt automatisch uit de mail weggelaten.",
+                    "een ##SECTIE##-blok zonder inhoud wordt automatisch uit de mail weggelaten "
+                    "(een los vak buiten zo'n blok wordt een lege tekst).",
                 },
                 "sections": {
                     "type": "array",
