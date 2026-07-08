@@ -158,7 +158,7 @@ def test_continue_conversation_keeps_history(client, session, fake_anthropic) ->
     # Het laatste bericht krijgt een cache-markering (geschiedenis-caching);
     # de tekst zelf blijft gelijk.
     assert second_history[2]["content"][0]["text"] == "tweede vraag"
-    assert second_history[2]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert second_history[2]["content"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
 
 
 def test_start_missing_tenant_404(client, fake_anthropic) -> None:

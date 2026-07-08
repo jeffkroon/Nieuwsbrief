@@ -89,6 +89,26 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
+class LlmUsage(Base):
+    """Token-verbruik per Claude-call (meten = weten; zie services/llm_usage.py)."""
+
+    __tablename__ = "llm_usage"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # Bewust geen FK's: een logtabel mag nooit een delete van een tenant/gesprek blokkeren.
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    purpose: Mapped[str] = mapped_column(Text, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(nullable=False, default=0)
+    cache_creation_tokens: Mapped[int] = mapped_column(nullable=False, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
 class TenantSecret(Base):
     """Versleutelde secret per tenant (bv. Brevo API-key).
 

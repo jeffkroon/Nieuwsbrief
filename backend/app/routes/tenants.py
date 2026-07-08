@@ -41,6 +41,7 @@ from app.schemas import (
 )
 from app.services.brevo import BrevoClient, BrevoError
 from app.services.company_prefill import prefill_company
+from app.services.llm_usage import TrackingLLM
 from app.services.crypto import SecretCipher
 from app.services.klaviyo import KlaviyoClient, KlaviyoError
 from app.services.tone import analyze_and_store_tone, get_cached_tone
@@ -70,6 +71,7 @@ def create_tenant(data: TenantCreate, session: Session = Depends(get_session)) -
 def prefill_tenant(
     body: TenantPrefillRequest,
     client=Depends(get_anthropic_client),
+    session: Session = Depends(get_session),
 ) -> TenantPrefillResult:
     """Vul een bedrijfsvoorstel automatisch vanaf de website (naam + URL volstaan).
 
@@ -79,7 +81,10 @@ def prefill_tenant(
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
     try:
-        result = prefill_company(client, name=body.name.strip(), website_url=url)
+        result = prefill_company(
+            TrackingLLM(client, session, purpose="prefill"),
+            name=body.name.strip(), website_url=url,
+        )
     except ValueError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return TenantPrefillResult(**result)

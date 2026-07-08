@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.deps import get_anthropic_client, get_session, require_admin, require_tenant_access
+from app.services.llm_usage import TrackingLLM
 from app.newsletter.models import Club, Match, NewsletterContent, Section
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.styles import sanitize_styles
@@ -149,7 +150,9 @@ def toolproof(
             status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"Template te groot (max {MAX_TEMPLATE_CHARS} tekens).",
         )
-    result = make_toolproof(client, body.html)
+    result = make_toolproof(
+        TrackingLLM(client, session, purpose="toolproof", tenant_id=tenant_id), body.html
+    )
     return TemplateToolproofResult(
         ok=result.ok,
         html=result.html,
