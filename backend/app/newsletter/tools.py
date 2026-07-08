@@ -251,10 +251,15 @@ TOOL_DEFINITIONS = [
                     "description": "Template-eigen invulvakken: sommige templates hebben vrije "
                     "tekstvakken ({{VAK_*}}). De preview-uitvoer meldt welke vakken de gekozen "
                     "template heeft. Vul per vak de tekst, sleutel = vaknaam (bv. 'ARTIKEL_TITEL'). "
-                    "ALLEEN vullen met informatie die de gebruiker gaf of die je met tools hebt "
-                    "opgehaald; NOOIT zelf inhoud verzinnen. Vakken die je leeg laat zijn veilig: "
-                    "een ##SECTIE##-blok zonder inhoud wordt automatisch uit de mail weggelaten "
-                    "(een los vak buiten zo'n blok wordt een lege tekst).",
+                    "COPY SCHRIJF JE ZELF, FEITEN NOOIT: merk-/marketingteksten (artikelen, "
+                    "kolommen, Q&A over het assortiment, banners) schrijf je zelf in de tone of "
+                    "voice en passend bij het thema, precies zoals de intro's. Maar vakken die "
+                    "echte feiten vereisen (namen van personen, interviews, projecten, prijzen, "
+                    "quotes, datums, foto-URL's) vul je ALLEEN met informatie die de gebruiker gaf "
+                    "of die je met tools hebt opgehaald; ontbreekt die, laat het vak dan leeg of "
+                    "vraag ernaar. Vakken die je leeg laat zijn veilig: een ##SECTIE##-blok zonder "
+                    "inhoud wordt automatisch uit de mail weggelaten (een los vak buiten zo'n blok "
+                    "wordt een lege tekst).",
                 },
                 "sections": {
                     "type": "array",
@@ -851,8 +856,10 @@ def _tool_preview_newsletter(ctx: ToolContext, tool_input: dict) -> dict:
         result_extra["invulvakken_nog_leeg"] = unfilled
         result_extra["invulvakken_hint"] = (
             "Deze template heeft eigen invulvakken die nog leeg zijn; die secties zijn uit "
-            "de preview weggelaten. Vul ze via custom_fields (alleen met informatie van de "
-            "gebruiker; vraag ernaar als iets ontbreekt), of laat ze bewust leeg."
+            "de preview weggelaten. Schrijf zelf passende merkcopy voor de tekstvakken "
+            "(tone of voice, zoals de intro's), maar vul vakken die echte feiten vereisen "
+            "(personen, projecten, prijzen, quotes, foto-URL's) alleen met informatie van "
+            "de gebruiker; vraag ernaar of laat ze bewust leeg."
         )
     return {
         **result_extra,
