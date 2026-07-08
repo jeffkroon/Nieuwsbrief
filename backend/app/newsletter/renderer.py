@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 from app.newsletter.card_block import render_template_cards
+from app.newsletter.custom_fields import fill_custom_fields
 from app.newsletter.models import (
     PRICE_ON_REQUEST,
     Club,
@@ -498,6 +499,8 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
     # Template-eigen kaarten: het ##KAART##-blok herhaalt de markup van de klant
     # zelf per blok (het ontwerp blijft van de klant, wij vullen alleen de data).
     html = render_template_cards(html, brand, content, image_fallback=club_image_url)
+    # Template-eigen invulvakken ({{VAK_*}}); secties zonder inhoud vervallen in code.
+    html = fill_custom_fields(html, dict(content.custom_fields))
     # Ruim ongevulde eigen placeholders op (bv. als een template een veld weglaat of
     # een onbekende toevoegt), zodat er nooit een rauwe {{IETS}} in de mail belandt.
     return _INTERNAL_PLACEHOLDER.sub("", html)
