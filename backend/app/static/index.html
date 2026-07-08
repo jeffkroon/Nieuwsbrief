@@ -45,7 +45,7 @@
   #chatSplit { display: flex; height: 100%; }
   #chatCol { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
   #chat { flex: 1; overflow-y: auto; padding: 24px 26px 10px; display: flex; flex-direction: column; gap: 12px; }
-  #chatPreview { flex: 0 0 460px; overflow-y: auto; border-left: 1px solid var(--border); background: #fbfbfc; padding: 16px; display: flex; flex-direction: column; }
+  #chatPreview { flex: 0 0 clamp(460px, 42vw, 660px); overflow-y: auto; border-left: 1px solid var(--border); background: #fbfbfc; padding: 16px; display: flex; flex-direction: column; }
   #chatPreviewHead { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   #previewDevices { display: none; gap: 4px; }
   #chatPreview.has-preview #previewDevices { display: inline-flex; }
