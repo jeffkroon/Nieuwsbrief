@@ -26,6 +26,11 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
+# 1-uurs cache i.p.v. de standaard 5 minuten: gebruikers denken in deze chat-flow
+# vaak langer dan 5 minuten na, en dan werd het vaste prefix (~8k tokens) plus de
+# hele geschiedenis elke beurt opnieuw vol afgerekend. Schrijven kost eenmalig 2x,
+# lezen blijft ~10%; bij dit gebruikspatroon wint 1 uur vrijwel altijd.
+CACHE_CONTROL = {"type": "ephemeral", "ttl": "1h"}
 MAX_OUTPUT_TOKENS = 16000
 MAX_ITERATIONS = 12
 
@@ -67,11 +72,11 @@ def _with_history_cache(messages: list[dict]) -> list[dict]:
     content = last.get("content")
     if isinstance(content, str):
         last["content"] = [
-            {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
+            {"type": "text", "text": content, "cache_control": CACHE_CONTROL}
         ]
     elif isinstance(content, list) and content and isinstance(content[-1], dict):
         blocks = list(content)
-        blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
+        blocks[-1] = {**blocks[-1], "cache_control": CACHE_CONTROL}
         last["content"] = blocks
     else:
         # SDK-objecten (assistant-beurt) of leeg: niets forceren, gewoon doorsturen.
@@ -94,7 +99,7 @@ def run_agent_turn(
     # Cache de system-prompt (rendert na de tools, dus dit cachet tools + system samen).
     # Dat vaste prefix wordt elke loop-stap en elke beurt opnieuw verstuurd; gecachet
     # kost het daarna ~10% i.p.v. de volle prijs.
-    cached_system = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+    cached_system = [{"type": "text", "text": system, "cache_control": CACHE_CONTROL}]
 
     for iteration in range(1, max_iterations + 1):
         response = client.beta.messages.create(
@@ -103,7 +108,7 @@ def run_agent_turn(
             thinking={"type": "adaptive"},
             output_config={"effort": "medium"},
             # Ruim oude tool-resultaten op bij lange gesprekken (behoudt het gesprek zelf).
-            betas=["context-management-2025-06-27"],
+            betas=["context-management-2025-06-27", "extended-cache-ttl-2025-04-11"],
             context_management={"edits": [{"type": "clear_tool_uses_20250919"}]},
             system=cached_system,
             tools=tools,

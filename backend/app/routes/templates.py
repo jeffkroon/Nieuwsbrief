@@ -149,7 +149,11 @@ def toolproof(
             status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"Template te groot (max {MAX_TEMPLATE_CHARS} tekens).",
         )
-    result = make_toolproof(client, body.html)
+    from app.services.llm_usage import TrackingLLM
+
+    result = make_toolproof(
+        TrackingLLM(client, session, purpose="toolproof", tenant_id=tenant_id), body.html
+    )
     return TemplateToolproofResult(
         ok=result.ok,
         html=result.html,

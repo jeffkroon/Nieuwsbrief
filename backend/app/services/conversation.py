@@ -19,6 +19,7 @@ from app.newsletter.tools import TOOL_DEFINITIONS, ToolContext, execute_tool
 from app.repositories import conversations as repo
 from app.repositories import templates as templates_repo
 from app.services.crypto import SecretCipher
+from app.services.llm_usage import TrackingLLM
 from app.services.tone import ensure_tone
 
 # Alleen deze rollen worden teruggespeeld naar Claude als geschiedenis.
@@ -75,6 +76,13 @@ def run_conversation_turn(
     template_id = template_id or conversation.template_id
 
     repo.add_message(session, conversation.id, "user", user_text)
+
+    # Elke Claude-call van deze beurt (orchestrator én Haiku-extracties) wordt
+    # geregistreerd in mail.llm_usage: meten wat een gesprek werkelijk kost.
+    client = TrackingLLM(
+        client, session, purpose="chat",
+        tenant_id=conversation.tenant_id, conversation_id=conversation.id,
+    )
 
     history = repo.list_messages(session, conversation.id)
     claude_messages = [

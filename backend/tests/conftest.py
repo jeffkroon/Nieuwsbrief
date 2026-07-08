@@ -14,6 +14,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 MAIL_TABLES = (
+    "mail.llm_usage",
     "mail.users",
     "mail.tenant_secrets",
     "mail.messages",
@@ -92,4 +93,7 @@ def _reset_chat_limiter():
 
     _conv._chat_limiter.reset()
     _auth._login_limiter.reset()
+    from app.newsletter import tools as _tools
+
+    _tools._validation_cache.clear()
     yield

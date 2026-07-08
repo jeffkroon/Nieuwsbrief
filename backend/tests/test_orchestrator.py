@@ -133,7 +133,7 @@ def test_system_prompt_is_cached() -> None:
     client, _ = _run([FakeResponse([FakeText("ok")], "end_turn")])
     system = client.messages.calls[0]["system"]
     assert isinstance(system, list)
-    assert system[0]["cache_control"] == {"type": "ephemeral"}
+    assert system[0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
 
 
 def test_pause_turn_continues() -> None:
@@ -168,7 +168,7 @@ def test_history_gets_cache_marker_without_mutating_input() -> None:
     run_agent_turn(fake, system="s", messages=original, tools=[], dispatch=lambda n, i: {})
     sent = fake.messages.calls[0]["messages"]
     assert sent[-1]["content"][0]["text"] == "hallo"
-    assert sent[-1]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert sent[-1]["content"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert original == [{"role": "user", "content": "hallo"}]  # geen mutatie
 
 
@@ -187,7 +187,7 @@ def test_tool_results_get_cache_marker() -> None:
     second_call = fake.messages.calls[1]["messages"]
     last_block = second_call[-1]["content"][-1]
     assert last_block["type"] == "tool_result"
-    assert last_block["cache_control"] == {"type": "ephemeral"}
+    assert last_block["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     # Maximaal 1 markering in de berichten (plus 1 op system = ruim binnen de limiet van 4).
     markers = sum(
         1

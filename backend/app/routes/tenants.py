@@ -70,6 +70,7 @@ def create_tenant(data: TenantCreate, session: Session = Depends(get_session)) -
 def prefill_tenant(
     body: TenantPrefillRequest,
     client=Depends(get_anthropic_client),
+    session: Session = Depends(get_session),
 ) -> TenantPrefillResult:
     """Vul een bedrijfsvoorstel automatisch vanaf de website (naam + URL volstaan).
 
@@ -79,7 +80,12 @@ def prefill_tenant(
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
     try:
-        result = prefill_company(client, name=body.name.strip(), website_url=url)
+        from app.services.llm_usage import TrackingLLM
+
+        result = prefill_company(
+            TrackingLLM(client, session, purpose="prefill"),
+            name=body.name.strip(), website_url=url,
+        )
     except ValueError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return TenantPrefillResult(**result)

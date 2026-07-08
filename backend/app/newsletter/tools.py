@@ -45,6 +45,7 @@ from app.newsletter.styles import (
     sanitize_styles,
 )
 from app.newsletter.templates import load_template
+from app.newsletter.validation_cache import ValidationCache
 from app.repositories import images as images_repo
 from app.repositories import newsletters as newsletters_repo
 from app.repositories import secrets as secrets_repo
@@ -295,6 +296,12 @@ TOOL_DEFINITIONS = [
         },
     },
 ]
+
+
+# Validatie-cache: identieke live-checks (prijs, bereikbaarheid, og-foto) binnen
+# 10 minuten niet herhalen. Nieuwe/gewijzigde blokken raken andere sleutels en
+# worden dus gewoon gevalideerd; garanties blijven in code.
+_validation_cache = ValidationCache()
 
 
 def _load_tenant(ctx: ToolContext) -> Tenant:
@@ -557,19 +564,28 @@ def _resolve_price(
     wint de handmatige prijs van de site; de URL wordt dan nog steeds gevalideerd.
     Zonder override is de handmatige prijs enkel de terugval als de site er geen heeft.
     """
-    status, html = extraction.fetch_page(url, ctx.http_client)
-    if status != 200:
-        raise ValueError(
-            f"URL bestaat niet of is onbereikbaar: {url} (status {status}). "
-            "Gebruik find_matches of find_ticket_links voor een geldige link."
-        )
+    price_key = ("min_price" if vanaf else "price", url)
     if override and manual:
+        # Expliciete gebruikersprijs: alleen bereikbaarheid checken (gecacht).
+        _require_reachable(ctx, url)
         return extraction.normalize_price(manual)
-    if vanaf:
-        # Clubpagina met meerdere wedstrijden: 'vanaf' = de laagste prijs (in code).
-        price = extraction.extract_min_price(llm, html, source_url=url)
+    hit, cached = _validation_cache.get(price_key)
+    if hit:
+        price = cached
     else:
-        price = extraction.extract_price(llm, html, source_url=url)
+        status, html = extraction.fetch_page(url, ctx.http_client)
+        if status != 200:
+            raise ValueError(
+                f"URL bestaat niet of is onbereikbaar: {url} (status {status}). "
+                "Gebruik find_matches of find_ticket_links voor een geldige link."
+            )
+        _validation_cache.set(("ok", url), True)
+        if vanaf:
+            # Clubpagina met meerdere wedstrijden: 'vanaf' = de laagste prijs (in code).
+            price = extraction.extract_min_price(llm, html, source_url=url)
+        else:
+            price = extraction.extract_price(llm, html, source_url=url)
+        _validation_cache.set(price_key, price)
     # Geen prijs op de site? Gebruik de handmatig opgegeven vanafprijs (echte prijs wint).
     if price == PRICE_ON_REQUEST and manual:
         price = extraction.normalize_price(manual)
@@ -619,25 +635,46 @@ def _validated_items(ctx: ToolContext, raw_items: list[dict]) -> list[Item]:
     """
     items: list[Item] = []
     for it in raw_items:
-        status, page_html = extraction.fetch_page(it["url"], ctx.http_client)
-        if status != 200:
-            raise ValueError(
-                f"URL bestaat niet of is onbereikbaar: {it['url']} (status {status}). "
-                "Gebruik find_products of find_ticket_links voor een geldige link."
-            )
+        url = it["url"]
+        page_html: str | None = None  # pas ophalen als een check hem echt nodig heeft
+
+        def _page() -> str:
+            nonlocal page_html
+            if page_html is None:
+                status, fetched = extraction.fetch_page(url, ctx.http_client)
+                if status != 200:
+                    raise ValueError(
+                        f"URL bestaat niet of is onbereikbaar: {url} (status {status}). "
+                        "Gebruik find_products of find_ticket_links voor een geldige link."
+                    )
+                _validation_cache.set(("ok", url), True)
+                page_html = fetched
+            return page_html
+
+        reachable_hit, _ = _validation_cache.get(("ok", url))
+        if not reachable_hit:
+            _page()
 
         price = it.get("price")
         if price and it.get("price_override"):
             price = extraction.normalize_price(price)
         elif price:
-            scraped = extraction.extract_price(
-                _require_llm(ctx), page_html, source_url=it["url"]
-            )
+            hit, cached = _validation_cache.get(("price", url))
+            if hit:
+                scraped = cached
+            else:
+                scraped = extraction.extract_price(_require_llm(ctx), _page(), source_url=url)
+                _validation_cache.set(("price", url), scraped)
             price = scraped if scraped != PRICE_ON_REQUEST else extraction.normalize_price(price)
 
         image_url = _resolve_image_for(ctx, it.get("image_url"), it["title"])
         if not image_url:
-            image_url = extraction.extract_og_image(page_html)
+            hit, cached = _validation_cache.get(("og", url))
+            if hit:
+                image_url = cached
+            else:
+                image_url = extraction.extract_og_image(_page())
+                _validation_cache.set(("og", url), image_url)
 
         items.append(
             Item(
@@ -650,9 +687,13 @@ def _validated_items(ctx: ToolContext, raw_items: list[dict]) -> list[Item]:
 
 
 def _require_reachable(ctx: ToolContext, url: str) -> None:
+    hit, _ok = _validation_cache.get(("ok", url))
+    if hit:
+        return
     status, _ = extraction.fetch_page(url, ctx.http_client)
     if status != 200:
         raise ValueError(f"URL bestaat niet of is onbereikbaar: {url} (status {status}).")
+    _validation_cache.set(("ok", url), True)
 
 
 def _validated_sections(ctx: ToolContext, raw_sections: list[dict]) -> list[Section]:
