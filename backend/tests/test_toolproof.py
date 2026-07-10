@@ -130,13 +130,13 @@ def test_make_toolproof_end_to_end() -> None:
 def test_failed_verification_reverts_to_original() -> None:
     """Review-vondst: een gefaalde verificatie mag nooit gemuteerde HTML
     achterlaten die een admin per ongeluk kan opslaan. Falen = verwerpen."""
-    ops = [{  # kaartblok ZONDER foto/link-tokens: sentinel-verificatie faalt
+    ops = [{  # kaartblok ZONDER titel-token: de titel is verplicht -> faalt
         "op": "replace",
         "find": '<div><a href="https://bedrijfx.nl/p1"><img src="https://bedrijfx.nl/p1.png"/>kaart 1</a></div>',
         "from": None, "to": None,
-        "replace": '<!-- ##KAART## --><div><a href="https://bedrijfx.nl/p1">'
-                   '<img src="https://bedrijfx.nl/p1.png"/>{{KAART_TITEL}}</a></div><!-- /##KAART## -->',
-        "reason": "kaart zonder url/foto-tokens",
+        "replace": '<!-- ##KAART## --><div><a href="{{KAART_URL}}">'
+                   '<img src="{{KAART_IMAGE_URL}}"/>kaart 1</a></div><!-- /##KAART## -->',
+        "reason": "kaart zonder titel-token",
     }]
     result = make_toolproof(FakeLLM({"operations": ops, "notes": []}), STATIC_HTML)
     assert not result.ok

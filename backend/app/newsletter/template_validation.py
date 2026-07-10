@@ -7,6 +7,8 @@ nieuwsbrief of een kaart-/review-layout zonder wedstrijdblokken) gewoon kan.
 
 from __future__ import annotations
 
+import re
+
 from app.newsletter.card_block import CARD_TPL_END, CARD_TPL_START
 from app.newsletter.renderer import BANNER_MARKER, CARD_MARKER, SECTIONS_MARKER
 
@@ -37,6 +39,11 @@ RECOMMENDED: dict[str, str] = {
 _BUTTON_TOKENS = ("{{STYLE_BUTTON_BG}}", "{{STYLE_CTA_BUTTON_BG}}", "{{STYLE_HERO_BUTTON_BG}}")
 
 
+# Onze eigen placeholder-/marker-vormen; een template zonder ook maar één
+# hiervan is niet tool-proof gemaakt en kan door niets ingevuld worden.
+_PLACEHOLDER_OF_MARKER = re.compile(r"\{\{[A-Z][A-Z0-9_]*\}\}|##[A-Z_]+##")
+
+
 def validate_template_html(html: str) -> tuple[list[str], list[str]]:
     """Geef (errors, warnings) terug. Lege errors-lijst = mag opgeslagen worden."""
     text = html or ""
@@ -45,6 +52,11 @@ def validate_template_html(html: str) -> tuple[list[str], list[str]]:
         for marker, desc in REQUIRED.items()
         if marker not in text
     ]
+    if not _PLACEHOLDER_OF_MARKER.search(text):
+        errors.append(
+            "deze template heeft geen enkele placeholder of marker; hij is niet "
+            "tool-proof gemaakt. Klik eerst op 'Maak tool-proof (AI)' voordat je opslaat."
+        )
     warnings = [
         f"aanbevolen ontbreekt: {marker} ({desc})"
         for marker, desc in RECOMMENDED.items()

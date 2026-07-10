@@ -7,7 +7,8 @@ from app.newsletter.template_validation import validate_template_html
 
 
 def test_missing_banner_marker_is_warning_not_error() -> None:
-    errors, warnings = validate_template_html("<html>geen marker</html>")
+    # Geen ##BANNERS##-marker nodig; een template met losse placeholders mag.
+    errors, warnings = validate_template_html("<html>{{INTRO_1}} geen marker</html>")
     assert errors == []  # niets blokkeert; admin mag elke layout opslaan
     assert any("BANNERS" in w for w in warnings)  # wel een waarschuwing
 

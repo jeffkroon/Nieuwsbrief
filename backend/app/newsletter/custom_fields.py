@@ -31,7 +31,8 @@ def find_custom_slots(html: str) -> list[str]:
 
 
 def normalize_custom_fields(raw: dict) -> dict[str, str]:
-    """Sleutels naar VAK-vorm (hoofdletters, zonder 'VAK_'-prefix), waarden gestript.
+    """Sleutels naar VAK-vorm (hoofdletters, zonder 'VAK_'-prefix); WAARDEN blijven
+    exact behouden (spaties tellen mee voor de byte-round-trip van toolproof).
 
     Botsende sleutels na normalisatie (bv. 'vak_titel' en 'TITEL') zijn een harde
     fout: nooit stil de ene waarde door de andere laten winnen.
@@ -46,7 +47,10 @@ def normalize_custom_fields(raw: dict) -> dict[str, str]:
                 f"custom_fields bevat twee sleutels die allebei op {name!r} uitkomen; "
                 "gebruik elke vaknaam maar één keer"
             )
-        clean[name] = str(value).strip()
+        # Waarde NIET strippen: een template kan betekenisvolle spaties bevatten
+        # ("Connect. Monitor. ") en strippen zou de byte-round-trip van toolproof
+        # breken. De leeg-check in fill_custom_fields stript zelf.
+        clean[name] = str(value)
     return clean
 
 
@@ -82,7 +86,7 @@ def fill_custom_fields(html: str, fields: dict[str, str]) -> str:
             )
         parts.append(_fill(rest[:start], fields))
         slots = SLOT_PATTERN.findall(inner)
-        if any(fields.get(name) for name in slots):
+        if any((fields.get(name) or "").strip() for name in slots):
             parts.append(_fill(inner, fields))
         rest = rest[end + len(SECTION_END):]
     parts.append(_fill(rest, fields))
