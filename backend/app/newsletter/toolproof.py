@@ -472,7 +472,10 @@ _TITLE_RE = re.compile(r"(?is)<title>.*?</title>")
 
 
 def _strip_ws(html: str) -> str:
-    return re.sub(r">\s+<", "><", html)
+    """Normaliseer witruimte-RUNS tussen tags naar één spatie. Bewust niet naar
+    leeg: 'geen spatie' versus 'wel een spatie' is een zichtbaar verschil
+    (woorden plakken aan elkaar) en moet een afwijking blijven."""
+    return re.sub(r">\s+<", "> <", html)
 
 
 def roundtrip_check(
@@ -601,14 +604,26 @@ def make_toolproof(llm, raw_html: str) -> ToolproofResult:
     rt_passed, rt_failed, rt_notes = roundtrip_check(
         raw_html, html, styles, extractie, removed
     )
+    alle_failed = checks_failed + rt_failed
+    extra_notes: list[str] = []
+    if alle_failed:
+        # Garantie in code: een omzetting die de verificatie niet haalt wordt
+        # in zijn geheel verworpen. De admin krijgt het ONAANGETASTE origineel
+        # terug plus het rapport; er valt dus nooit een kapot resultaat op te slaan.
+        html = raw_html
+        styles = {}
+        extra_notes.append(
+            "De omzetting is VERWORPEN omdat de verificatie faalde; de template "
+            "is onaangetast. Zie de verificatieregels hierboven voor de reden."
+        )
     return ToolproofResult(
         html=html,
         styles=styles,
         applied=applied,
         failed=failed,
         checks_passed=checks_passed + rt_passed,
-        checks_failed=checks_failed + rt_failed,
+        checks_failed=alle_failed,
         warnings=warnings,
-        notes=input_notes + style_notes + rt_notes
+        notes=input_notes + style_notes + rt_notes + extra_notes
         + [n for n in proposal.get("notes", []) if isinstance(n, str)],
     )

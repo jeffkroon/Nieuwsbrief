@@ -837,6 +837,9 @@ document.getElementById("newTmplHtml").addEventListener("input", scheduleAdminPr
 document.getElementById("adminPreview").onclick = renderAdminPreview;
 for (const k in STYLE_INPUTS) STYLE_INPUTS[k].addEventListener("input", () => {
   scheduleStylePreview();
+  // Na toolproof telt de actuele kiezer-stand: een handmatige kleuraanpassing
+  // gaat mee bij het opslaan in plaats van stil te verdwijnen.
+  if (toolproofStyles) toolproofStyles = readStyleInputs();
   if (isAdmin && document.getElementById("newTmplHtml").value.trim()) scheduleAdminPreview();
 });
 
@@ -853,6 +856,7 @@ document.getElementById("tmplStarter").onclick = async () => {
 // template er exact zo uit blijft zien als het origineel.
 let toolproofStyles = null;
 document.getElementById("newTmplHtml").addEventListener("input", () => { toolproofStyles = null; });
+
 
 document.getElementById("tmplToolproof").onclick = async () => {
   const html = document.getElementById("newTmplHtml").value.trim();

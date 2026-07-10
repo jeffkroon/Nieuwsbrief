@@ -121,6 +121,17 @@ def test_same_token_two_values_in_one_op_rejected() -> None:
     assert not v.ok and "twee verschillende waarden" in v.reason
 
 
+def test_content_gap_cannot_swallow_markup() -> None:
+    """Review-vondst: {{INTRO_1}} mocht een hele <table> opslokken; de round-trip
+    klopte dan nog (zelfde waarde terug) maar elke toekomstige render met andere
+    tekst zou die tabel kwijt zijn. Tags in het gat = weigeren."""
+    v = verify_replace_op(
+        "<p>Welkom!<table><tr><td>spacer</td></tr></table></p>",
+        "<p>{{INTRO_1}}</p>",
+    )
+    assert not v.ok
+
+
 def test_color_token_cannot_swallow_markup() -> None:
     # Het kleur-gat is restrictief: er past alleen een hex-kleur in.
     v = verify_replace_op(
@@ -177,9 +188,26 @@ _HTML_MET_KAART = (
 
 
 def test_range_removes_duplicate_cards() -> None:
-    dubbel = '<td class="d"><img src="https://x/2.png"/><p>Ander</p></td>'
+    # Echte kopieën: zelfde structuur en attributen; alleen data (src) en tekst anders.
+    dubbel = '<td class="c"><img src="https://x/2.png"/><p>Ander product</p></td>'
     v = verify_range_op(_HTML_MET_KAART, dubbel + dubbel, "")
     assert v.ok
+
+
+def test_range_same_tags_different_attributes_rejected() -> None:
+    """Review-vondst: een disclaimer-blok met dezelfde tags maar andere class
+    is GEEN kaart-kopie en mag niet verwijderd worden."""
+    disclaimer = '<td class="disclaimer"><img src="https://x/legal.png"/><p>Juridische tekst</p></td>'
+    v = verify_range_op(_HTML_MET_KAART, disclaimer, "")
+    assert not v.ok and "niet herkend als kopie" in v.reason
+
+
+def test_range_plain_text_without_markup_rejected() -> None:
+    """Review-vondst: kale tekst zonder tags is geen 'onschadelijke witruimte'."""
+    v = verify_range_op(_HTML_MET_KAART, "Belangrijke disclaimer: lees dit goed.", "")
+    assert not v.ok and "tekst zonder kaart-markup" in v.reason
+    # Pure witruimte mag nog wel weg.
+    assert verify_range_op(_HTML_MET_KAART, "\n   \n", "").ok
 
 
 def test_range_with_replacement_content_rejected() -> None:

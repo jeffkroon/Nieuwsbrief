@@ -43,7 +43,11 @@ MAX_FIND_CHARS = 20_000
 _GAP_COLOR = r"#[0-9a-fA-F]{3,8}"
 _GAP_SPACING = r"[0-9]{1,3}"
 _GAP_FONT = r'[^;{}<>"]+'
-_GAP_FREE = r"(?s:.*?)"
+# Content-gaten mogen GEEN tags bevatten: als {{INTRO_1}} een <table> zou
+# opslokken, reproduceert de round-trip het origineel nog wel (zelfde waarde
+# terug), maar verdwijnt die tabel bij elke toekomstige render met andere
+# tekst. Tag-grenzen zijn dus een harde grens voor het gat.
+_GAP_FREE = r"[^<>]*?"
 
 # Vaste content-placeholders die de renderer kent (vrij gat).
 _CONTENT_TOKENS = (
@@ -286,15 +290,28 @@ def _font_key(stack: str) -> str | None:
 # -- replace_range: alleen kaart-kopieën verwijderen ---------------------------
 
 
-def _tag_skeleton(fragment: str) -> tuple[str, ...]:
-    """Tag-skelet van een HTML-fragment: (open/close + tagnaam)-reeks.
+_DATA_ATTRS = ("href", "src", "alt", "title")
 
-    Tekst en attributen tellen niet mee: we vergelijken alleen de structuur.
-    """
-    return tuple(
-        f"{'/' if m.group(1) else ''}{m.group(2).lower()}"
-        for m in re.finditer(r"<\s*(/?)\s*([a-zA-Z0-9]+)", fragment)
-    )
+
+def _tag_skeleton(fragment: str) -> tuple[str, ...]:
+    """Structuur-handtekening van een HTML-fragment: per tag de naam plus de
+    attributen. Attribuutwaarden tellen mee (een <td class="disclaimer"> is
+    GEEN kopie van <td class="kaart">), behalve de data-attributen href/src/
+    alt/title: die verschillen legitiem tussen kaart-kopieën en worden
+    gemaskeerd. Tekstinhoud telt niet mee (productnamen verschillen)."""
+    skeleton: list[str] = []
+    for m in re.finditer(r"<\s*(/?)\s*([a-zA-Z0-9]+)([^>]*)>", fragment):
+        sluit, naam, attrs = m.group(1), m.group(2).lower(), m.group(3)
+        if sluit:
+            skeleton.append(f"/{naam}")
+            continue
+        parts = []
+        for am in re.finditer(r"""([a-zA-Z-]+)\s*=\s*("[^"]*"|'[^']*')""", attrs):
+            attr = am.group(1).lower()
+            waarde = "*" if attr in _DATA_ATTRS else am.group(2)
+            parts.append(f"{attr}={waarde}")
+        skeleton.append(naam + "|" + ",".join(sorted(parts)))
+    return tuple(skeleton)
 
 
 def _kept_card_skeletons(html: str) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]] | None:
@@ -342,7 +359,12 @@ def verify_range_op(html: str, removed: str, replace: str) -> OpVerdict:
 
     rest = list(_tag_skeleton(removed))
     if not rest:
-        return OpVerdict(ok=True)  # alleen tekst/witruimte: onschadelijk
+        if not removed.strip():
+            return OpVerdict(ok=True)  # alleen witruimte: onschadelijk
+        return _reject(
+            "de te verwijderen sectie bevat tekst zonder kaart-markup; dat is "
+            "geen kaart-kopie en mag niet verwijderd worden"
+        )
     guard = 0
     while rest and guard < 50:
         guard += 1

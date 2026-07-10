@@ -127,6 +127,35 @@ def test_make_toolproof_end_to_end() -> None:
     assert result.warnings  # aanbevolen placeholders (logo, footer) ontbreken nog -> tips
 
 
+def test_failed_verification_reverts_to_original() -> None:
+    """Review-vondst: een gefaalde verificatie mag nooit gemuteerde HTML
+    achterlaten die een admin per ongeluk kan opslaan. Falen = verwerpen."""
+    ops = [{  # kaartblok ZONDER foto/link-tokens: sentinel-verificatie faalt
+        "op": "replace",
+        "find": '<div><a href="https://bedrijfx.nl/p1"><img src="https://bedrijfx.nl/p1.png"/>kaart 1</a></div>',
+        "from": None, "to": None,
+        "replace": '<!-- ##KAART## --><div><a href="https://bedrijfx.nl/p1">'
+                   '<img src="https://bedrijfx.nl/p1.png"/>{{KAART_TITEL}}</a></div><!-- /##KAART## -->',
+        "reason": "kaart zonder url/foto-tokens",
+    }]
+    result = make_toolproof(FakeLLM({"operations": ops, "notes": []}), STATIC_HTML)
+    assert not result.ok
+    assert result.html == STATIC_HTML  # omzetting verworpen, origineel onaangetast
+    assert result.styles == {}
+    assert any("VERWORPEN" in n for n in result.notes)
+
+
+def test_strip_ws_keeps_single_space_meaningful() -> None:
+    """Review-vondst: 'geen spatie' vs 'wel een spatie' tussen tags is een
+    zichtbaar verschil (woorden plakken aan elkaar) en blijft dus een afwijking."""
+    from app.newsletter.toolproof import _strip_ws
+
+    assert _strip_ws("<b>Nieuw</b> <span>Product</span>") != _strip_ws(
+        "<b>Nieuw</b><span>Product</span>"
+    )
+    assert _strip_ws("<b>a</b>\n\t <i>b</i>") == _strip_ws("<b>a</b> <i>b</i>")
+
+
 def test_make_toolproof_not_ok_when_ops_fail() -> None:
     llm = FakeLLM({"operations": [
         {"op": "replace", "find": "NIET AANWEZIG", "from": None, "to": None,
