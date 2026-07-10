@@ -458,6 +458,9 @@ def render_newsletter(template: str, brand: dict, content: NewsletterContent) ->
         "{{HEADER_TITEL}}": content.header_title or content.theme,
         "{{HEADER_SUBTITEL}}": content.header_subtitle or "",
         "{{HEADER_CTA}}": _render_hero_cta(brand, content),
+        # Voor templates die hun EIGEN heroknop-markup behouden (toolproof):
+        # alleen de knoptekst wisselt; de link is {{HOOFD_CTA_URL}} in de markup.
+        "{{HEADER_CTA_TEKST}}": content.header_cta_text or content.main_cta_text,
         "{{WEBSITE_URL}}": brand["website_url"],
         "{{LOGO_URL}}": brand["logo_url"],
         "{{BRAND_NAME}}": brand["brand_name"],

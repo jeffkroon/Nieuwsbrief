@@ -31,6 +31,12 @@ from app.newsletter.renderer import (
     render_newsletter,
 )
 from app.newsletter.template_validation import validate_template_html
+from app.newsletter.toolproof_ops import (
+    Extractie,
+    extract_styles,
+    verify_range_op,
+    verify_replace_op,
+)
 
 TRANSFORM_MODEL = "claude-sonnet-4-6"
 MAX_TEMPLATE_CHARS = 150_000
@@ -68,9 +74,11 @@ zodat de template herbruikbaar ("tool-proof") wordt.
 
 BESCHIKBARE PLACEHOLDERS (per nieuwsbrief ingevuld):
 - {{EMAIL_TITEL}}: de <title> van de mail
-- {{HEADER_TITEL}} kop in de header/hero; {{HEADER_SUBTITEL}} ondertitel; {{HEADER_CTA}} \
-de knop in de hero (vervang de HELE knop-tabel door deze placeholder); \
+- {{HEADER_TITEL}} kop in de header/hero; {{HEADER_SUBTITEL}} ondertitel; \
 {{HEADER_IMAGE_URL}} de hero-/headerfoto-URL
+- Knop in de hero: BEHOUD de eigen knop-markup volledig; vervang alleen de \
+knoptekst door {{HEADER_CTA_TEKST}}, de href door {{HOOFD_CTA_URL}} en de \
+kleuren door {{STYLE_HERO_BUTTON_BG}} + {{STYLE_HERO_BUTTON_TEXT}}
 - {{INTRO_1}} eerste intro-alinea; {{INTRO_2}} tweede intro-alinea (alleen de tekst \
 binnen de <p>, niet de tags zelf)
 - {{HOOFD_CTA_URL}} en {{HOOFD_CTA_TEKST}}: href en tekst van de belangrijkste knop
@@ -96,25 +104,14 @@ sectie waarvan geen enkel vak inhoud krijgt wordt dan automatisch uit de mail \
 weggelaten. Nooit nesten; elk blok eerst sluiten. Ook onbekende placeholders die al \
 in de input staan (bv. {{artikel_titel}}) zet je zo om naar {{VAK_*}}-vakken of, als \
 er een duidelijke match is, naar onze vaste placeholders.
-- <!-- ##CARDS## --> of <!-- ##BANNERS## -->: vervangt de HELE sectie door \
-inhoudsblokken in ONS standaard-ontwerp. LAATSTE REDMIDDEL: alleen als de template \
-GEEN eigen kaart-ontwerp heeft EN de sectie ook niet als {{VAK_*}}-tekstsectie te \
-behouden is. Kies ##CARDS## bij een grid van kaarten naast elkaar, ##BANNERS## bij \
-brede blokken onder elkaar. Gebruik hiervoor replace_range over de complete sectie.
-- <!-- ##SECTIES## -->: alleen voor "schil"-templates waar de HELE variabele \
-middenzone (hero + teksten + blokken + knoppen samen) per nieuwsbrief opnieuw wordt \
-samengesteld in de chat. Vervang dan die complete middenzone door deze ene marker en \
-laat head en footer staan. LAATSTE REDMIDDEL: alleen als losse placeholders én \
-{{VAK_*}}-vakken allebei niet passen.
 
 BEDRIJFSGEGEVENS (per bedrijf ingevuld):
 - {{BRAND_NAME}}, {{WEBSITE_URL}}, {{LOGO_URL}}, {{FACEBOOK_URL}}, {{INSTAGRAM_URL}}, \
 {{YOUTUBE_URL}}
-- {{FOOTER_CONTACT}}: HEEL het blok met adres/e-mail/telefoon/KVK in de footer \
-vervangen door deze ene placeholder (regels die het bedrijf niet heeft worden \
-automatisch weggelaten). Gebruik deze boven losse velden; losse velden \
-({{BRAND_ADRES}}, {{BRAND_POSTCODE_STAD}}, {{BRAND_EMAIL}}, {{BRAND_TELEFOON}}, \
-{{BRAND_KVK}}) bestaan ook maar laten lege labels achter als iets ontbreekt.
+- Footer-contactgegevens: BEHOUD de eigen footer-markup en vervang alleen de \
+concrete waarden door de losse velden {{BRAND_ADRES}}, {{BRAND_POSTCODE_STAD}}, \
+{{BRAND_EMAIL}}, {{BRAND_TELEFOON}} en {{BRAND_KVK}}. Twijfel je, laat het blok \
+dan statisch staan en meld het in notes.
 
 STIJL (kleuren/lettertype uit de stijl-builder):
 - {{STYLE_FONT}}, {{STYLE_TEXT_COLOR}}, {{STYLE_HEADING_COLOR}}, {{STYLE_LINK_COLOR}}, \
@@ -122,8 +119,9 @@ STIJL (kleuren/lettertype uit de stijl-builder):
 - KNOPPEN hebben drie aparte kleurgroepen; kies per knop het juiste token-paar: \
 kaart-/productknoppen (bv. "SHOP NU" per product) -> {{STYLE_BUTTON_BG}} + \
 {{STYLE_BUTTON_TEXT}}; de grote knop onderaan/midden (bv. "bekijk de collectie") -> \
-{{STYLE_CTA_BUTTON_BG}} + {{STYLE_CTA_BUTTON_TEXT}}; de knop op de bannerfoto wordt \
-{{HEADER_CTA}} (hele knop vervangen). LET OP: een knop bestaat vaak uit MEERDERE \
+{{STYLE_CTA_BUTTON_BG}} + {{STYLE_CTA_BUTTON_TEXT}}; de knop op de bannerfoto -> \
+{{STYLE_HERO_BUTTON_BG}} + {{STYLE_HERO_BUTTON_TEXT}} (markup behouden, zie boven). \
+LET OP: een knop bestaat vaak uit MEERDERE \
 lagen (bgcolor op de td, background in de td-style, én background/color in de \
 <a>-tag); vervang de kleur in ALLE lagen van dezelfde knop door hetzelfde token, \
 anders blijft de zichtbare laag een andere kleur houden.
@@ -140,6 +138,15 @@ REGELS:
 - JOUW ENIGE TAAK is concrete inhoud vervangen door placeholders. Het ONTWERP van de \
 template (layout, secties, structuur, CSS) verander je NOOIT; je verwijdert geen \
 secties behalve overtollige kopieën van de voorbeeldkaart/-rij.
+- HARDE CODE-CHECK: "replace" moet LETTERLIJK gelijk zijn aan "find" waarin alleen \
+concrete waarden door placeholders zijn vervangen (en eventueel markers zijn \
+ingevoegd). Elke andere afwijking, hoe klein ook, wordt door de code geweigerd.
+- Zet NOOIT twee placeholders direct tegen elkaar; er moet vaste tekst tussen staan.
+- Gebruik hetzelfde stijl-token nooit voor twee VERSCHILLENDE originele waarden \
+(bv. twee knoppen met andere kleuren): kies dan per knop de juiste knopgroep of \
+laat er één staan.
+- "replace_range" mag ALLEEN overtollige kaart-kopieën verwijderen ("replace" leeg); \
+elk ander gebruik wordt geweigerd.
 - Geef ALLEEN operaties terug, nooit de hele HTML.
 - "find", "from" en "to" moeten LETTERLIJK en byte-exact uit de input komen (kopieer \
 precies, inclusief spaties, aanhalingstekens en hoofdletters) en lang genoeg zijn om \
@@ -218,6 +225,7 @@ _PLACEHOLDER_SENTINELS = {
     "{{HEADER_TITEL}}": "TP-KOP",
     "{{HEADER_SUBTITEL}}": "TP-SUBKOP",
     "{{HEADER_CTA}}": "TP-HEROKNOP",
+    "{{HEADER_CTA_TEKST}}": "TP-HEROKNOP",
     "{{HEADER_IMAGE_URL}}": "https://tp-hero.test/h.png",
     "{{LOGO_URL}}": "https://tp-logo.test/logo.png",
     "{{WEBSITE_URL}}": "https://tp-website.test",
@@ -237,6 +245,9 @@ _PLACEHOLDER_SENTINELS = {
 @dataclass(frozen=True)
 class ToolproofResult:
     html: str
+    # Basis-stijl met de ORIGINELE waarden uit de template (kleuren, witruimtes,
+    # lettertype), zodat de getokeniseerde template er exact zo uit blijft zien.
+    styles: dict = field(default_factory=dict)
     applied: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     checks_passed: list[str] = field(default_factory=list)
@@ -265,29 +276,61 @@ def propose_replacements(llm, raw_html: str) -> dict:
         return {"operations": [], "notes": ["LLM-antwoord kon niet worden gelezen."]}
 
 
-def apply_replacements(html: str, operations: list[dict]) -> tuple[str, list[str], list[str]]:
-    """Pas de operaties toe. Niet-matchende operaties worden gerapporteerd, nooit gegokt."""
+def apply_operations(
+    html: str, operations: list[dict]
+) -> tuple[str, list[str], list[str], Extractie, list[str]]:
+    """Pas operaties toe MET de harde substitutie-verificatie.
+
+    Een operatie die het ontwerp zou kunnen veranderen wordt geweigerd (failed)
+    en NIET toegepast. Twee fasen: eerst alle replace-ops (daarbij komt het
+    bewaarde ##KAART##-blok in de HTML te staan), daarna de replace_range-ops
+    (die alleen kaart-kopieën mogen wissen en het kaartblok nodig hebben voor
+    de structuurvergelijking). Geeft ook de Extractie (originele waarden per
+    placeholder) en de verwijderde fragmenten terug.
+    """
     applied: list[str] = []
     failed: list[str] = []
+    extractie = Extractie()
+    removed: list[str] = []
+
     for op in operations:
-        reason = op.get("reason") or op.get("replace", "")[:60]
         if op.get("op") == "replace_range":
-            start_marker, end_marker = op.get("from") or "", op.get("to") or ""
-            start = html.find(start_marker) if start_marker else -1
-            end = html.find(end_marker, start + len(start_marker)) if start != -1 and end_marker else -1
-            if start == -1 or end == -1:
-                failed.append(f"sectie niet gevonden: {reason}")
-                continue
-            html = html[:start] + op["replace"] + html[end:]
-            applied.append(reason)
-        else:
-            find = op.get("find") or ""
-            if not find or find not in html:
-                failed.append(f"tekst niet letterlijk gevonden: {reason}")
-                continue
-            html = html.replace(find, op["replace"], 1)
-            applied.append(reason)
-    return html, applied, failed
+            continue
+        reason = op.get("reason") or op.get("replace", "")[:60]
+        find = op.get("find") or ""
+        if not find or find not in html:
+            failed.append(f"tekst niet letterlijk gevonden: {reason}")
+            continue
+        verdict = verify_replace_op(find, op.get("replace") or "")
+        if not verdict.ok:
+            failed.append(f"{reason}: {verdict.reason}")
+            continue
+        conflict = extractie.bind(verdict.bindings)
+        if conflict:
+            failed.append(f"{reason}: {conflict}")
+            continue
+        html = html.replace(find, op["replace"], 1)
+        applied.append(reason)
+
+    for op in operations:
+        if op.get("op") != "replace_range":
+            continue
+        reason = op.get("reason") or "sectie verwijderen"
+        start_marker, end_marker = op.get("from") or "", op.get("to") or ""
+        start = html.find(start_marker) if start_marker else -1
+        end = html.find(end_marker, start + len(start_marker)) if start != -1 and end_marker else -1
+        if start == -1 or end == -1:
+            failed.append(f"sectie niet gevonden: {reason}")
+            continue
+        fragment = html[start:end]
+        verdict = verify_range_op(html, fragment, op.get("replace") or "")
+        if not verdict.ok:
+            failed.append(f"{reason}: {verdict.reason}")
+            continue
+        html = html[:start] + html[end:]
+        removed.append(fragment)
+        applied.append(reason)
+    return html, applied, failed, extractie, removed
 
 
 def verify_toolproof(html: str) -> tuple[list[str], list[str]]:
@@ -408,19 +451,164 @@ def analyze_input(raw_html: str) -> list[str]:
     return notes
 
 
+_ONS_TOKEN = re.compile(r"\{\{[A-Z][A-Z0-9_]*\}\}")
+
+# Token -> brand-veld voor de round-trip (de renderer vult deze uit brand).
+_BRAND_TOKEN_FIELDS = {
+    "{{BRAND_NAME}}": "brand_name",
+    "{{BRAND_EMAIL}}": "brand_email",
+    "{{BRAND_ADRES}}": "brand_adres",
+    "{{BRAND_POSTCODE_STAD}}": "brand_postcode_stad",
+    "{{BRAND_TELEFOON}}": "brand_telefoon",
+    "{{BRAND_KVK}}": "brand_kvk",
+    "{{WEBSITE_URL}}": "website_url",
+    "{{LOGO_URL}}": "logo_url",
+    "{{FACEBOOK_URL}}": "facebook_url",
+    "{{INSTAGRAM_URL}}": "instagram_url",
+    "{{YOUTUBE_URL}}": "youtube_url",
+}
+
+_TITLE_RE = re.compile(r"(?is)<title>.*?</title>")
+
+
+def _strip_ws(html: str) -> str:
+    return re.sub(r">\s+<", "><", html)
+
+
+def roundtrip_check(
+    raw_html: str, result_html: str, styles: dict, extractie: Extractie,
+    removed: list[str],
+) -> tuple[list[str], list[str], list[str]]:
+    """De eindcheck: terugvullen met de originele waarden moet het origineel geven.
+
+    Rendert het toolproof-resultaat met de geëxtraheerde originele waarden
+    (stijl + inhoud) en vergelijkt met het origineel (minus de geverifieerde
+    kaart-kopieën). Geeft (passed, failed, notes) terug.
+    """
+    passed: list[str] = []
+    failed: list[str] = []
+    notes: list[str] = []
+
+    if _ONS_TOKEN.search(raw_html):
+        notes.append(
+            "de input bevatte al {{...}}-placeholders; de render-vergelijking met "
+            "het origineel is dan niet mogelijk. De per-operatie-garantie geldt wel."
+        )
+        return passed, failed, notes
+
+    b = extractie.waarden.get
+    brand = {veld: b(token) for token, veld in _BRAND_TOKEN_FIELDS.items() if b(token) is not None}
+    brand.setdefault("brand_name", "TP-MERK")
+    brand.setdefault("brand_email", "tp@merk-email.test")
+    brand.setdefault("website_url", "https://tp-website.test")
+    brand.setdefault("logo_url", "https://tp-logo.test/logo.png")
+    brand.setdefault("dummy_image_url", "https://tp-dummy.test/d.png")
+    brand.setdefault("primary_color", "#FF7200")
+    brand["styles"] = styles
+
+    strip_title = False
+    theme = "TP-THEMA"
+    titel_origineel = b("{{EMAIL_TITEL}}")
+    if titel_origineel is not None:
+        staart = f" | {brand['brand_name']}"
+        if titel_origineel.endswith(staart):
+            theme = titel_origineel[: -len(staart)]
+        else:
+            strip_title = True
+            notes.append(
+                "de <title> wordt bij renderen 'thema | merknaam'; voor de titel "
+                "geldt alleen de per-operatie-garantie"
+            )
+
+    custom_fields = tuple(
+        (token[len("{{VAK_"):-2], waarde)
+        for token, waarde in extractie.waarden.items()
+        if token.startswith("{{VAK_")
+    )
+    items: tuple[Item, ...] = ()
+    if has_card_block(result_html):
+        items = (Item(
+            title=b("{{KAART_TITEL}}") or "TP-BLOK",
+            url=b("{{KAART_URL}}") or "https://tp-item.test",
+            subtitle=b("{{KAART_SUBTITEL}}"),
+            price=b("{{KAART_PRIJS}}"),
+            image_url=b("{{KAART_IMAGE_URL}}"),
+            label=b("{{KAART_LABEL}}"),
+            button_text=b("{{KAART_KNOP_TEKST}}") or "Lees meer",
+        ),)
+
+    content = NewsletterContent(
+        theme=theme,
+        subject="",
+        intro_1=b("{{INTRO_1}}") or "",
+        intro_2=b("{{INTRO_2}}") or "",
+        main_cta_text=b("{{HOOFD_CTA_TEKST}}") or "",
+        main_cta_url=b("{{HOOFD_CTA_URL}}") or "",
+        slot_cta_text=b("{{SLOT_CTA_TEKST}}") or "",
+        slot_cta_url=b("{{SLOT_CTA_URL}}") or "",
+        matches=(),
+        items=items,
+        header_title=b("{{HEADER_TITEL}}"),
+        header_subtitle=b("{{HEADER_SUBTITEL}}"),
+        header_cta_text=b("{{HEADER_CTA_TEKST}}"),
+        header_image_url=b("{{HEADER_IMAGE_URL}}"),
+        custom_fields=custom_fields,
+    )
+
+    referentie = raw_html
+    for fragment in removed:
+        referentie = referentie.replace(fragment, "", 1)
+    try:
+        rendered = render_newsletter(result_html, brand, content)
+    except ValueError as exc:
+        return passed, [f"round-trip-render mislukt: {exc}"], notes
+
+    if strip_title:
+        rendered = _TITLE_RE.sub("<title></title>", rendered, count=1)
+        referentie = _TITLE_RE.sub("<title></title>", referentie, count=1)
+
+    minus = " (minus de verwijderde kaart-kopieën)" if removed else ""
+    if rendered == referentie:
+        passed.append(f"render met de originele waarden is byte-identiek aan het origineel{minus}")
+    elif _strip_ws(rendered) == _strip_ws(referentie):
+        passed.append(f"render met de originele waarden is identiek aan het origineel{minus}, op witruimte na")
+    else:
+        genorm_r, genorm_o = _strip_ws(rendered), _strip_ws(referentie)
+        idx = next(
+            (i for i, (a, z) in enumerate(zip(genorm_r, genorm_o)) if a != z),
+            min(len(genorm_r), len(genorm_o)),
+        )
+        ctx_van, ctx_tot = max(0, idx - 60), idx + 60
+        failed.append(
+            "render met de originele waarden wijkt af van het origineel rond: "
+            f"...{genorm_o[ctx_van:ctx_tot]!r} (origineel) versus "
+            f"{genorm_r[ctx_van:ctx_tot]!r} (render)"
+        )
+    return passed, failed, notes
+
+
 def make_toolproof(llm, raw_html: str) -> ToolproofResult:
-    """Volledige pipeline: voor-analyse -> voorstellen -> toepassen -> valideren -> verificatie."""
+    """Volledige pipeline: voor-analyse -> voorstellen -> geverifieerd toepassen ->
+    stijl-extractie -> valideren -> sentinel-verificatie -> round-trip-eindcheck."""
     input_notes = analyze_input(raw_html)
     proposal = propose_replacements(llm, raw_html)
-    html, applied, failed = apply_replacements(raw_html, proposal.get("operations", []))
+    html, applied, failed, extractie, removed = apply_operations(
+        raw_html, proposal.get("operations", [])
+    )
+    styles, style_notes = extract_styles(extractie)
     _, warnings = validate_template_html(html)
     checks_passed, checks_failed = verify_toolproof(html)
+    rt_passed, rt_failed, rt_notes = roundtrip_check(
+        raw_html, html, styles, extractie, removed
+    )
     return ToolproofResult(
         html=html,
+        styles=styles,
         applied=applied,
         failed=failed,
-        checks_passed=checks_passed,
-        checks_failed=checks_failed,
+        checks_passed=checks_passed + rt_passed,
+        checks_failed=checks_failed + rt_failed,
         warnings=warnings,
-        notes=input_notes + [n for n in proposal.get("notes", []) if isinstance(n, str)],
+        notes=input_notes + style_notes + rt_notes
+        + [n for n in proposal.get("notes", []) if isinstance(n, str)],
     )

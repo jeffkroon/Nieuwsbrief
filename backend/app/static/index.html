@@ -849,6 +849,11 @@ document.getElementById("tmplStarter").onclick = async () => {
   }
 };
 
+// Basis-stijl uit de laatste toolproof-run; gaat mee bij Toevoegen zodat de
+// template er exact zo uit blijft zien als het origineel.
+let toolproofStyles = null;
+document.getElementById("newTmplHtml").addEventListener("input", () => { toolproofStyles = null; });
+
 document.getElementById("tmplToolproof").onclick = async () => {
   const html = document.getElementById("newTmplHtml").value.trim();
   const report = document.getElementById("toolproofReport");
@@ -867,7 +872,13 @@ document.getElementById("tmplToolproof").onclick = async () => {
     }
     const r = await res.json();
     document.getElementById("newTmplHtml").value = r.html;
+    toolproofStyles = r.styles && Object.keys(r.styles).length ? r.styles : null;
+    if (toolproofStyles) applyStyleInputs(toolproofStyles);
     const lines = [];
+    if (toolproofStyles) {
+      lines.push("Overgenomen basisstijl (origineel blijft exact gelijk):",
+        ...Object.entries(toolproofStyles).map(([k, v]) => "  = " + k + ": " + v), "");
+    }
     if (r.applied.length) lines.push("Vervangen (" + r.applied.length + "):", ...r.applied.map(s => "  + " + s), "");
     if (r.failed.length) lines.push("Niet gelukt (handmatig nakijken):", ...r.failed.map(s => "  ! " + s), "");
     if (r.checks_failed.length) lines.push("Verificatie GEFAALD:", ...r.checks_failed.map(s => "  X " + s), "");
@@ -904,9 +915,11 @@ document.getElementById("tmplCreate").onclick = async () => {
   const html = document.getElementById("newTmplHtml").value;
   if (!name || !html) { adminStatus.textContent = "Geef een naam en HTML op."; return; }
   const res = await fetch(`/tenants/${tenantSel.value}/templates`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, html }) });
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, html, styles: toolproofStyles || {} }) });
   if (!res.ok) { const e = await res.json().catch(() => ({})); adminStatus.textContent = "Fout: " + (e.detail || res.status); return; }
   adminStatus.textContent = "Template toegevoegd.";
+  toolproofStyles = null;
   document.getElementById("newTmplName").value = ""; document.getElementById("newTmplHtml").value = "";
   loadTemplates();
 };

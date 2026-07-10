@@ -192,6 +192,17 @@ def test_hero_cta_text_custom_link_matches_main() -> None:
     assert 'href="https://site/overzicht/"' in hero  # zelfde link als de hoofd-knop
 
 
+def test_header_cta_tekst_token_keeps_own_markup() -> None:
+    """Templates die hun EIGEN heroknop behouden: alleen de tekst wisselt."""
+    from dataclasses import replace
+
+    tpl = '<a href="{{HOOFD_CTA_URL}}">{{HEADER_CTA_TEKST}}</a>'
+    met_tekst = replace(_content(()), header_cta_text="Shop nu")
+    assert ">Shop nu<" in render_newsletter(tpl, BRAND, met_tekst)
+    # Zonder eigen tekst: terugvallen op de hoofdknop-tekst.
+    assert ">Bekijk alles<" in render_newsletter(tpl, BRAND, _content(()))
+
+
 def test_price_has_no_double_euro() -> None:
     # De prijs bevat al een euroteken; de banner mag er geen tweede toevoegen.
     m = Match(home="Chelsea", away="Arsenal", url="https://site/a/", price="€ 249")
