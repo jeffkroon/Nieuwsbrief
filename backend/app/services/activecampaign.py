@@ -27,6 +27,27 @@ HTML_MIN_BYTES = 10
 # Geen gedocumenteerde API-limiet; boven ~102 KB knipt Gmail de mail af.
 HTML_WARN_BYTES = 102_400
 
+# Alleen echte ActiveCampaign-hosts: voorkomt dat een (per ongeluk of kwaadwillend)
+# ingevulde interne URL server-side wordt aangeroepen met de API-key eraan (SSRF).
+_ALLOWED_HOST = re.compile(r"^[a-z0-9-]+\.(api-us[0-9]+\.com|activehosted\.com)$")
+
+
+def validate_api_url(api_url: str) -> str:
+    """Valideer de account-URL hard; geeft de genormaliseerde URL terug."""
+    url = (api_url or "").strip().rstrip("/")
+    if not url.startswith("https://"):
+        raise ValueError(
+            "ActiveCampaign API-URL ontbreekt of is ongeldig (verwacht "
+            "https://<account>.api-us1.com; zie Settings > Developer in ActiveCampaign)"
+        )
+    host = url.removeprefix("https://").split("/")[0].lower()
+    if not _ALLOWED_HOST.match(host):
+        raise ValueError(
+            f"ActiveCampaign API-URL wijst niet naar ActiveCampaign ({host}); "
+            "verwacht https://<account>.api-us1.com"
+        )
+    return url
+
 
 class ActiveCampaignError(Exception):
     """ActiveCampaign gaf een fout terug of het verzoek kon niet worden afgerond."""
@@ -56,12 +77,7 @@ class ActiveCampaignClient:
     ) -> None:
         if not api_key:
             raise ValueError("ACTIVECAMPAIGN API-key ontbreekt voor deze tenant")
-        if not (api_url or "").startswith(("http://", "https://")):
-            raise ValueError(
-                "ActiveCampaign API-URL ontbreekt of is ongeldig (verwacht "
-                "https://<account>.api-us1.com; zie Settings > Developer in ActiveCampaign)"
-            )
-        self._base = api_url.rstrip("/")
+        self._base = validate_api_url(api_url)
         self._api_key = api_key
         self._timeout = timeout
         self._client = client  # injecteerbaar voor tests
@@ -71,6 +87,8 @@ class ActiveCampaignClient:
     def _post_v1(self, action: str, data: dict) -> dict:
         """v1-call: form-encoded POST naar admin/api.php; JSON terug."""
         url = f"{self._base}/admin/api.php"
+        # LET OP: de v1-API accepteert de key alleen als query-param. Voeg voor deze
+        # client dus nooit request-logging/tracing toe die query-params vastlegt.
         params = {"api_key": self._api_key, "api_action": action, "api_output": "json"}
         try:
             if self._client is not None:

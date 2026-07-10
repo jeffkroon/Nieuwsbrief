@@ -46,6 +46,22 @@ def test_requires_api_url_and_key() -> None:
         ActiveCampaignClient("account.api-us1.com", "key")  # zonder https://
 
 
+def test_api_url_host_allowlist_blocks_non_activecampaign_hosts() -> None:
+    """SSRF-slot: alleen echte ActiveCampaign-hosts zijn toegestaan."""
+    for kwaad in (
+        "https://127.0.0.1",
+        "https://169.254.169.254/latest",
+        "https://evil.example.com",
+        "https://api-us1.com",  # zonder accountnaam
+        "https://account.api-us1.com.evil.nl",
+    ):
+        with pytest.raises(ValueError, match="ActiveCampaign"):
+            ActiveCampaignClient(kwaad, "key")
+    # Geldige varianten werken wel.
+    ActiveCampaignClient("https://account.api-us1.com", "key")
+    ActiveCampaignClient("https://mijn-account.activehosted.com/", "key")
+
+
 def test_create_draft_two_step_flow() -> None:
     http = _FakeHttp(post_responses=[
         httpx.Response(200, json={"id": 555, "result_code": 1}),

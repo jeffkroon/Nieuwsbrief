@@ -1346,9 +1346,16 @@ document.getElementById("companySave").onclick = async () => {
     companyStatus.textContent = "Klaviyo vereist een lijst-ID (list- of segment-id).";
     return;
   }
-  if (esp === "activecampaign" && (!listRaw || !CO("coAcUrl").value.trim())) {
-    companyStatus.textContent = "ActiveCampaign vereist een API-URL en een lijst-ID.";
-    return;
+  if (esp === "activecampaign") {
+    const acUrl = CO("coAcUrl").value.trim();
+    if (!listRaw || !acUrl) {
+      companyStatus.textContent = "ActiveCampaign vereist een API-URL en een lijst-ID.";
+      return;
+    }
+    if (!/^https:\/\//.test(acUrl)) {
+      companyStatus.textContent = "De ActiveCampaign API-URL moet met https:// beginnen (bv. https://account.api-us1.com).";
+      return;
+    }
   }
   companyStatus.textContent = "Opslaan...";
   const formConfig = companyConfigFromForm();

@@ -941,6 +941,18 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
             f"geen {esp_label} API-key ingesteld voor deze tenant "
             "(zet die via de Bedrijven-tab of PUT /tenants/{id}/secrets)"
         )
+    ac_api_url = ""
+    if esp == "activecampaign":
+        # Hard valideren VOOR de render: een kapotte URL mag geen dure
+        # validatie-ronde kosten en moet een duidelijke fout geven.
+        from app.services.activecampaign import validate_api_url
+
+        try:
+            ac_api_url = validate_api_url((tenant.config or {}).get("activecampaign_api_url") or "")
+        except ValueError as exc:
+            raise ValueError(
+                f"{exc} Stel de API-URL in via de Bedrijven-tab > Verzendplatform."
+            ) from exc
 
     tenant, brand, content, matches, clubs, items, html, _unfilled = _build_newsletter(ctx, tool_input)
     if esp == "klaviyo":
@@ -948,13 +960,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         list_id = brand.get("klaviyo_list_id")
         list_ids = [list_id] if list_id else None
     elif esp == "activecampaign":
-        api_url = (brand.get("activecampaign_api_url") or "").strip()
-        if not api_url:
-            raise ValueError(
-                "geen ActiveCampaign API-URL ingesteld voor dit bedrijf "
-                "(Bedrijven-tab > Verzendplatform > API-URL, bv. https://account.api-us1.com)"
-            )
-        client = ctx.activecampaign_factory(api_url, api_key)
+        client = ctx.activecampaign_factory(ac_api_url, api_key)
         list_id = brand.get("activecampaign_list_id")
         list_ids = [list_id] if list_id else None
     else:
@@ -984,7 +990,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         )
         raise
 
-    is_klaviyo = esp != "brevo"  # string-ref voor Klaviyo en ActiveCampaign
+    use_text_ref = esp != "brevo"  # string-ref voor Klaviyo en ActiveCampaign
     newsletter = newsletters_repo.create_newsletter(
         ctx.session,
         tenant_id=tenant.id,
@@ -993,20 +999,25 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         theme=content.theme,
         html=html,
         input=tool_input,
-        brevo_campaign_id=None if is_klaviyo else draft.campaign_id,
-        esp_campaign_ref=str(draft.campaign_id) if is_klaviyo else None,
+        brevo_campaign_id=None if use_text_ref else draft.campaign_id,
+        esp_campaign_ref=str(draft.campaign_id) if use_text_ref else None,
         status="ready",
     )
     return {
         "newsletter_id": str(newsletter.id),
         "esp": esp,
         "campaign_id": draft.campaign_id,
-        "brevo_campaign_id": None if is_klaviyo else draft.campaign_id,
+        "brevo_campaign_id": None if use_text_ref else draft.campaign_id,
         "status": "ready",
         "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
         "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
         "items_used": [{"title": i.title, "url": i.url, "price": i.price} for i in items],
-        "message": f"Concept aangemaakt in {esp_label}. Niets verstuurd; controleer en verstuur handmatig.",
+        "message": f"Concept aangemaakt in {esp_label}. Niets verstuurd; controleer en verstuur handmatig."
+        + (
+            " Let op: ActiveCampaign ondersteunt geen preheader via de API; de "
+            "geschreven preheader staat niet in het concept."
+            if esp == "activecampaign" and content.preview_text else ""
+        ),
     }
 
 
