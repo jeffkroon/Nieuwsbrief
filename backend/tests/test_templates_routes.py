@@ -151,8 +151,10 @@ def test_toolproof_endpoint_transforms_and_reports(client, session) -> None:
         body = resp.json()
         assert body["ok"] is True
         assert "{{INTRO_1}}" in body["html"]
-        assert "<!-- ##CARDS## -->" in body["html"]
+        assert "<!-- ##KAART## -->" in body["html"]
+        assert "##CARDS##" not in body["html"]  # standaard-ontwerp-route bestaat niet meer
         assert body["checks_failed"] == []
+        assert isinstance(body["styles"], dict)  # basis-stijl gaat mee naar de frontend
     finally:
         app.dependency_overrides.pop(get_anthropic_client, None)
 

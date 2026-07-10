@@ -156,6 +156,7 @@ def toolproof(
     return TemplateToolproofResult(
         ok=result.ok,
         html=result.html,
+        styles=result.styles,
         applied=result.applied,
         failed=result.failed,
         checks_passed=result.checks_passed,

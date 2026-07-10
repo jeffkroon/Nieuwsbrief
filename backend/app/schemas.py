@@ -223,6 +223,9 @@ class TemplateToolproofResult(BaseModel):
 
     ok: bool
     html: str
+    # Basis-stijl met de originele waarden uit de template; opslaan bij create
+    # zodat de template er exact zo uit blijft zien.
+    styles: dict = Field(default_factory=dict)
     applied: list[str]
     failed: list[str]
     checks_passed: list[str]

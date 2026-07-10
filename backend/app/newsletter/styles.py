@@ -148,7 +148,8 @@ def effective_styles(brand: dict) -> dict:
 
 # Welke stijlwaarden als {{STYLE_*}}-token in de layout-HTML beschikbaar zijn.
 # (De kaart-/blok-kleuren worden in code toegepast, niet via tokens.)
-_TEMPLATE_TOKENS = {
+# Publiek: toolproof_ops gebruikt dit als registry voor de stijl-extractie.
+TEMPLATE_TOKENS = {
     "{{STYLE_FONT}}": "font",
     "{{STYLE_TEXT_COLOR}}": "text_color",
     "{{STYLE_HEADING_COLOR}}": "heading_color",
@@ -173,4 +174,4 @@ _TEMPLATE_TOKENS = {
 def style_replacements(brand: dict) -> dict[str, str]:
     """Placeholder->waarde map voor de {{STYLE_*}}-tokens in de layout-HTML."""
     st = effective_styles(brand)
-    return {token: str(st[key]) for token, key in _TEMPLATE_TOKENS.items()}
+    return {token: str(st[key]) for token, key in TEMPLATE_TOKENS.items()}
