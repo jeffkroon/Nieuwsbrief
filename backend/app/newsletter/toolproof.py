@@ -662,6 +662,38 @@ def roundtrip_check(
     return passed, failed, notes
 
 
+def _log_diagnostics(
+    proposal: dict, applied: list[str], failed: list[str]
+) -> None:
+    """TIJDELIJK (diag): log wat de AI voorstelde en wat werd toegepast/geweigerd.
+
+    Doel: op echte templates zien of kaart-operaties wél worden voorgesteld maar
+    door de verificatie sneuvelen (code-fix), of nooit worden voorgesteld
+    (prompt-fix). Greppen op 'TOOLPROOF-DIAG'. Bevat geen secrets (alleen
+    template-markup) maar mag na de diagnose weer weg.
+    """
+    ops = proposal.get("operations", []) or []
+    kaart_ops = sum(
+        1 for op in ops if "##KAART" in (op.get("replace") or "") or "{{KAART" in (op.get("replace") or "")
+    )
+    _log.info(
+        "TOOLPROOF-DIAG %d ops voorgesteld (%d met kaart-token/marker), "
+        "%d toegepast, %d geweigerd",
+        len(ops), kaart_ops, len(applied), len(failed),
+    )
+    for i, op in enumerate(ops):
+        bron = op.get("find") or op.get("from") or ""
+        _log.info(
+            "TOOLPROOF-DIAG op[%d] %s reason=%r find=%r replace=%r",
+            i, op.get("op"), op.get("reason"),
+            bron[:160], (op.get("replace") or "")[:320],
+        )
+    for reden in failed:
+        _log.info("TOOLPROOF-DIAG GEWEIGERD: %s", reden)
+    for note in proposal.get("notes", []) or []:
+        _log.info("TOOLPROOF-DIAG AI-note: %s", note)
+
+
 def make_toolproof(llm, raw_html: str) -> ToolproofResult:
     """Volledige pipeline: voor-analyse -> voorstellen -> geverifieerd toepassen ->
     stijl-extractie -> valideren -> sentinel-verificatie -> round-trip-eindcheck."""
@@ -670,6 +702,7 @@ def make_toolproof(llm, raw_html: str) -> ToolproofResult:
     html, applied, failed, extractie, removed = apply_operations(
         raw_html, proposal.get("operations", [])
     )
+    _log_diagnostics(proposal, applied, failed)
     styles, style_notes = extract_styles(extractie)
     _, warnings = validate_template_html(html)
     checks_passed, checks_failed = verify_toolproof(html)
