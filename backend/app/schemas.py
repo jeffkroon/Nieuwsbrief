@@ -20,7 +20,7 @@ Channel = Literal["slack", "web", "api"]
 ConversationStatus = Literal["active", "completed", "abandoned"]
 MessageRole = Literal["user", "assistant", "system", "tool"]
 NewsletterStatus = Literal["draft", "generating", "ready", "approved", "sent", "failed"]
-SecretKind = Literal["brevo_api_key", "klaviyo_api_key"]
+SecretKind = Literal["brevo_api_key", "klaviyo_api_key", "activecampaign_api_key"]
 
 
 class _ORMModel(BaseModel):
@@ -104,8 +104,9 @@ class EspListsRequest(BaseModel):
     versleutelde opslag via tenant_id.
     """
 
-    esp: Literal["brevo", "klaviyo"]
+    esp: Literal["brevo", "klaviyo", "activecampaign"]
     api_key: str | None = None
+    api_url: str | None = None  # alleen ActiveCampaign: account-specifieke API-URL
     tenant_id: uuid.UUID | None = None
 
 

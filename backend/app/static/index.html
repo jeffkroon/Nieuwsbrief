@@ -350,9 +350,11 @@
                 <select id="coEsp" class="field">
                   <option value="brevo">Brevo</option>
                   <option value="klaviyo">Klaviyo</option>
+                  <option value="activecampaign">ActiveCampaign</option>
                 </select>
               </label>
               <label>API-key <input type="password" id="coBrevoKey" placeholder="alleen invullen om te (her)zetten"></label>
+              <label id="coAcUrlWrap" style="display:none;">API-URL <input type="text" id="coAcUrl" placeholder="https://account.api-us1.com"></label>
               <label>Lijst-ID <input type="text" id="coBrevoList" placeholder="of kies hieronder"></label>
             </div>
             <div class="row" style="margin-top:8px;">
@@ -967,9 +969,12 @@ function readContentTypes() {
 const ESP_HINTS = {
   brevo: "Brevo: API-key begint met 'xkeysib-'. Lijst-ID = het nummer van de contactenlijst waar de campagne aan gericht wordt (Brevo -> Contacts -> Lists, het nummer achter de lijstnaam). Optioneel: zonder lijst maakt Brevo het concept ook aan.",
   klaviyo: "Klaviyo: private key (pk_...) met scopes campaigns:write, templates:write en lists:read. Lijst-ID = het ID van de lijst/segment waar de campagne aan gericht wordt (Klaviyo -> Audience -> Lists & Segments -> klik de lijst, het ID staat in de URL). VERPLICHT: zonder audience weigert Klaviyo een concept.",
+  activecampaign: "ActiveCampaign: API-key en API-URL staan allebei in ActiveCampaign onder Settings -> Developer. De API-URL is per account (https://account.api-us1.com). Lijst-ID = het nummer van de contactenlijst (of kies hieronder). VERPLICHT: zonder lijst weigert ActiveCampaign een concept.",
 };
 function updateEspHint() {
-  document.getElementById("espHint").textContent = ESP_HINTS[CO("coEsp").value] || "";
+  const esp = CO("coEsp").value;
+  document.getElementById("espHint").textContent = ESP_HINTS[esp] || "";
+  document.getElementById("coAcUrlWrap").style.display = esp === "activecampaign" ? "" : "none";
 }
 CO("coEsp").addEventListener("change", updateEspHint);
 updateEspHint();
@@ -1112,13 +1117,14 @@ document.getElementById("espListsBtn").onclick = async (e) => {
   e.preventDefault();
   const esp = CO("coEsp").value;
   const body = { esp };
+  if (esp === "activecampaign") body.api_url = CO("coAcUrl").value.trim();
   const key = CO("coBrevoKey").value.trim();
   if (key) body.api_key = key;
   else if (editingCompanyId) body.tenant_id = editingCompanyId;
   else { companyStatus.textContent = "Plak eerst de API-key (of bewerk een bedrijf met opgeslagen key)."; return; }
   const btn = document.getElementById("espListsBtn");
   btn.disabled = true;
-  companyStatus.textContent = "Lijsten ophalen bij " + (esp === "klaviyo" ? "Klaviyo" : "Brevo") + "...";
+  companyStatus.textContent = "Lijsten ophalen bij " + ({klaviyo: "Klaviyo", activecampaign: "ActiveCampaign"}[esp] || "Brevo") + "...";
   try {
     const res = await fetch("/tenants/esp-lists", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -1176,6 +1182,10 @@ function companyConfigFromForm() {
     esp: CO("coEsp").value,
   };
   if (cfg.esp === "klaviyo") cfg.klaviyo_list_id = CO("coBrevoList").value.trim();
+  if (cfg.esp === "activecampaign") {
+    cfg.activecampaign_list_id = CO("coBrevoList").value.trim();
+    cfg.activecampaign_api_url = CO("coAcUrl").value.trim();
+  }
   const matchesUrl = CO("coMatches").value.trim();
   if (matchesUrl) cfg.matches_url = matchesUrl;
   return cfg;
@@ -1238,7 +1248,7 @@ document.getElementById("coPrefill").onclick = async (e) => {
 
 function resetCompanyForm() {
   editingCompanyId = null;
-  for (const id of ["coName","coSlug","coWebsite","coEmail","coAdres","coPostcode","coTelefoon","coKvk","coLogo","coDummy","coMatches","coFacebook","coInstagram","coYoutube","coBrevoKey","coBrevoList"]) CO(id).value = "";
+  for (const id of ["coName","coSlug","coWebsite","coEmail","coAdres","coPostcode","coTelefoon","coKvk","coLogo","coDummy","coMatches","coFacebook","coInstagram","coYoutube","coBrevoKey","coBrevoList","coAcUrl"]) CO(id).value = "";
   CO("coPrimary").value = "#ff7200";
   CO("ctMatches").checked = false; CO("ctClubs").checked = false; CO("ctReizen").checked = false;
   CO("coEsp").value = "brevo"; updateEspHint();
@@ -1275,7 +1285,9 @@ function fillCompanyForm(t) {
   CO("coYoutube").value = c.youtube_url || "";
   CO("coEsp").value = c.esp || "brevo";
   updateEspHint();
-  CO("coBrevoList").value = (c.esp === "klaviyo" ? c.klaviyo_list_id : t.brevo_list_id) ?? "";
+  CO("coBrevoList").value = (c.esp === "klaviyo" ? c.klaviyo_list_id
+    : c.esp === "activecampaign" ? c.activecampaign_list_id : t.brevo_list_id) ?? "";
+  CO("coAcUrl").value = c.activecampaign_api_url || "";
   for (const ct of c.content_types || []) {
     if (ct.kind === "matches") CO("ctMatches").checked = true;
     else if (ct.kind === "clubs") CO("ctClubs").checked = true;
@@ -1334,6 +1346,10 @@ document.getElementById("companySave").onclick = async () => {
     companyStatus.textContent = "Klaviyo vereist een lijst-ID (list- of segment-id).";
     return;
   }
+  if (esp === "activecampaign" && (!listRaw || !CO("coAcUrl").value.trim())) {
+    companyStatus.textContent = "ActiveCampaign vereist een API-URL en een lijst-ID.";
+    return;
+  }
   companyStatus.textContent = "Opslaan...";
   const formConfig = companyConfigFromForm();
   const listId = esp === "brevo" && listRaw ? parseInt(listRaw, 10) : null;
@@ -1361,7 +1377,7 @@ document.getElementById("companySave").onclick = async () => {
   tenantId = saved.id;
   const espKey = CO("coBrevoKey").value.trim();
   if (espKey) {
-    const kind = esp === "klaviyo" ? "klaviyo_api_key" : "brevo_api_key";
+    const kind = {klaviyo: "klaviyo_api_key", activecampaign: "activecampaign_api_key"}[esp] || "brevo_api_key";
     const sres = await fetch(`/tenants/${tenantId}/secrets`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind, value: espKey }),

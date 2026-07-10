@@ -431,6 +431,62 @@ def test_create_draft_via_klaviyo_when_esp_configured(session, cipher) -> None:
     assert nl.brevo_campaign_id is None
 
 
+def test_create_draft_via_activecampaign_when_esp_configured(session, cipher) -> None:
+    from types import SimpleNamespace
+
+    cfg = {
+        **CONFIG, "esp": "activecampaign",
+        "activecampaign_list_id": "7",
+        "activecampaign_api_url": "https://account.api-us1.com",
+    }
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug="ac-shop", name="AC Shop", config=cfg)
+    )
+    secrets_repo.set_tenant_secret(
+        session, cipher, tenant.id, "activecampaign_api_key", "ac_geheim"
+    )
+    captured: dict = {}
+
+    class FakeAC:
+        def __init__(self, api_url: str, api_key: str) -> None:
+            captured["api_url"], captured["key"] = api_url, api_key
+
+        def create_draft(self, **kw):
+            captured["kw"] = kw
+            return SimpleNamespace(campaign_id="42", message_id="9")
+
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        activecampaign_factory=FakeAC,
+        brevo_factory=lambda k: pytest.fail("Brevo mag niet worden aangeroepen"),
+        klaviyo_factory=lambda k: pytest.fail("Klaviyo mag niet worden aangeroepen"),
+    )
+    result = execute_tool("create_newsletter_draft", payload, ctx)
+    assert captured["api_url"] == "https://account.api-us1.com"
+    assert captured["key"] == "ac_geheim"
+    assert captured["kw"]["list_ids"] == ["7"]
+    assert result["esp"] == "activecampaign" and result["campaign_id"] == "42"
+    assert "ActiveCampaign" in result["message"]
+    nl = session.get(Newsletter, uuid.UUID(result["newsletter_id"]))
+    assert nl.esp_campaign_ref == "42"
+    assert nl.brevo_campaign_id is None
+
+
+def test_activecampaign_missing_api_url_gives_clear_error(session, cipher) -> None:
+    cfg = {**CONFIG, "esp": "activecampaign", "activecampaign_list_id": "7"}
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug="ac-zonder-url", name="AC", config=cfg)
+    )
+    secrets_repo.set_tenant_secret(
+        session, cipher, tenant.id, "activecampaign_api_key", "ac_geheim"
+    )
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    with pytest.raises(ValueError, match="API-URL"):
+        execute_tool("create_newsletter_draft", payload, ctx)
+
+
 def test_klaviyo_missing_key_gives_clear_error(session, cipher) -> None:
     cfg = {**CONFIG, "esp": "klaviyo", "klaviyo_list_id": "L1"}
     tenant = tenants_repo.create_tenant(

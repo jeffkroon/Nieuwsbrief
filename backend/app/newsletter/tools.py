@@ -50,6 +50,7 @@ from app.repositories import images as images_repo
 from app.repositories import newsletters as newsletters_repo
 from app.repositories import secrets as secrets_repo
 from app.repositories import templates as templates_repo
+from app.services.activecampaign import ActiveCampaignClient, ActiveCampaignError
 from app.services.brevo import BrevoClient, BrevoError
 from app.services.crypto import SecretCipher
 from app.services.klaviyo import KlaviyoClient, KlaviyoError
@@ -57,6 +58,8 @@ from app.services.klaviyo import KlaviyoClient, KlaviyoError
 DEFAULT_TEMPLATE = "voetbalreizenxl-main"
 BREVO_SECRET_KIND = "brevo_api_key"
 KLAVIYO_SECRET_KIND = "klaviyo_api_key"
+ACTIVECAMPAIGN_SECRET_KIND = "activecampaign_api_key"
+ESP_LABELS = {"brevo": "Brevo", "klaviyo": "Klaviyo", "activecampaign": "ActiveCampaign"}
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,7 @@ class ToolContext:
     conversation_id: uuid.UUID | None = None
     brevo_factory: Callable[[str], BrevoClient] = BrevoClient
     klaviyo_factory: Callable[[str], KlaviyoClient] = KlaviyoClient
+    activecampaign_factory: Callable[[str, str], ActiveCampaignClient] = ActiveCampaignClient
     http_client: httpx.Client | None = None
     template_id: uuid.UUID | None = None  # gekozen template in de chat; None = standaard
     # Voorbeeld-HTML wordt hierin gezet door preview_newsletter, zodat de chat-laag het
@@ -926,8 +930,11 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
     _validation_cache.clear()
     tenant = _load_tenant(ctx)
     esp = (tenant.config or {}).get("esp", "brevo")
-    esp_label = "Klaviyo" if esp == "klaviyo" else "Brevo"
-    secret_kind = KLAVIYO_SECRET_KIND if esp == "klaviyo" else BREVO_SECRET_KIND
+    esp_label = ESP_LABELS.get(esp, "Brevo")
+    secret_kind = {
+        "klaviyo": KLAVIYO_SECRET_KIND,
+        "activecampaign": ACTIVECAMPAIGN_SECRET_KIND,
+    }.get(esp, BREVO_SECRET_KIND)
     api_key = secrets_repo.get_tenant_secret(ctx.session, ctx.cipher, tenant.id, secret_kind)
     if not api_key:
         raise ValueError(
@@ -939,6 +946,16 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
     if esp == "klaviyo":
         client = ctx.klaviyo_factory(api_key)
         list_id = brand.get("klaviyo_list_id")
+        list_ids = [list_id] if list_id else None
+    elif esp == "activecampaign":
+        api_url = (brand.get("activecampaign_api_url") or "").strip()
+        if not api_url:
+            raise ValueError(
+                "geen ActiveCampaign API-URL ingesteld voor dit bedrijf "
+                "(Bedrijven-tab > Verzendplatform > API-URL, bv. https://account.api-us1.com)"
+            )
+        client = ctx.activecampaign_factory(api_url, api_key)
+        list_id = brand.get("activecampaign_list_id")
         list_ids = [list_id] if list_id else None
     else:
         client = ctx.brevo_factory(api_key)
@@ -954,7 +971,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
             list_ids=list_ids,
             preview_text=content.preview_text,
         )
-    except (BrevoError, KlaviyoError):
+    except (BrevoError, KlaviyoError, ActiveCampaignError):
         newsletters_repo.create_newsletter(
             ctx.session,
             tenant_id=tenant.id,
@@ -967,7 +984,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         )
         raise
 
-    is_klaviyo = esp == "klaviyo"
+    is_klaviyo = esp != "brevo"  # string-ref voor Klaviyo en ActiveCampaign
     newsletter = newsletters_repo.create_newsletter(
         ctx.session,
         tenant_id=tenant.id,
