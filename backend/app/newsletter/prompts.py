@@ -273,9 +273,10 @@ def build_system_prompt(
     """
     types = content_types if content_types else DEFAULT_CONTENT_TYPES
     prompt = f"{_PROMPT_HEAD}\n{_content_section(types)}\n{_PROMPT_TAIL}"
-    if esp == "klaviyo":
-        # De basisteksten noemen Brevo; voor een Klaviyo-bedrijf heet het platform anders.
-        prompt = prompt.replace("Brevo", "Klaviyo")
+    # De basisteksten noemen Brevo; voor andere platforms heet het anders.
+    esp_names = {"klaviyo": "Klaviyo", "activecampaign": "ActiveCampaign"}
+    if esp in esp_names:
+        prompt = prompt.replace("Brevo", esp_names[esp])
     if template_info:
         prompt = f"{prompt}\n\n{_template_section(template_info)}"
     if not tone_of_voice:

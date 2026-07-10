@@ -39,6 +39,7 @@ from app.schemas import (
     TenantSecretSet,
     TenantUpdate,
 )
+from app.services.activecampaign import ActiveCampaignClient, ActiveCampaignError
 from app.services.brevo import BrevoClient, BrevoError
 from app.services.company_prefill import prefill_company
 from app.services.llm_usage import TrackingLLM
@@ -104,7 +105,10 @@ def esp_lists(
     admin een lijst kan KIEZEN in plaats van een ID op te zoeken."""
     api_key = (body.api_key or "").strip()
     if not api_key and body.tenant_id:
-        kind = "klaviyo_api_key" if body.esp == "klaviyo" else "brevo_api_key"
+        kind = {
+            "klaviyo": "klaviyo_api_key",
+            "activecampaign": "activecampaign_api_key",
+        }.get(body.esp, "brevo_api_key")
         api_key = secrets_repo.get_tenant_secret(session, cipher, body.tenant_id, kind) or ""
     if not api_key:
         raise HTTPException(
@@ -112,9 +116,18 @@ def esp_lists(
             detail="Geen API-key: plak de key in het formulier of sla 'm eerst op bij het bedrijf.",
         )
     try:
-        client = KlaviyoClient(api_key) if body.esp == "klaviyo" else BrevoClient(api_key)
+        if body.esp == "activecampaign":
+            api_url = (body.api_url or "").strip()
+            if not api_url and body.tenant_id:
+                tenant = repo.get_tenant(session, body.tenant_id)
+                api_url = ((tenant.config or {}).get("activecampaign_api_url") or "").strip() if tenant else ""
+            client = ActiveCampaignClient(api_url, api_key)
+        elif body.esp == "klaviyo":
+            client = KlaviyoClient(api_key)
+        else:
+            client = BrevoClient(api_key)
         lists = client.get_lists()
-    except (KlaviyoError, BrevoError, ValueError) as exc:
+    except (KlaviyoError, BrevoError, ActiveCampaignError, ValueError) as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return EspListsResult(lists=lists)
 
