@@ -14,8 +14,15 @@ from sqlalchemy.orm import Session
 from app.db.models import Conversation, Tenant
 from app.newsletter.orchestrator import run_agent_turn
 from app.newsletter.prompts import build_system_prompt
+from app.newsletter.capabilities import template_capabilities
 from app.newsletter.renderer import SECTIONS_MARKER
-from app.newsletter.tools import TOOL_DEFINITIONS, ToolContext, execute_tool
+from app.newsletter.templates import load_template
+from app.newsletter.tools import (
+    DEFAULT_TEMPLATE,
+    TOOL_DEFINITIONS,
+    ToolContext,
+    execute_tool,
+)
 from app.repositories import conversations as repo
 from app.repositories import templates as templates_repo
 from app.services.crypto import SecretCipher
@@ -27,7 +34,8 @@ _REPLAYABLE_ROLES = {"user", "assistant"}
 
 
 def _template_info(
-    session: Session, tenant_id: uuid.UUID, template_id: uuid.UUID | None
+    session: Session, tenant_id: uuid.UUID, template_id: uuid.UUID | None,
+    builtin_name: str | None = None,
 ) -> dict:
     """Feiten over de actieve template voor de prompt (naam, secties, fallback).
 
@@ -42,14 +50,24 @@ def _template_info(
     if template is None:
         template = templates_repo.get_default_template(session, tenant_id)
     if template is None:
-        # De ingebouwde fallback-layout heeft wel een kop over de banner.
-        return {"is_fallback": True, "has_sections": False, "has_header_title": True}
+        # De ingebouwde fallback-layout: capaciteiten uit het echte bestand halen,
+        # zodat de assistent er net zo eerlijk over is als over eigen templates.
+        # Zelfde keuzevolgorde als _resolve_template_html: eventueel een per-
+        # bedrijf gekozen ingebouwd bestand, anders de standaard-fallback.
+        html = load_template(builtin_name or DEFAULT_TEMPLATE)
+        return {
+            "is_fallback": True,
+            "has_sections": SECTIONS_MARKER in html,
+            "has_header_title": "{{HEADER_TITEL}}" in html,
+            "capabilities": template_capabilities(html),
+        }
     html = template.html or ""
     return {
         "is_fallback": False,
         "name": template.name,
         "has_sections": SECTIONS_MARKER in html,
         "has_header_title": "{{HEADER_TITEL}}" in html,
+        "capabilities": template_capabilities(html),
     }
 
 
@@ -106,7 +124,10 @@ def run_conversation_turn(
     tenant = session.get(Tenant, conversation.tenant_id)
     tone = ensure_tone(session, tenant, client) if tenant else None
     content_types = (tenant.config or {}).get("content_types") if tenant else None
-    template_info = _template_info(session, conversation.tenant_id, template_id)
+    template_info = _template_info(
+        session, conversation.tenant_id, template_id,
+        builtin_name=(tenant.config or {}).get("template") if tenant else None,
+    )
 
     esp = (tenant.config or {}).get("esp") if tenant else None
     result = run_agent_turn(

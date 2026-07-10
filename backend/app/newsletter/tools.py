@@ -33,6 +33,7 @@ from app.newsletter.models import (
     NewsletterContent,
     Section,
 )
+from app.newsletter.capabilities import style_key_has_effect
 from app.newsletter.custom_fields import find_custom_slots, normalize_custom_fields
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.styles import (
@@ -56,6 +57,14 @@ from app.services.crypto import SecretCipher
 from app.services.klaviyo import KlaviyoClient, KlaviyoError
 
 DEFAULT_TEMPLATE = "voetbalreizenxl-main"
+# De oorspronkelijke paddings van de fallback-template (zie de tokens in het
+# html-bestand); als basis-stijl meegegeven zodat de render identiek blijft.
+_FALLBACK_TEMPLATE_STYLES = {
+    "spacing_banner_intro": 20,
+    "spacing_text_button": 16,
+    "spacing_intro_products": 4,
+    "spacing_products_text": 0,
+}
 BREVO_SECRET_KIND = "brevo_api_key"
 KLAVIYO_SECRET_KIND = "klaviyo_api_key"
 ACTIVECAMPAIGN_SECRET_KIND = "activecampaign_api_key"
@@ -775,7 +784,14 @@ def _resolve_template_html(ctx: ToolContext, tenant, brand: dict) -> tuple[str, 
         chosen_tpl = templates_repo.get_default_template(ctx.session, tenant.id)
     if chosen_tpl is not None:
         return chosen_tpl.html, {**brand, "styles": chosen_tpl.styles or {}}
-    return load_template(brand.get("template", DEFAULT_TEMPLATE)), brand
+    # Ingebouwde fallback: de witruimte-tokens staan in het bestand met deze
+    # oorspronkelijke waarden als basis; zonder deze styles zouden de globale
+    # defaults (80px) de layout ineens veranderen.
+    fallback_styles = {**_FALLBACK_TEMPLATE_STYLES, **(brand.get("styles") or {})}
+    return (
+        load_template(brand.get("template", DEFAULT_TEMPLATE)),
+        {**brand, "styles": fallback_styles},
+    )
 
 
 def _inherit_last_preview(ctx: ToolContext, tool_input: dict) -> dict:
@@ -829,6 +845,18 @@ def _apply_style_overrides(brand: dict, template_html: str, raw: dict | None) ->
         raise ValueError(
             f"deze template ondersteunt {', '.join(ontbreekt)} niet (het bijbehorende "
             "spacing-token ontbreekt in de layout). Meld dit eerlijk aan de gebruiker."
+        )
+    # Zelfde eerlijkheid voor kleuren/lettertype: een sleutel die in deze template
+    # nergens effect heeft (geen token en niet gebruikt door de gegenereerde
+    # blokken) wordt hard geweigerd in plaats van stil niets te doen.
+    zonder_effect = [
+        k for k in clean
+        if k not in SPACING_KEYS and not style_key_has_effect(k, template_html)
+    ]
+    if zonder_effect:
+        raise ValueError(
+            f"deze template gebruikt {', '.join(zonder_effect)} nergens; die aanpassing "
+            "zou stil niets doen. Meld dit eerlijk aan de gebruiker."
         )
     basis = dict(brand.get("styles") or {})
     if any(k in clean for k in ("button_bg", "button_text")):
