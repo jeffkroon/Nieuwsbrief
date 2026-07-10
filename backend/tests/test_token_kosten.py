@@ -137,16 +137,30 @@ class _FakeUsage:
 
 
 class _FakeAnthropicClient:
-    """Nabootsing van de echte client: messages.create en beta.messages.create."""
+    """Nabootsing van de echte client: messages.create/stream en beta.messages.create."""
 
     def __init__(self) -> None:
         class _Resp:
             usage = _FakeUsage()
             content = []
+            stop_reason = "end_turn"
+
+        class _StreamCM:
+            def __enter__(self_inner):
+                return self_inner
+
+            def __exit__(self_inner, *exc):
+                return False
+
+            def get_final_message(self_inner):
+                return _Resp()
 
         class _Messages:
             def create(self, **kwargs):
                 return _Resp()
+
+            def stream(self, **kwargs):
+                return _StreamCM()
 
         class _Beta:
             messages = _Messages()
@@ -174,6 +188,29 @@ def test_tracking_llm_records_both_apis(session) -> None:
     ]
     assert rows[0].tenant_id == tenant_id and rows[0].conversation_id == conv_id
     assert rows[0].input_tokens == 1200 and rows[0].cache_read_tokens == 7600
+
+
+def test_tracking_llm_records_streaming(session) -> None:
+    """De toolproof-tak streamt; de usage-wrapper moet ook dan één regel loggen."""
+    from app.db.models import LlmUsage
+    from app.services.llm_usage import TrackingLLM
+
+    tenant_id = uuid.uuid4()
+    tracked = TrackingLLM(
+        _FakeAnthropicClient(), session, purpose="toolproof", tenant_id=tenant_id
+    )
+    with tracked.messages.stream(model="claude-sonnet-4-6", max_tokens=64000) as stream:
+        msg = stream.get_final_message()
+        # Idempotent: een tweede aanroep mag NIET dubbel wegschrijven.
+        stream.get_final_message()
+    assert msg.usage.input_tokens == 1200
+
+    rows = session.query(LlmUsage).all()
+    assert len(rows) == 1  # precies één regel, niet twee
+    assert rows[0].model == "claude-sonnet-4-6"
+    assert rows[0].purpose == "toolproof"
+    assert rows[0].tenant_id == tenant_id
+    assert rows[0].output_tokens == 340 and rows[0].cache_read_tokens == 7600
 
 
 def test_recording_failure_never_breaks_the_call(session) -> None:

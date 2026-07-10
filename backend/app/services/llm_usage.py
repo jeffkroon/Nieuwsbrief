@@ -51,9 +51,46 @@ def record_usage(
             pass
 
 
+class _RecordingStream:
+    """Wikkelt een MessageStream zodat get_final_message() de usage registreert."""
+
+    def __init__(self, stream, model, tracker: "TrackingLLM") -> None:
+        self._stream = stream
+        self._model = model
+        self._tracker = tracker
+        self._recorded = False
+
+    def get_final_message(self):
+        message = self._stream.get_final_message()
+        # get_final_message() is idempotent bij de SDK; registreer daarom maar
+        # één keer, anders zou herhaald aanroepen de kosten dubbel wegschrijven.
+        if not self._recorded:
+            self._recorded = True
+            self._tracker._record(self._model, getattr(message, "usage", None))
+        return message
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+class _StreamManager:
+    """Context-manager om client.messages.stream() heen die usage vastlegt."""
+
+    def __init__(self, inner_cm, model, tracker: "TrackingLLM") -> None:
+        self._inner_cm = inner_cm
+        self._model = model
+        self._tracker = tracker
+
+    def __enter__(self):
+        return _RecordingStream(self._inner_cm.__enter__(), self._model, self._tracker)
+
+    def __exit__(self, *exc):
+        return self._inner_cm.__exit__(*exc)
+
+
 @dataclass
 class _MessagesProxy:
-    """Vervangt client.messages: zelfde create(), maar legt usage vast."""
+    """Vervangt client.messages: zelfde create()/stream(), maar legt usage vast."""
 
     inner: object
     tracker: "TrackingLLM"
@@ -62,6 +99,9 @@ class _MessagesProxy:
         response = self.inner.create(**kwargs)
         self.tracker._record(kwargs.get("model"), getattr(response, "usage", None))
         return response
+
+    def stream(self, **kwargs):
+        return _StreamManager(self.inner.stream(**kwargs), kwargs.get("model"), self.tracker)
 
 
 @dataclass
