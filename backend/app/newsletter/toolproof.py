@@ -388,12 +388,20 @@ def verify_toolproof(html: str) -> tuple[list[str], list[str]]:
         if not has_card_block(html):
             failed.append("kaart-blok niet afgesloten (<!-- /##KAART## --> ontbreekt)")
         else:
-            # Het eigen kaart-ontwerp moet de item-data echt tonen: titel, link en foto.
-            checks = {
-                "titel": "TP-BLOK",
-                "link": "https://tp-item.test",
-                "foto": "https://tp-itemfoto.test/i.png",
+            # Het kaart-ontwerp moet de item-data tonen die het GEBRUIKT: een
+            # kaart zonder eigen link/foto (bv. label + titel + tekst) is legitiem,
+            # dus alleen tokens die echt in het blok staan hoeven door te stromen.
+            # De titel is verplicht (een kaart zonder fillbare titel is een
+            # hardcoded kaart); link en foto zijn optioneel, want niet elk
+            # kaart-ontwerp heeft een klikbare link of een eigen foto.
+            optioneel = {
+                "{{KAART_URL}}": ("link", "https://tp-item.test"),
+                "{{KAART_IMAGE_URL}}": ("foto", "https://tp-itemfoto.test/i.png"),
             }
+            checks = {"titel": "TP-BLOK"}
+            for token, (naam, sentinel) in optioneel.items():
+                if token in html:
+                    checks[naam] = sentinel
             missing = [naam for naam, sentinel in checks.items() if sentinel not in rendered]
             if missing:
                 failed.append(

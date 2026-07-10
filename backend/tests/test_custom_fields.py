@@ -44,8 +44,10 @@ def test_find_custom_slots_unique_in_order() -> None:
 
 
 def test_normalize_accepts_lowercase_and_prefix() -> None:
+    # Sleutels worden genormaliseerd; waarden blijven exact behouden (spaties
+    # tellen mee voor de byte-round-trip van toolproof).
     assert normalize_custom_fields({"vak_artikel_titel": " Kop ", "QA_VRAAG": "x"}) == {
-        "ARTIKEL_TITEL": "Kop",
+        "ARTIKEL_TITEL": " Kop ",
         "QA_VRAAG": "x",
     }
 

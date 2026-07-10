@@ -46,7 +46,10 @@ def normalize_custom_fields(raw: dict) -> dict[str, str]:
                 f"custom_fields bevat twee sleutels die allebei op {name!r} uitkomen; "
                 "gebruik elke vaknaam maar één keer"
             )
-        clean[name] = str(value).strip()
+        # Waarde NIET strippen: een template kan betekenisvolle spaties bevatten
+        # ("Connect. Monitor. ") en strippen zou de byte-round-trip van toolproof
+        # breken. De leeg-check in fill_custom_fields stript zelf.
+        clean[name] = str(value)
     return clean
 
 
@@ -82,7 +85,7 @@ def fill_custom_fields(html: str, fields: dict[str, str]) -> str:
             )
         parts.append(_fill(rest[:start], fields))
         slots = SLOT_PATTERN.findall(inner)
-        if any(fields.get(name) for name in slots):
+        if any((fields.get(name) or "").strip() for name in slots):
             parts.append(_fill(inner, fields))
         rest = rest[end + len(SECTION_END):]
     parts.append(_fill(rest, fields))

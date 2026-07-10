@@ -61,7 +61,7 @@ def test_create_without_marker_is_allowed(client, session) -> None:
     # Een afwijkende layout zonder wedstrijdblokken (bv. kaart-/review-layout) mag.
     t = _tenant(session)
     resp = client.post(
-        f"/tenants/{t.id}/templates", json={"name": "Card", "html": "<html>geen marker</html>"}
+        f"/tenants/{t.id}/templates", json={"name": "Card", "html": "<html>{{INTRO_1}} geen marker</html>"}
     )
     assert resp.status_code == 201
 
