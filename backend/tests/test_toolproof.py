@@ -58,21 +58,49 @@ class _FakeText:
 @dataclass
 class _FakeResp:
     content: list
+    stop_reason: str = "end_turn"
+    usage: object = None
+
+
+class _FakeStream:
+    """Bootst client.messages.stream() na als context-manager."""
+
+    def __init__(self, resp: _FakeResp) -> None:
+        self._resp = resp
+
+    def __enter__(self) -> "_FakeStream":
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        return False
+
+    def get_final_message(self) -> _FakeResp:
+        return self._resp
 
 
 @dataclass
 class _FakeMessages:
     payload: dict
+    stop_reason: str = "end_turn"
     calls: list = field(default_factory=list)
+
+    def _resp(self) -> _FakeResp:
+        return _FakeResp(
+            [_FakeText(json.dumps(self.payload))], stop_reason=self.stop_reason
+        )
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return _FakeResp([_FakeText(json.dumps(self.payload))])
+        return self._resp()
+
+    def stream(self, **kwargs):
+        self.calls.append(kwargs)
+        return _FakeStream(self._resp())
 
 
 class FakeLLM:
-    def __init__(self, payload: dict) -> None:
-        self.messages = _FakeMessages(payload=payload)
+    def __init__(self, payload: dict, *, stop_reason: str = "end_turn") -> None:
+        self.messages = _FakeMessages(payload=payload, stop_reason=stop_reason)
 
 
 def test_apply_operations_valid_substitutions_and_card_dedup() -> None:
@@ -154,6 +182,80 @@ def test_strip_ws_keeps_single_space_meaningful() -> None:
         "<b>Nieuw</b><span>Product</span>"
     )
     assert _strip_ws("<b>a</b>\n\t <i>b</i>") == _strip_ws("<b>a</b> <i>b</i>")
+
+
+def test_truncated_llm_answer_reports_clear_reason() -> None:
+    """Regressie: een afgekapt AI-antwoord (max_tokens) op een grote template
+    gaf vroeger 0 operaties + de vage 'kon niet worden gelezen'. Nu volgt er
+    een duidelijke, bruikbare reden en blijft de template onaangetast."""
+    from app.newsletter.toolproof import propose_replacements
+
+    proposal = propose_replacements(
+        FakeLLM({"operations": OPS, "notes": []}, stop_reason="max_tokens"),
+        STATIC_HTML,
+    )
+    assert proposal["operations"] == []
+    assert any("te groot" in n for n in proposal["notes"])
+    assert not any("kon niet worden gelezen" in n for n in proposal["notes"])
+
+    result = make_toolproof(
+        FakeLLM({"operations": OPS, "notes": []}, stop_reason="max_tokens"), STATIC_HTML
+    )
+    assert result.html == STATIC_HTML  # niets omgezet, origineel onaangetast
+    assert any("te groot" in n for n in result.notes)
+
+
+def test_refused_llm_answer_reports_clear_reason() -> None:
+    from app.newsletter.toolproof import propose_replacements
+
+    proposal = propose_replacements(
+        FakeLLM({"operations": [], "notes": []}, stop_reason="refusal"), STATIC_HTML
+    )
+    assert proposal["operations"] == []
+    assert any("geweigerd" in n for n in proposal["notes"])
+
+
+def test_unexpected_stop_reason_reports_clear_reason() -> None:
+    """Vangnet: een onbekende stop-reden (bv. pause_turn) geeft een bruikbare
+    melding i.p.v. de generieke 'kon niet worden gelezen'."""
+    from app.newsletter.toolproof import propose_replacements
+
+    proposal = propose_replacements(
+        FakeLLM({"operations": OPS, "notes": []}, stop_reason="pause_turn"), STATIC_HTML
+    )
+    assert proposal["operations"] == []
+    assert any("onverwachte reden" in n for n in proposal["notes"])
+
+
+def test_api_error_reports_clear_reason_without_500() -> None:
+    """Een API-fout (timeout/onbereikbaar) tijdens streamen mag geen kale 500
+    veroorzaken, maar een nette melding opleveren."""
+    import anthropic
+    import httpx
+
+    from app.newsletter.toolproof import propose_replacements
+
+    class _BoomStream:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def get_final_message(self):
+            raise anthropic.APIConnectionError(
+                message="boom", request=httpx.Request("POST", "https://api.anthropic.com")
+            )
+
+    class _BoomLLM:
+        class messages:
+            @staticmethod
+            def stream(**kwargs):
+                return _BoomStream()
+
+    proposal = propose_replacements(_BoomLLM(), STATIC_HTML)
+    assert proposal["operations"] == []
+    assert any("niet worden uitgevoerd" in n for n in proposal["notes"])
 
 
 def test_make_toolproof_not_ok_when_ops_fail() -> None:

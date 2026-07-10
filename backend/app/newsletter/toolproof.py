@@ -14,8 +14,11 @@ Werkwijze (garanties in code, niet in het model):
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field, replace
+
+import anthropic
 
 from app.newsletter.card_block import CARD_TPL_END, CARD_TPL_START, has_card_block
 from app.newsletter.custom_fields import (
@@ -38,9 +41,15 @@ from app.newsletter.toolproof_ops import (
     verify_replace_op,
 )
 
+_log = logging.getLogger(__name__)
+
 TRANSFORM_MODEL = "claude-sonnet-4-6"
 MAX_TEMPLATE_CHARS = 150_000
-MAX_OUTPUT_TOKENS = 16000
+# Grote (Stripo/ActiveCampaign) exports leveren tientallen operaties op; 16000
+# tokens kapte het JSON-antwoord af (json.loads faalde -> "kon niet gelezen").
+# claude-sonnet-4-6 kan tot 128K output, maar boven ~16K moet er gestreamd
+# worden om SDK-HTTP-timeouts te vermijden (zie propose_replacements).
+MAX_OUTPUT_TOKENS = 64000
 
 _REPLACEMENTS_SCHEMA = {
     "type": "object",
@@ -261,14 +270,47 @@ class ToolproofResult:
 
 
 def propose_replacements(llm, raw_html: str) -> dict:
-    """Vraag het LLM om exacte vervangingsoperaties (structured output)."""
-    response = llm.messages.create(
-        model=TRANSFORM_MODEL,
-        max_tokens=MAX_OUTPUT_TOKENS,
-        system=_TRANSFORM_SYSTEM,
-        output_config={"format": {"type": "json_schema", "schema": _REPLACEMENTS_SCHEMA}},
-        messages=[{"role": "user", "content": f"Template-HTML:\n{raw_html}"}],
-    )
+    """Vraag het LLM om exacte vervangingsoperaties (structured output).
+
+    Streamt het antwoord: een grote template kan tientallen operaties opleveren
+    en bij hoge max_tokens weigert de SDK een niet-streamende call (timeout-risico).
+    Een afgekapt of geweigerd antwoord wordt met een duidelijke, bruikbare reden
+    gemeld in plaats van de generieke "kon niet worden gelezen".
+    """
+    try:
+        with llm.messages.stream(
+            model=TRANSFORM_MODEL,
+            max_tokens=MAX_OUTPUT_TOKENS,
+            system=_TRANSFORM_SYSTEM,
+            output_config={"format": {"type": "json_schema", "schema": _REPLACEMENTS_SCHEMA}},
+            messages=[{"role": "user", "content": f"Template-HTML:\n{raw_html}"}],
+        ) as stream:
+            response = stream.get_final_message()
+    except anthropic.APIError as exc:
+        _log.warning("toolproof-transform faalde: %s", exc, exc_info=True)
+        return {"operations": [], "notes": [
+            "De AI-omzetting kon niet worden uitgevoerd (het model was onbereikbaar "
+            f"of gaf een fout: {type(exc).__name__}). Probeer het later opnieuw."
+        ]}
+
+    stop_reason = getattr(response, "stop_reason", None)
+    if stop_reason == "max_tokens":
+        return {"operations": [], "notes": [
+            "De template is te groot om in één keer om te zetten: het AI-antwoord "
+            "werd afgekapt op de maximale lengte. Zet de template in stukken om, of "
+            "verwijder overbodige (dubbele) blokken en probeer opnieuw."
+        ]}
+    if stop_reason == "refusal":
+        return {"operations": [], "notes": [
+            "Het AI-model heeft geweigerd deze template om te zetten (veiligheidsfilter)."
+        ]}
+    if stop_reason not in ("end_turn", None):
+        # Vangnet voor toekomstige/onbekende redenen (bv. pause_turn): geef een
+        # bruikbare melding i.p.v. de generieke JSON-parsefout hieronder.
+        return {"operations": [], "notes": [
+            f"De AI-omzetting stopte om een onverwachte reden ({stop_reason}); "
+            "het antwoord is niet gebruikt. Probeer het opnieuw."
+        ]}
     text = next((b.text for b in response.content if getattr(b, "type", None) == "text"), "")
     try:
         return json.loads(text)
