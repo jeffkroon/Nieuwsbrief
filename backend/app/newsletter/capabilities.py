@@ -25,12 +25,13 @@ from app.newsletter.styles import FONT_KEY, SPACING_KEYS, TEMPLATE_TOKENS
 _KEY_TOKENS = {key: token for token, key in TEMPLATE_TOKENS.items()}
 _KEY_TOKENS[FONT_KEY] = "{{STYLE_FONT}}"
 
-# Stijl-sleutels die de code-gegenereerde blokken (kaarten/banners/secties)
-# zelf toepassen; die werken dus ook zonder token in de HTML.
-_GENERATED_BLOCK_KEYS = frozenset({
-    "accent", "card_bg", "card_border", "price_color", "badge_bg",
-    "home_color", "away_color", "block_border", "button_bg", "button_text",
-    "text_color", FONT_KEY,
+# Welke code-gegenereerde blokken gebruiken welke stijl-sleutels? De kaart- en
+# banner-renderers raken verschillende sleutels; de secties-composer kan beide
+# vormen renderen en telt dus bij allebei mee.
+_CARD_KEYS = frozenset({"accent", "card_bg", "card_border", "badge_bg"})
+_BANNER_KEYS = frozenset({"home_color", "away_color", "block_border"})
+_SHARED_BLOCK_KEYS = frozenset({
+    "price_color", "button_bg", "button_text", "text_color", FONT_KEY,
 })
 
 
@@ -43,12 +44,14 @@ def style_key_has_effect(key: str, html: str) -> bool:
     token = _KEY_TOKENS.get(key) or ("{{STYLE_" + key.upper() + "}}")
     if token in html:
         return True
-    generated = _has_generated_blocks(html)
-    if key in _GENERATED_BLOCK_KEYS and (generated or CARD_TPL_START in html):
-        # Eigen kaartblokken gebruiken tokens (dan ving de check hierboven het al),
-        # maar de knop-/kaartkleuren gelden ook als terugval voor hero/cta.
-        if generated:
-            return True
+    kaarten = CARD_MARKER in html or SECTIONS_MARKER in html
+    banners = BANNER_MARKER in html or SECTIONS_MARKER in html
+    if key in _CARD_KEYS and kaarten:
+        return True
+    if key in _BANNER_KEYS and banners:
+        return True
+    if key in _SHARED_BLOCK_KEYS and (kaarten or banners):
+        return True
     if key in ("hero_button_bg", "hero_button_text") and "{{HEADER_CTA}}" in html:
         return True  # de gegenereerde hero-knop gebruikt deze kleuren
     if key in ("cta_button_bg", "cta_button_text") and SECTIONS_MARKER in html:
@@ -56,8 +59,9 @@ def style_key_has_effect(key: str, html: str) -> bool:
     if key in ("button_bg", "button_text"):
         # Via de terugval-keten kleuren hero-/cta-knoppen mee met de
         # productknop zolang die geen eigen kleur hebben.
+        suffix = "text" if key == "button_text" else "bg"
         for volger in ("hero_button", "cta_button"):
-            if style_key_has_effect(f"{volger}_bg", html):
+            if style_key_has_effect(f"{volger}_{suffix}", html):
                 return True
     if key == FONT_KEY and "{{HEADER_CTA}}" in html:
         return True  # de gegenereerde hero-knop gebruikt het lettertype

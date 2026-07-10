@@ -243,17 +243,23 @@ def _template_section(template_info: dict) -> str:
             ("product", "productkaart-knoppen"), ("hero", "de knop op de banner"),
             ("cta", "de grote CTA-knop"),
         ) if knoppen.get(sleutel)]
-        lines.append(
-            "AANPASBAAR IN DEZE TEMPLATE (via style_overrides, geldt alleen voor deze "
-            "nieuwsbrief): "
-            + ("knopkleuren van " + ", ".join(knop_labels) + "; " if knop_labels else "")
-            + ("tekstkleur/lettertype; " if caps.get("text_color") else "")
-            + (
-                f"witruimte tussen de hoofd-zones ({len(spacing)} zones instelbaar). "
-                if spacing else "GEEN witruimte-aanpassing (de spacing-tokens ontbreken "
-                "in deze template); zeg dat eerlijk als iemand erom vraagt. "
+        if not knop_labels and not caps.get("text_color") and not spacing:
+            lines.append(
+                "LET OP: deze template heeft GEEN aanpasbare stijl (geen knopkleuren, "
+                "tekstkleur of witruimte); zeg dat eerlijk als iemand erom vraagt."
             )
-        )
+        else:
+            lines.append(
+                "AANPASBAAR IN DEZE TEMPLATE (via style_overrides, geldt alleen voor deze "
+                "nieuwsbrief): "
+                + ("knopkleuren van " + ", ".join(knop_labels) + "; " if knop_labels else "")
+                + ("tekstkleur/lettertype; " if caps.get("text_color") else "")
+                + (
+                    f"witruimte tussen de hoofd-zones ({len(spacing)} zones instelbaar). "
+                    if spacing else "GEEN witruimte-aanpassing (de spacing-tokens ontbreken "
+                    "in deze template); zeg dat eerlijk als iemand erom vraagt. "
+                )
+            )
         if caps.get("own_card_design"):
             lines.append(
                 "De productblokken gebruiken het EIGEN kaart-ontwerp van deze template."

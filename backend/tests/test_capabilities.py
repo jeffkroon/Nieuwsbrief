@@ -14,7 +14,8 @@ MET_TOKENS = (
     "<td bgcolor='{{STYLE_BUTTON_BG}}'>x</td>"
     "</body></html>"
 )
-MET_GEGENEREERDE_BLOKKEN = "<html><body>{{INTRO_1}}<!-- ##BANNERS## -->{{HEADER_CTA}}</body></html>"
+MET_BANNERS = "<html><body>{{INTRO_1}}<!-- ##BANNERS## -->{{HEADER_CTA}}</body></html>"
+MET_KAARTEN = "<html><body>{{INTRO_1}}<!-- ##CARDS## --></body></html>"
 KALE = "<html><body><p>{{INTRO_1}}</p></body></html>"
 
 
@@ -25,14 +26,21 @@ def test_effect_via_token() -> None:
     assert not style_key_has_effect("footer_bg", MET_TOKENS)
 
 
-def test_effect_via_generated_blocks() -> None:
-    # Kaart-/knopkleuren werken ook zonder token: de code genereert de blokken.
-    assert style_key_has_effect("button_bg", MET_GEGENEREERDE_BLOKKEN)
-    assert style_key_has_effect("accent", MET_GEGENEREERDE_BLOKKEN)
-    assert style_key_has_effect("hero_button_bg", MET_GEGENEREERDE_BLOKKEN)  # via {{HEADER_CTA}}
-    assert style_key_has_effect("font_family", MET_GEGENEREERDE_BLOKKEN)
-    # Maar pagina-achtergrond heeft zonder token nergens effect.
-    assert not style_key_has_effect("page_bg", MET_GEGENEREERDE_BLOKKEN)
+def test_effect_via_generated_blocks_is_marker_specific() -> None:
+    # Knopkleuren en lettertype werken bij beide bloksoorten (code genereert ze).
+    assert style_key_has_effect("button_bg", MET_BANNERS)
+    assert style_key_has_effect("font_family", MET_BANNERS)
+    assert style_key_has_effect("hero_button_bg", MET_BANNERS)  # via {{HEADER_CTA}}
+    # Maar kaart-specifieke kleuren gelden NIET bij een banners-only template
+    # (review-vondst: accent deed daar stil niets)...
+    assert not style_key_has_effect("accent", MET_BANNERS)
+    assert not style_key_has_effect("card_bg", MET_BANNERS)
+    # ...en banner-specifieke kleuren niet bij een kaarten-only template.
+    assert style_key_has_effect("accent", MET_KAARTEN)
+    assert not style_key_has_effect("home_color", MET_KAARTEN)
+    assert style_key_has_effect("home_color", MET_BANNERS)
+    # Pagina-achtergrond heeft zonder token nergens effect.
+    assert not style_key_has_effect("page_bg", MET_BANNERS)
 
 
 def test_kale_template_has_no_style_effect() -> None:
@@ -64,8 +72,27 @@ def test_override_without_effect_is_rejected() -> None:
     with pytest.raises(ValueError, match="nergens"):
         _apply_style_overrides(brand, KALE, {"button_bg": "#000000"})
     # Met gegenereerde blokken mag het wel (de code past de kleur toe).
-    out = _apply_style_overrides(brand, MET_GEGENEREERDE_BLOKKEN, {"button_bg": "#000000"})
+    out = _apply_style_overrides(brand, MET_BANNERS, {"button_bg": "#000000"})
     assert out["styles"]["button_bg"] == "#000000"
+    # Kaart-kleur op een banners-only template: nette weigering.
+    with pytest.raises(ValueError, match="nergens"):
+        _apply_style_overrides(brand, MET_BANNERS, {"accent": "#000000"})
+
+
+def test_prompt_says_nothing_adjustable_honestly() -> None:
+    from app.newsletter.prompts import build_system_prompt
+
+    prompt = build_system_prompt(template_info={
+        "is_fallback": False, "name": "Statisch", "has_sections": False,
+        "has_header_title": True,
+        "capabilities": {
+            "spacing_keys": [], "buttons": {"product": False, "hero": False, "cta": False},
+            "text_color": False, "own_card_design": False,
+            "generated_blocks": False, "custom_slots": [],
+        },
+    })
+    assert "GEEN aanpasbare stijl" in prompt
+    assert "AANPASBAAR IN DEZE TEMPLATE" not in prompt
 
 
 def test_prompt_mentions_capabilities() -> None:
