@@ -235,6 +235,37 @@ def _template_section(template_info: dict) -> str:
         )
     else:
         lines.append(f"Gekozen template: \"{template_info.get('name', 'onbekend')}\".")
+    caps = template_info.get("capabilities") or {}
+    if caps:
+        spacing = caps.get("spacing_keys") or []
+        knoppen = caps.get("buttons") or {}
+        knop_labels = [label for sleutel, label in (
+            ("product", "productkaart-knoppen"), ("hero", "de knop op de banner"),
+            ("cta", "de grote CTA-knop"),
+        ) if knoppen.get(sleutel)]
+        lines.append(
+            "AANPASBAAR IN DEZE TEMPLATE (via style_overrides, geldt alleen voor deze "
+            "nieuwsbrief): "
+            + ("knopkleuren van " + ", ".join(knop_labels) + "; " if knop_labels else "")
+            + ("tekstkleur/lettertype; " if caps.get("text_color") else "")
+            + (
+                f"witruimte tussen de hoofd-zones ({len(spacing)} zones instelbaar). "
+                if spacing else "GEEN witruimte-aanpassing (de spacing-tokens ontbreken "
+                "in deze template); zeg dat eerlijk als iemand erom vraagt. "
+            )
+        )
+        if caps.get("own_card_design"):
+            lines.append(
+                "De productblokken gebruiken het EIGEN kaart-ontwerp van deze template."
+            )
+        slots = caps.get("custom_slots") or []
+        if slots:
+            getoond = ", ".join(slots[:15]) + (" (en meer)" if len(slots) > 15 else "")
+            lines.append(
+                f"Deze template heeft EIGEN INVULVAKKEN (custom_fields): {getoond}. "
+                "Copy schrijf je zelf in de tone of voice; feiten alleen met input "
+                "van de gebruiker; lege vakken vallen automatisch weg."
+            )
     if template_info.get("has_sections"):
         lines.append(
             "Deze template ondersteunt OPZET-SECTIES: doorloop stap 2b en bespreek de "
