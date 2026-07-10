@@ -31,7 +31,8 @@ def find_custom_slots(html: str) -> list[str]:
 
 
 def normalize_custom_fields(raw: dict) -> dict[str, str]:
-    """Sleutels naar VAK-vorm (hoofdletters, zonder 'VAK_'-prefix), waarden gestript.
+    """Sleutels naar VAK-vorm (hoofdletters, zonder 'VAK_'-prefix); WAARDEN blijven
+    exact behouden (spaties tellen mee voor de byte-round-trip van toolproof).
 
     Botsende sleutels na normalisatie (bv. 'vak_titel' en 'TITEL') zijn een harde
     fout: nooit stil de ene waarde door de andere laten winnen.

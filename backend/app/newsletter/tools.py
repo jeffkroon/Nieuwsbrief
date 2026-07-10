@@ -917,7 +917,7 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
     brand = _apply_style_overrides(brand, template_html, tool_input.get("style_overrides"))
     html = render_newsletter(template_html, brand, content)
     slots = find_custom_slots(template_html)
-    unfilled = [naam for naam in slots if not custom_fields.get(naam)]
+    unfilled = [naam for naam in slots if not (custom_fields.get(naam) or '').strip()]
     return tenant, brand, content, matches, clubs, items, html, unfilled
 
 

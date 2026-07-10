@@ -106,3 +106,24 @@ def test_thingsdata_export_toolproofs_and_roundtrips() -> None:
     )
     verwacht = RAW.replace(_KAART2, "")
     assert render_newsletter(result.html, brand, content) == verwacht
+
+
+def test_hardcoded_card_link_is_rejected() -> None:
+    """Review-vondst: een vaste http-link/foto in een herhaald kaart-blok zou
+    elke kaart naar dezelfde plek laten wijzen; dat moet geweigerd worden."""
+    from app.newsletter.toolproof import verify_toolproof
+
+    html = (
+        "<html><body>{{INTRO_1}}"
+        '<!-- ##KAART## --><td><a href="https://vast.nl/product-1">'
+        '<img src="{{KAART_IMAGE_URL}}"/></a><h3>{{KAART_TITEL}}</h3></td><!-- /##KAART## -->'
+        "</body></html>"
+    )
+    _, failed = verify_toolproof(html)
+    assert any("vaste link of foto" in f for f in failed)
+
+    # Volledig getokeniseerd kaart-blok: geen fout.
+    goed = html.replace('href="https://vast.nl/product-1"', 'href="{{KAART_URL}}"')
+    passed, failed = verify_toolproof(goed)
+    assert failed == []
+    assert any("kaart-blok herhaalt" in p for p in passed)

@@ -17,7 +17,7 @@ import json
 import re
 from dataclasses import dataclass, field, replace
 
-from app.newsletter.card_block import CARD_TPL_START, has_card_block
+from app.newsletter.card_block import CARD_TPL_END, CARD_TPL_START, has_card_block
 from app.newsletter.custom_fields import (
     SECTION_END,
     SECTION_START,
@@ -333,6 +333,19 @@ def apply_operations(
     return html, applied, failed, extractie, removed
 
 
+_CARD_URL_ATTR = re.compile(r'(?:href|src)\s*=\s*"(https?://[^"]*)"', re.IGNORECASE)
+
+
+def _hardcoded_card_urls(html: str) -> list[str]:
+    """Vaste http(s) href/src-waarden binnen het ##KAART##-blok (geen tokens)."""
+    start = html.find(CARD_TPL_START)
+    end = html.find(CARD_TPL_END, start)
+    if start == -1 or end == -1:
+        return []
+    blok = html[start + len(CARD_TPL_START):end]
+    return _CARD_URL_ATTR.findall(blok)
+
+
 def verify_toolproof(html: str) -> tuple[list[str], list[str]]:
     """Render met sentinel-content en check dat elke aanwezige placeholder doorstroomt."""
     passed: list[str] = []
@@ -403,10 +416,19 @@ def verify_toolproof(html: str) -> tuple[list[str], list[str]]:
                 if token in html:
                     checks[naam] = sentinel
             missing = [naam for naam, sentinel in checks.items() if sentinel not in rendered]
+            # Een vaste http(s)-link/foto binnen het kaart-blok is verdacht: de kaart
+            # wordt per item herhaald, dus zou ELKE kaart naar dezelfde plek wijzen.
+            hardcoded = _hardcoded_card_urls(html)
             if missing:
                 failed.append(
                     f"kaart-blok aanwezig maar {', '.join(missing)} komt niet in de render "
                     "(placeholder {{KAART_...}} vergeten?)"
+                )
+            elif hardcoded:
+                failed.append(
+                    "kaart-blok bevat een vaste link of foto die niet getokeniseerd is "
+                    f"({hardcoded[0]}); elke herhaalde kaart zou dan dezelfde link/foto "
+                    "krijgen. Vervang die door {{KAART_URL}} of {{KAART_IMAGE_URL}}."
                 )
             else:
                 passed.append("kaart-blok herhaalt het eigen ontwerp met de item-data")
