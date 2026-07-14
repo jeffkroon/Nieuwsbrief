@@ -56,9 +56,14 @@ from app.services.brevo import BrevoClient, BrevoError
 from app.services.crypto import SecretCipher
 from app.services.klaviyo import KlaviyoClient, KlaviyoError
 
-DEFAULT_TEMPLATE = "voetbalreizenxl-main"
-# De oorspronkelijke paddings van de fallback-template (zie de tokens in het
-# html-bestand); als basis-stijl meegegeven zodat de render identiek blijft.
+# Neutrale, merk-gekleurde fallback voor tenants zonder eigen template (geen
+# voetbal-styling meer). De klant-specifieke voetbal-template blijft bestaan en
+# wordt gebruikt zodra een tenant hem als eigen/standaard template heeft of via
+# config["template"] expliciet kiest.
+DEFAULT_TEMPLATE = "neutraal-basis"
+# De oorspronkelijke paddings van de oude fallback-template (zie de tokens in het
+# html-bestand); als basis-stijl meegegeven zodat een render die deze tokens wél
+# gebruikt identiek blijft. De neutrale template gebruikt ze niet (onschadelijk).
 _FALLBACK_TEMPLATE_STYLES = {
     "spacing_banner_intro": 20,
     "spacing_text_button": 16,
@@ -770,10 +775,14 @@ def _validated_clubs(ctx: ToolContext, raw_clubs: list[dict]) -> list[Club]:
     ]
 
 
-def _resolve_template_html(ctx: ToolContext, tenant, brand: dict) -> tuple[str, dict]:
+def _resolve_template_html(
+    ctx: ToolContext, tenant, brand: dict
+) -> tuple[str, dict, bool]:
     """Kies de template-HTML: gekozen (ctx.template_id) > standaard > ingebouwd bestand.
 
-    Geeft de HTML terug plus een brand-dict waarin de stijl van de template is gezet.
+    Geeft de HTML terug, een brand-dict waarin de stijl van de template is gezet,
+    en of de ingebouwde (neutrale) fallback is gebruikt (True = tenant heeft nog
+    geen eigen template).
     """
     chosen_tpl = None
     if ctx.template_id is not None:
@@ -783,7 +792,7 @@ def _resolve_template_html(ctx: ToolContext, tenant, brand: dict) -> tuple[str, 
     if chosen_tpl is None:
         chosen_tpl = templates_repo.get_default_template(ctx.session, tenant.id)
     if chosen_tpl is not None:
-        return chosen_tpl.html, {**brand, "styles": chosen_tpl.styles or {}}
+        return chosen_tpl.html, {**brand, "styles": chosen_tpl.styles or {}}, False
     # Ingebouwde fallback: de witruimte-tokens staan in het bestand met deze
     # oorspronkelijke waarden als basis; zonder deze styles zouden de globale
     # defaults (80px) de layout ineens veranderen.
@@ -791,6 +800,7 @@ def _resolve_template_html(ctx: ToolContext, tenant, brand: dict) -> tuple[str, 
     return (
         load_template(brand.get("template", DEFAULT_TEMPLATE)),
         {**brand, "styles": fallback_styles},
+        True,
     )
 
 
@@ -876,7 +886,8 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
     """Valideer wedstrijden/clubs/items, bouw de content, kies de template en render.
 
     Gedeeld door preview_newsletter (geen Brevo) en create_newsletter_draft (wel Brevo).
-    Geeft (tenant, brand, content, matches, clubs, items, html) terug.
+    Geeft (tenant, brand, content, matches, clubs, items, html, unfilled, is_fallback)
+    terug; is_fallback=True betekent dat de neutrale ingebouwde template is gebruikt.
     """
     tool_input = _inherit_last_preview(ctx, tool_input)
     tenant = _load_tenant(ctx)
@@ -913,18 +924,26 @@ def _build_newsletter(ctx: ToolContext, tool_input: dict):
         sections=tuple(sections),
         custom_fields=tuple(sorted(custom_fields.items())),
     )
-    template_html, brand = _resolve_template_html(ctx, tenant, brand)
+    template_html, brand, is_fallback = _resolve_template_html(ctx, tenant, brand)
     brand = _apply_style_overrides(brand, template_html, tool_input.get("style_overrides"))
     html = render_newsletter(template_html, brand, content)
     slots = find_custom_slots(template_html)
     unfilled = [naam for naam in slots if not (custom_fields.get(naam) or '').strip()]
-    return tenant, brand, content, matches, clubs, items, html, unfilled
+    return tenant, brand, content, matches, clubs, items, html, unfilled, is_fallback
 
 
 def _tool_preview_newsletter(ctx: ToolContext, tool_input: dict) -> dict:
-    _, _, content, matches, clubs, items, html, unfilled = _build_newsletter(ctx, tool_input)
+    _, _, content, matches, clubs, items, html, unfilled, is_fallback = _build_newsletter(
+        ctx, tool_input
+    )
     ctx.preview_holder.append(html)  # frontend toont dit in het voorbeeldpaneel
     result_extra = {}
+    if is_fallback:
+        result_extra["let_op_geen_eigen_template"] = (
+            "Deze tenant heeft nog geen eigen template; er is een neutrale standaard "
+            "gebruikt. Maak via de Bedrijven-tab een eigen template aan voor de juiste "
+            "huisstijl."
+        )
     if unfilled:
         result_extra["invulvakken_nog_leeg"] = unfilled
         result_extra["invulvakken_hint"] = (
@@ -982,7 +1001,9 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
                 f"{exc} Stel de API-URL in via de Bedrijven-tab > Verzendplatform."
             ) from exc
 
-    tenant, brand, content, matches, clubs, items, html, _unfilled = _build_newsletter(ctx, tool_input)
+    tenant, brand, content, matches, clubs, items, html, _unfilled, is_fallback = (
+        _build_newsletter(ctx, tool_input)
+    )
     if esp == "klaviyo":
         client = ctx.klaviyo_factory(api_key)
         list_id = brand.get("klaviyo_list_id")
@@ -1045,6 +1066,11 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
             " Let op: ActiveCampaign ondersteunt geen preheader via de API; de "
             "geschreven preheader staat niet in het concept."
             if esp == "activecampaign" and content.preview_text else ""
+        )
+        + (
+            " Let op: deze tenant heeft nog geen eigen template; het concept gebruikt "
+            "de neutrale standaard. Maak een eigen template aan voor de juiste huisstijl."
+            if is_fallback else ""
         ),
     }
 

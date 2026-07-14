@@ -147,7 +147,8 @@ def test_fallback_render_keeps_original_paddings(session, cipher) -> None:
         config = {"brand_name": "X"}
 
     ctx = ToolContext(session=session, tenant_id=_Tenant.id, cipher=cipher)
-    html, brand = _resolve_template_html(ctx, _Tenant(), _Tenant.config)
+    html, brand, is_fallback = _resolve_template_html(ctx, _Tenant(), _Tenant.config)
+    assert is_fallback is True
     assert "{{STYLE_SPACING_BANNER_INTRO}}" in html
     assert brand["styles"]["spacing_banner_intro"] == 20  # origineel, niet de 80-default
     assert brand["styles"]["spacing_products_text"] == 0
