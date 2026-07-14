@@ -132,6 +132,10 @@ def test_image_filename_resolves_to_real_url(session, cipher) -> None:
     # De agent geeft een bestandsnaam mee; de backend zoekt de echte opslag-URL op.
     from app.repositories import images as images_repo
     tenant = _tenant(session)
+    # Pin de voetbal-template: die heeft een {{HEADER_IMAGE_URL}}-slot, zodat deze
+    # test de foto-resolutie (bestandsnaam -> echte URL) van header EN club dekt.
+    tenant.config = {**tenant.config, "template": "voetbalreizenxl-main"}
+    session.commit()
     secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
     images_repo.create_image(
         session, tenant_id=tenant.id, category="banner", filename="allianz-arena.jpg",
@@ -379,7 +383,8 @@ def test_preview_with_generic_items(session, cipher) -> None:
     result = execute_tool("preview_newsletter", payload, ctx)
     assert result["items_used"][0]["title"] == "Case Coolblue"
     html = ctx.preview_holder[0]
-    assert "CASE COOLBLUE" in html and "Lees de case" in html
+    # De neutrale fallback rendert de kaarttitel zoals aangeleverd (niet geüppercased).
+    assert "Case Coolblue" in html and "Lees de case" in html
     assert "op aanvraag" not in html  # geen prijs meegegeven -> geen prijsregel
 
 

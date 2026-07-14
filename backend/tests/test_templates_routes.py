@@ -66,6 +66,34 @@ def test_create_without_marker_is_allowed(client, session) -> None:
     assert resp.status_code == 201
 
 
+def test_create_rejects_corrupt_template(client, session) -> None:
+    # Kopieer-verminking laat een losse `}}` achter; dat mag niet opgeslagen worden.
+    t = _tenant(session)
+    corrupt = '<html>{{INTRO_1}} <p style="color:styleBG}}">x</p></html>'
+    resp = client.post(
+        f"/tenants/{t.id}/templates", json={"name": "Corrupt", "html": corrupt}
+    )
+    assert resp.status_code == 400
+    assert "ongeldig" in resp.json()["detail"].lower()
+
+
+def test_health_green_for_valid_default(client, session) -> None:
+    t = _brand_tenant(session)
+    client.post(f"/tenants/{t.id}/templates", json={"name": "Basis", "html": MARKER_HTML})
+    body = client.get(f"/tenants/{t.id}/templates/health").json()
+    assert body["ok"] is True
+    assert body["heeft_eigen_template"] is True
+    assert body["is_standaard"] is True
+    assert body["ontbrekende_brand_velden"] == []
+
+
+def test_health_red_without_template(client, session) -> None:
+    t = _tenant(session)
+    body = client.get(f"/tenants/{t.id}/templates/health").json()
+    assert body["ok"] is False
+    assert body["heeft_eigen_template"] is False
+
+
 def test_validate_endpoint(client, session) -> None:
     t = _tenant(session)
     resp = client.post(
