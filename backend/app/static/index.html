@@ -921,7 +921,18 @@ document.getElementById("tmplCreate").onclick = async () => {
   const res = await fetch(`/tenants/${tenantSel.value}/templates`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, html, styles: toolproofStyles || {} }) });
-  if (!res.ok) { const e = await res.json().catch(() => ({})); adminStatus.textContent = "Fout: " + (e.detail || res.status); return; }
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    const detail = typeof e.detail === "string" ? e.detail : String(res.status);
+    adminStatus.textContent = "Niet opgeslagen: de template is ongeldig. Zie het rapport.";
+    const report = document.getElementById("toolproofReport");
+    const punten = detail.replace(/^template is ongeldig:\s*/i, "").split("; ");
+    report.textContent = ["Deze template is niet opgeslagen omdat hij niet geldig is:",
+      ...punten.map(p => "  X " + p), "",
+      "Maak de template opnieuw tool-proof of plak hem opnieuw, en sla dan pas op."].join("\n");
+    report.style.display = "block";
+    return;
+  }
   adminStatus.textContent = "Template toegevoegd.";
   toolproofStyles = null;
   document.getElementById("newTmplName").value = ""; document.getElementById("newTmplHtml").value = "";

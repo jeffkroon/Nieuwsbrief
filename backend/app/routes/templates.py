@@ -21,7 +21,8 @@ from app.services.llm_usage import TrackingLLM
 from app.newsletter.models import Club, Match, NewsletterContent, Section
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.styles import sanitize_styles
-from app.newsletter.template_validation import validate_template_html
+from app.newsletter.save_validation import validate_template_for_save
+from app.newsletter.template_health import tenant_template_health
 from app.newsletter.templates import load_template
 from app.newsletter.toolproof import MAX_TEMPLATE_CHARS, make_toolproof
 from app.repositories import templates as repo
@@ -110,6 +111,15 @@ def starter_html() -> dict:
     return {"html": load_template(STARTER_TEMPLATE)}
 
 
+@router.get("/templates/health", dependencies=[Depends(require_admin)])
+def template_health(
+    tenant_id: uuid.UUID, session: Session = Depends(get_session)
+) -> dict:
+    """Groen/rood-rapport: heeft deze tenant een geldige eigen standaard-template?"""
+    _require_tenant(session, tenant_id)
+    return tenant_template_health(session, tenant_id)
+
+
 @router.get("/templates/{template_id}", response_model=TemplateRead)
 def get_template(
     tenant_id: uuid.UUID, template_id: uuid.UUID, session: Session = Depends(get_session)
@@ -124,7 +134,7 @@ def get_template(
     dependencies=[Depends(require_admin)],
 )
 def validate(tenant_id: uuid.UUID, body: TemplateValidateRequest) -> TemplateValidation:
-    errors, warnings = validate_template_html(body.html)
+    errors, warnings = validate_template_for_save(body.html)
     return TemplateValidation(ok=not errors, errors=errors, warnings=warnings)
 
 
@@ -176,7 +186,7 @@ def create_template(
     tenant_id: uuid.UUID, body: TemplateCreate, session: Session = Depends(get_session)
 ):
     _require_tenant(session, tenant_id)
-    errors, _ = validate_template_html(body.html)
+    errors, _ = validate_template_for_save(body.html, body.styles)
     if errors:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -212,7 +222,7 @@ def update_template(
 ):
     _require_template(session, tenant_id, template_id)
     if body.html is not None:
-        errors, _ = validate_template_html(body.html)
+        errors, _ = validate_template_for_save(body.html, body.styles)
         if errors:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
