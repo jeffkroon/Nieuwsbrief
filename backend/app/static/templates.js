@@ -30,6 +30,23 @@ const tmplSelect = document.getElementById("tmplSelect");
 const tmplStatus = document.getElementById("tmplStatus");
 const adminStatus = document.getElementById("adminStatus");
 const previewFrame = document.getElementById("tmplPreviewFrame");
+const previewScaler = document.getElementById("tmplPreviewScaler");
+
+// De mail is 650px breed. Past dat niet in de kolom, dan verkleinen we het
+// geheel in plaats van de mail smaller te maken: anders gaat hij zich als een
+// mobiele mail gedragen en klopt het beeld niet meer met wat de ontvanger ziet.
+const VOORBEELD_BREEDTE = 620;  // gelijk aan het chat-voorbeeld
+const VOORBEELD_HOOGTE = 900;
+
+function schaalVoorbeeld() {
+  if (!previewScaler) return;
+  const beschikbaar = previewScaler.clientWidth;
+  const schaal = Math.min(1, beschikbaar / VOORBEELD_BREEDTE);
+  previewFrame.style.transform = `scale(${schaal})`;
+  previewScaler.style.height = `${Math.round(VOORBEELD_HOOGTE * schaal)}px`;
+}
+
+window.addEventListener("resize", schaalVoorbeeld);
 const STYLE_INPUTS = {
   font_family: document.getElementById("stFont"),
   text_color: document.getElementById("stText"),
@@ -197,6 +214,7 @@ async function renderStylePreview() {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) { const e = await res.json().catch(() => ({})); tmplStatus.textContent = "Voorbeeld: " + (e.detail || res.status); return; }
     previewFrame.srcdoc = await res.text();
+    schaalVoorbeeld();
     tmplStatus.textContent = "";
   } catch (e) { tmplStatus.textContent = "Voorbeeld mislukt: " + e.message; }
 }
