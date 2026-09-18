@@ -362,7 +362,7 @@ def _tool_analyze_website_tone(ctx: ToolContext, tool_input: dict) -> dict:
         raise ValueError("geen website-URL om de tone of voice te analyseren")
     status, html = extraction.fetch_page(url, ctx.http_client)
     if status != 200:
-        raise ValueError(f"kon {url} niet ophalen (status {status})")
+        raise ValueError(extraction.fetch_probleem(url, status))
     return {"source_url": url, "tone_of_voice": extraction.extract_tone(_require_llm(ctx), html, source_url=url)}
 
 
@@ -373,7 +373,7 @@ def _tool_find_ticket_links(ctx: ToolContext, tool_input: dict) -> dict:
         raise ValueError("geen URL om ticket-links te zoeken")
     status, html = extraction.fetch_page(url, ctx.http_client)
     if status != 200:
-        raise ValueError(f"kon {url} niet ophalen (status {status})")
+        raise ValueError(extraction.fetch_probleem(url, status))
     links = extraction.extract_links(
         _require_llm(ctx), html, source_url=url, query=tool_input["query"]
     )
@@ -388,7 +388,7 @@ def _tool_find_products(ctx: ToolContext, tool_input: dict) -> dict:
         raise ValueError("geen URL om producten te zoeken; geef een collectie-URL mee")
     status, html = extraction.fetch_page(url, ctx.http_client)
     if status != 200:
-        raise ValueError(f"kon {url} niet ophalen (status {status})")
+        raise ValueError(extraction.fetch_probleem(url, status))
     products = extraction.extract_products(_require_llm(ctx), html, source_url=url)
     return {
         "source_url": url,
@@ -485,7 +485,7 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
         raise ValueError("geen URL om een banner te zoeken; geef een pagina-URL mee")
     status, html = extraction.fetch_page(url, ctx.http_client)
     if status != 200:
-        raise ValueError(f"kon {url} niet ophalen (status {status})")
+        raise ValueError(extraction.fetch_probleem(url, status))
     crop = brand.get("banner_crop") or "landscape"
     og_image = extraction.extract_og_image(html)
     if not og_image:
@@ -530,7 +530,7 @@ def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:
         raise ValueError("geen URL om wedstrijden te zoeken; zet 'matches_url' in de brand-config")
     status, html = extraction.fetch_page(url, ctx.http_client)
     if status != 200:
-        raise ValueError(f"kon {url} niet ophalen (status {status})")
+        raise ValueError(extraction.fetch_probleem(url, status))
     matches = extraction.extract_matches(_require_llm(ctx), html, source_url=url)
     return {"source_url": url, "count": len(matches), "matches": matches}
 
@@ -599,7 +599,7 @@ def _resolve_price(
         status, html = extraction.fetch_page(url, ctx.http_client)
         if status != 200:
             raise ValueError(
-                f"URL bestaat niet of is onbereikbaar: {url} (status {status}). "
+                extraction.fetch_probleem(url, status) + " "
                 "Gebruik find_matches of find_ticket_links voor een geldige link."
             )
         _validation_cache.set(("ok", url), True)
@@ -667,7 +667,7 @@ def _validated_items(ctx: ToolContext, raw_items: list[dict]) -> list[Item]:
                 status, fetched = extraction.fetch_page(url, ctx.http_client)
                 if status != 200:
                     raise ValueError(
-                        f"URL bestaat niet of is onbereikbaar: {url} (status {status}). "
+                        extraction.fetch_probleem(url, status) + " "
                         "Gebruik find_products of find_ticket_links voor een geldige link."
                     )
                 _validation_cache.set(("ok", url), True)
@@ -715,7 +715,7 @@ def _require_reachable(ctx: ToolContext, url: str) -> None:
         return
     status, _ = extraction.fetch_page(url, ctx.http_client)
     if status != 200:
-        raise ValueError(f"URL bestaat niet of is onbereikbaar: {url} (status {status}).")
+        raise ValueError(extraction.fetch_probleem(url, status))
     _validation_cache.set(("ok", url), True)
 
 

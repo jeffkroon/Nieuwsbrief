@@ -360,3 +360,31 @@ def extract_price(llm, raw_html: str, *, source_url: str, model: str = EXTRACT_M
         messages=[{"role": "user", "content": f"Pagina-inhoud:\n{text}"}],
     )
     return normalize_price(_parse_json(response).get("price"))
+
+
+def fetch_probleem(url: str, status: int | None) -> str:
+    """Leg uit wat er misging bij het ophalen, en wat eraan te doen is.
+
+    "Niet bereikbaar" is bij een 403 onjuist en stuurt iedereen het verkeerde bos
+    in: de site DOET het, hij weigert ons. Dat is bijna altijd bot-bescherming die
+    het IP van onze server blokkeert, en dat lost geen enkele herhaalpoging op.
+    """
+    if status == 403:
+        return (
+            f"de site weigert onze server op {url} (403). De pagina zelf werkt; de "
+            "bot-bescherming van de site blokkeert ons. Opnieuw proberen helpt niet: "
+            "het IP-adres van de nieuwsbrief-server moet bij de site worden "
+            "toegelaten. Meld dit bij Dunion."
+        )
+    if status == 404:
+        return f"de pagina {url} bestaat niet (404). Controleer de link."
+    if status == 429:
+        return (
+            f"de site houdt ons even tegen op {url} (429, te veel verzoeken). "
+            "Over een paar minuten opnieuw proberen werkt meestal."
+        )
+    if status is None:
+        return f"{url} was niet te bereiken (geen antwoord). Bestaat het domein nog?"
+    if 500 <= status < 600:
+        return f"de site geeft een storing op {url} ({status}). Later opnieuw proberen."
+    return f"kon {url} niet ophalen (status {status})"
