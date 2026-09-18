@@ -159,17 +159,23 @@ class ImageCategoriesRead(BaseModel):
 # --- Templates -------------------------------------------------------------
 # De HTML (layout) wordt door Dunion-admins beheerd; `styles` (kleuren/lettertype)
 # mag een bedrijf zelf aanpassen via TemplateStyleUpdate.
+TemplateSource = Literal["upload", "toolproof", "handmatig", "terugzetten"]
+
+
 class TemplateCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     html: str = Field(min_length=1)
     styles: dict = Field(default_factory=dict)
     is_default: bool = False
+    # Waar deze inhoud vandaan komt; belandt in de versiegeschiedenis.
+    source: TemplateSource = "handmatig"
 
 
 class TemplateUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=120)
     html: str | None = None
     styles: dict | None = None
+    source: TemplateSource = "handmatig"
 
 
 class TemplateStyleUpdate(BaseModel):
@@ -212,6 +218,9 @@ class TemplatePreviewRequest(BaseModel):
     template_id: uuid.UUID | None = None
     html: str | None = None
     styles: dict = Field(default_factory=dict)
+    # Met een eerdere nieuwsbrief als voorbeeldinhoud ziet een admin de template
+    # met echte teksten en blokken in plaats van de vaste voorbeelddata.
+    newsletter_id: uuid.UUID | None = None
 
 
 class TemplateToolproofRequest(BaseModel):
@@ -232,6 +241,42 @@ class TemplateToolproofResult(BaseModel):
     checks_failed: list[str]
     warnings: list[str]
     notes: list[str]
+    # Unified diff tussen de geplakte HTML en het resultaat, zodat de UI precies
+    # kan tonen wat er is vervangen.
+    diff: str = ""
+    # Wat de omgezette template ondersteunt (kaarten, invulvakken, knoppen...).
+    capabilities: list[str] = Field(default_factory=list)
+
+
+class TemplateImportResult(BaseModel):
+    """Resultaat van een geuploade .html of .zip; wordt nog niet opgeslagen."""
+
+    html: str
+    images: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+
+
+class TemplateCapabilitiesRequest(BaseModel):
+    """Wat kan deze template? Op losse HTML of op een opgeslagen template."""
+
+    html: str | None = None
+    template_id: uuid.UUID | None = None
+
+
+class TemplateCapabilitiesResult(BaseModel):
+    summary: list[str] = Field(default_factory=list)
+    details: dict = Field(default_factory=dict)
+
+
+class TemplateVersionSummary(_ORMModel):
+    """Een eerdere layout-versie; de HTML zelf zit in de detail-opvraag."""
+
+    id: uuid.UUID
+    name: str
+    source: str
+    actor: str | None
+    created_at: datetime
 
 
 # --- Conversation turns (chat) --------------------------------------------

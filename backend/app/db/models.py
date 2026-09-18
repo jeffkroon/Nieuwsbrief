@@ -259,6 +259,31 @@ class Template(Base):
     updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
+
+class TemplateVersion(Base):
+    """Een eerdere inhoud van een template, zodat terugzetten mogelijk blijft.
+
+    Wordt geschreven bij elke opslag (aanmaken, bijwerken, tool-proof, terugzetten);
+    `source` legt vast waar die versie vandaan kwam.
+    """
+
+    __tablename__ = "template_versions"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.templates.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    html: Mapped[str] = mapped_column(Text, nullable=False)
+    styles: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    source: Mapped[str] = mapped_column(Text, nullable=False, server_default="handmatig")
+    actor: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 

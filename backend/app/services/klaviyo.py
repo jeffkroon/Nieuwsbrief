@@ -30,7 +30,9 @@ KLAVIYO_REVISION = "2026-04-15"
 HTML_MIN_BYTES = 10
 # Geen gedocumenteerde API-limiet; boven ~102 KB knipt Gmail de mail af.
 HTML_WARN_BYTES = 102_400
-UNSUBSCRIBE_TAGS = ("{% unsubscribe %}", "unsubscribe_link")
+# Klaviyo kent alleen zijn eigen schrijfwijze; andere platform-tags zijn hiervoor
+# al omgezet (zie app/newsletter/esp_tags.py). Blijft staan als laatste vangnet.
+UNSUBSCRIBE_TAGS = ("{% unsubscribe %}", "{%unsubscribe%}", "unsubscribe_link")
 
 
 class KlaviyoError(Exception):
@@ -82,7 +84,8 @@ class KlaviyoClient:
             # Zonder afmeldlink kan een mens de campagne in het dashboard niet eens
             # inplannen; hard afdwingen in code.
             raise ValueError(
-                "Klaviyo vereist een afmeldlink in de template: voeg {% unsubscribe %} toe"
+                "Klaviyo vereist een afmeldlink; deze nieuwsbrief heeft er geen. "
+                "Voeg {% unsubscribe %} toe aan de template."
             )
 
         template_id = self._create_template(name, html)

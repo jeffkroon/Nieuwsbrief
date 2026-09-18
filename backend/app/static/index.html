@@ -111,6 +111,21 @@
   .style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
   .style-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
   .style-grid input[type=color] { width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
+  .drop { display: block; border: 2px dashed var(--border); border-radius: 10px; padding: 18px; text-align: center; cursor: pointer; background: #fcfcfd; margin-bottom: 10px; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop strong { display: block; font-size: 13.5px; margin-bottom: 3px; }
+  .caps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .caps span { background: var(--accent-soft); color: var(--accent-hover); font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 10px; }
+  .diff { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; max-height: 340px; overflow: auto; background: #fff; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; }
+  .diff div { padding: 1px 10px; white-space: pre-wrap; word-break: break-all; }
+  .diff .add { background: #e7f7ec; color: #11683a; }
+  .diff .del { background: #fdecea; color: #a4251a; }
+  .diff .hunk { background: #eef2f7; color: var(--muted); }
+  .tmpl-item .edit { color: #0b62c4; }
+  .tmpl-item .ghost { color: var(--muted); }
+  .versions { border-top: 1px solid var(--border); padding: 8px 0 10px; font-size: 13px; }
+  .versions .v { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+  .versions .v small { color: var(--muted); }
   .preview-frame { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; background: #fff; }
   .preview-frame.mini { height: 360px; }
 
@@ -281,15 +296,23 @@
           <input type="text" id="newTmplName" placeholder="Naam van de template" class="field" style="flex:1;">
           <button class="btn secondary" id="tmplStarter">Begin met standaard layout</button>
         </div>
-        <textarea id="newTmplHtml" rows="10" placeholder="Plak hier de HTML van de layout (met {{ }}-placeholders en de &lt;!-- ##BANNERS## --&gt; marker)" style="width:100%; font-family:monospace; font-size:12px; padding:10px; border:1px solid #cfd3da; border-radius:8px;"></textarea>
+        <label class="drop" id="tmplDrop">
+          <input type="file" id="tmplFile" accept=".html,.htm,.zip" style="display:none;">
+          <strong>Sleep hier een .html-bestand of .zip-export</strong>
+          <span class="hint">of klik om te kiezen. Afbeeldingen uit een ZIP worden opgeslagen en de verwijzingen in de HTML worden automatisch omgezet.</span>
+        </label>
+        <textarea id="newTmplHtml" rows="10" placeholder="Of plak hier de HTML van de layout ({{ }}-placeholders, kaartblok, &lt;!-- ##SECTIES## --&gt; en eigen {{VAK_*}}-invulvakken)" style="width:100%; font-family:monospace; font-size:12px; padding:10px; border:1px solid #cfd3da; border-radius:8px;"></textarea>
         <div class="row" style="margin-top:10px;">
           <button class="btn" id="tmplToolproof">Maak tool-proof (AI)</button>
           <button class="btn secondary" id="tmplValidate">Valideer</button>
           <button class="btn secondary" id="adminPreview">Voorbeeld verversen</button>
           <button class="btn" id="tmplCreate">Toevoegen</button>
+          <button class="btn secondary" id="tmplCancelEdit" style="display:none;">Annuleer bewerken</button>
           <span id="adminStatus" class="hint"></span>
         </div>
-        <p class="hint" style="margin:6px 0 0;">Tip: plak een ruwe export (bv. uit Brevo) en klik "Maak tool-proof (AI)": de vaste teksten, knoppen, logo en footer worden vervangen door placeholders en in code gecontroleerd. Daarna kun je 'm opslaan.</p>
+        <div class="caps" id="tmplCaps"></div>
+        <p class="hint" style="margin:6px 0 0;">Tip: upload of plak een ruwe export (Brevo, Stripo, ActiveCampaign) en klik "Maak tool-proof (AI)": de vaste teksten, knoppen, logo en footer worden vervangen door placeholders en in code gecontroleerd. Elke opslag bewaart een versie, dus terugzetten kan altijd. Daarna kun je 'm opslaan.</p>
+        <div class="diff" id="toolproofDiff" style="display:none;"></div>
         <div id="toolproofReport" style="display:none; margin-top:10px; padding:12px; border:1px solid var(--border); border-radius:8px; background:#fafbfc; font-size:13px; white-space:pre-wrap;"></div>
         <p class="hint" style="margin:10px 0 0;">Live voorbeeld (ververst automatisch terwijl je typt):</p>
         <iframe id="adminPreviewFrame" class="preview-frame mini" title="Voorbeeld layout"></iframe>
@@ -805,13 +828,39 @@ function renderAdminList() {
     const el = document.createElement("div");
     el.className = "tmpl-item";
     el.innerHTML = `<span>${t.name}</span>` + (t.is_default ? `<span class="badge">standaard</span>` : "")
-      + `<span style="margin-left:auto;"></span><button data-id="${t.id}">verwijderen</button>`;
-    el.querySelector("button").onclick = async () => {
+      + `<span style="margin-left:auto;"></span>`;
+
+    const bewerk = document.createElement("button");
+    bewerk.className = "edit";
+    bewerk.textContent = "bewerken";
+    bewerk.onclick = async () => {
+      const res = await fetch(`/tenants/${tenantSel.value}/templates/${t.id}`);
+      if (!res.ok) { adminStatus.textContent = "Kon de template niet laden."; return; }
+      startBewerken(await res.json());
+    };
+    el.appendChild(bewerk);
+
+    const versies = document.createElement("button");
+    versies.className = "ghost";
+    versies.textContent = "versies";
+    el.appendChild(versies);
+
+    const verwijder = document.createElement("button");
+    verwijder.textContent = "verwijderen";
+    verwijder.onclick = async () => {
       if (!confirm(`Template "${t.name}" verwijderen?`)) return;
       await fetch(`/tenants/${tenantSel.value}/templates/${t.id}`, { method: "DELETE" });
+      if (editingTemplateId === t.id) stopBewerken();
       loadTemplates();
     };
+    el.appendChild(verwijder);
     list.appendChild(el);
+
+    const paneel = document.createElement("div");
+    paneel.className = "versions";
+    paneel.dataset.open = "0";
+    list.appendChild(paneel);
+    versies.onclick = () => toggleVersies(t, paneel);
   }
 }
 
@@ -855,7 +904,164 @@ document.getElementById("tmplStarter").onclick = async () => {
 // Basis-stijl uit de laatste toolproof-run; gaat mee bij Toevoegen zodat de
 // template er exact zo uit blijft zien als het origineel.
 let toolproofStyles = null;
-document.getElementById("newTmplHtml").addEventListener("input", () => { toolproofStyles = null; });
+// Waar de HTML in het tekstvak vandaan komt; belandt in de versiegeschiedenis.
+let templateSource = "handmatig";
+// Gevuld = we bewerken een bestaande template in plaats van een nieuwe toe te voegen.
+let editingTemplateId = null;
+document.getElementById("newTmplHtml").addEventListener("input", () => {
+  toolproofStyles = null;
+  templateSource = "handmatig";
+});
+
+// ---- capabilities + diff tonen ----
+function toonCapabilities(lijst) {
+  const el = document.getElementById("tmplCaps");
+  el.innerHTML = "";
+  for (const tekst of lijst || []) {
+    const span = document.createElement("span");
+    span.textContent = tekst;
+    el.appendChild(span);
+  }
+}
+
+// Eigen mini-renderer voor de unified diff: geen externe bibliotheek nodig.
+function toonDiff(diff) {
+  const el = document.getElementById("toolproofDiff");
+  el.innerHTML = "";
+  if (!diff) { el.style.display = "none"; return; }
+  for (const regel of diff.split("\n")) {
+    const div = document.createElement("div");
+    if (regel.startsWith("+++") || regel.startsWith("---")) div.className = "hunk";
+    else if (regel.startsWith("@@")) div.className = "hunk";
+    else if (regel.startsWith("+")) div.className = "add";
+    else if (regel.startsWith("-")) div.className = "del";
+    div.textContent = regel;
+    el.appendChild(div);
+  }
+  el.style.display = "block";
+}
+
+// ---- uploaden van een .html of .zip ----
+const tmplDrop = document.getElementById("tmplDrop");
+const tmplFile = document.getElementById("tmplFile");
+
+async function uploadTemplateBestand(bestand) {
+  if (!bestand) return;
+  if (!tenantSel.value) { adminStatus.textContent = "Kies eerst een bedrijf."; return; }
+  adminStatus.textContent = `"${bestand.name}" inlezen...`;
+  const body = new FormData();
+  body.append("file", bestand);
+  try {
+    const res = await fetch(`/tenants/${tenantSel.value}/templates/upload`, { method: "POST", body });
+    const r = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      adminStatus.textContent = "Niet ingelezen: " + (typeof r.detail === "string" ? r.detail : res.status);
+      return;
+    }
+    document.getElementById("newTmplHtml").value = r.html;
+    templateSource = "upload";
+    toolproofStyles = null;
+    toonCapabilities(r.capabilities);
+    toonDiff("");
+    const report = document.getElementById("toolproofReport");
+    const regels = [];
+    if (r.images.length) regels.push(`${r.images.length} afbeeldingen opgeslagen en in de HTML omgezet:`, ...r.images.map(n => "  = " + n), "");
+    if (r.notes.length) regels.push("Let op:", ...r.notes.map(n => "  - " + n));
+    report.textContent = regels.join("\n").trim();
+    report.style.display = regels.length ? "block" : "none";
+    if (!document.getElementById("newTmplName").value.trim()) {
+      document.getElementById("newTmplName").value = bestand.name.replace(/\.(zip|html?)$/i, "");
+    }
+    adminStatus.textContent = "Ingelezen. Maak hem tool-proof of sla hem op.";
+    renderAdminPreview();
+  } catch (e) {
+    adminStatus.textContent = "Netwerkfout: " + e.message;
+  }
+}
+
+tmplDrop.onclick = () => tmplFile.click();
+tmplFile.onchange = () => { uploadTemplateBestand(tmplFile.files[0]); tmplFile.value = ""; };
+tmplDrop.addEventListener("dragover", (e) => { e.preventDefault(); tmplDrop.classList.add("over"); });
+tmplDrop.addEventListener("dragleave", () => tmplDrop.classList.remove("over"));
+tmplDrop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  tmplDrop.classList.remove("over");
+  uploadTemplateBestand(e.dataTransfer.files[0]);
+});
+
+// ---- bewerken van een bestaande template ----
+function startBewerken(t) {
+  editingTemplateId = t.id;
+  templateSource = "handmatig";
+  toolproofStyles = t.styles && Object.keys(t.styles).length ? t.styles : null;
+  document.getElementById("newTmplName").value = t.name;
+  document.getElementById("newTmplHtml").value = t.html;
+  document.getElementById("tmplCreate").textContent = "Wijziging opslaan";
+  document.getElementById("tmplCancelEdit").style.display = "";
+  toonCapabilities([]);
+  toonDiff("");
+  adminStatus.textContent = `"${t.name}" wordt bewerkt. De vorige versie blijft bewaard.`;
+  document.getElementById("newTmplHtml").scrollIntoView({ behavior: "smooth", block: "center" });
+  renderAdminPreview();
+}
+
+function stopBewerken() {
+  editingTemplateId = null;
+  toolproofStyles = null;
+  templateSource = "handmatig";
+  document.getElementById("newTmplName").value = "";
+  document.getElementById("newTmplHtml").value = "";
+  document.getElementById("tmplCreate").textContent = "Toevoegen";
+  document.getElementById("tmplCancelEdit").style.display = "none";
+  toonCapabilities([]);
+  toonDiff("");
+  document.getElementById("toolproofReport").style.display = "none";
+  adminPreviewFrame.srcdoc = "";
+}
+
+document.getElementById("tmplCancelEdit").onclick = () => {
+  stopBewerken();
+  adminStatus.textContent = "Bewerken gestopt.";
+};
+
+// ---- versiegeschiedenis ----
+async function toggleVersies(t, paneel) {
+  if (paneel.dataset.open === "1") {
+    paneel.innerHTML = ""; paneel.dataset.open = "0"; return;
+  }
+  paneel.dataset.open = "1";
+  paneel.innerHTML = `<p class="hint">Versies laden...</p>`;
+  const res = await fetch(`/tenants/${tenantSel.value}/templates/${t.id}/versions`);
+  if (!res.ok) { paneel.innerHTML = `<p class="hint">Kon de versies niet laden.</p>`; return; }
+  const versies = await res.json();
+  if (!versies.length) { paneel.innerHTML = `<p class="hint">Nog geen eerdere versies.</p>`; return; }
+  paneel.innerHTML = "";
+  versies.forEach((v, i) => {
+    const rij = document.createElement("div");
+    rij.className = "v";
+    const datum = new Date(v.created_at).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" });
+    rij.innerHTML = `<span>${datum}</span><small>${v.source}${v.actor ? " - " + v.actor : ""}</small>`
+      + (i === 0 ? `<small style="margin-left:auto;">huidige</small>` : `<span style="margin-left:auto;"></span>`);
+    if (i > 0) {
+      const knop = document.createElement("button");
+      knop.className = "edit";
+      knop.textContent = "terugzetten";
+      knop.onclick = async () => {
+        if (!confirm(`Versie van ${datum} terugzetten? De huidige blijft als versie bewaard.`)) return;
+        const r = await fetch(`/tenants/${tenantSel.value}/templates/${t.id}/versions/${v.id}/restore`, { method: "POST" });
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          adminStatus.textContent = "Terugzetten mislukt: " + (typeof e.detail === "string" ? e.detail : r.status);
+          return;
+        }
+        adminStatus.textContent = "Versie teruggezet.";
+        loadTemplates();
+      };
+      rij.appendChild(knop);
+    }
+    paneel.appendChild(rij);
+  });
+}
 
 
 document.getElementById("tmplToolproof").onclick = async () => {
@@ -876,6 +1082,9 @@ document.getElementById("tmplToolproof").onclick = async () => {
     }
     const r = await res.json();
     document.getElementById("newTmplHtml").value = r.html;
+    templateSource = "toolproof";
+    toonDiff(r.diff);
+    toonCapabilities(r.capabilities);
     toolproofStyles = r.styles && Object.keys(r.styles).length ? r.styles : null;
     if (toolproofStyles) applyStyleInputs(toolproofStyles);
     const lines = [];
@@ -918,9 +1127,13 @@ document.getElementById("tmplCreate").onclick = async () => {
   const name = document.getElementById("newTmplName").value.trim();
   const html = document.getElementById("newTmplHtml").value;
   if (!name || !html) { adminStatus.textContent = "Geef een naam en HTML op."; return; }
-  const res = await fetch(`/tenants/${tenantSel.value}/templates`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, html, styles: toolproofStyles || {} }) });
+  const bewerken = editingTemplateId !== null;
+  const url = bewerken
+    ? `/tenants/${tenantSel.value}/templates/${editingTemplateId}`
+    : `/tenants/${tenantSel.value}/templates`;
+  const res = await fetch(url, {
+    method: bewerken ? "PUT" : "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, html, styles: toolproofStyles || {}, source: templateSource }) });
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
     const detail = typeof e.detail === "string" ? e.detail : String(res.status);
@@ -933,9 +1146,8 @@ document.getElementById("tmplCreate").onclick = async () => {
     report.style.display = "block";
     return;
   }
-  adminStatus.textContent = "Template toegevoegd.";
-  toolproofStyles = null;
-  document.getElementById("newTmplName").value = ""; document.getElementById("newTmplHtml").value = "";
+  adminStatus.textContent = bewerken ? "Wijziging opgeslagen; de vorige versie is bewaard." : "Template toegevoegd.";
+  stopBewerken();
   loadTemplates();
 };
 

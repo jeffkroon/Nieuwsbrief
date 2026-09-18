@@ -87,3 +87,46 @@ def template_capabilities(html: str) -> dict:
         "generated_blocks": _has_generated_blocks(html),
         "custom_slots": find_custom_slots(html),
     }
+
+
+# Welke placeholder hoort bij welk leesbaar feit? Alleen voor de UI; de agent
+# krijgt de dict hierboven.
+_PLACEHOLDER_LABELS = (
+    ("{{HEADER_TITEL}}", "kop op de header"),
+    ("{{HEADER_SUBTITEL}}", "ondertitel in de header"),
+    ("{{HEADER_IMAGE_URL}}", "headerfoto"),
+    ("{{HEADER_CTA_TEKST}}", "knop op de header"),
+    ("{{INTRO_1}}", "eerste intro-alinea"),
+    ("{{INTRO_2}}", "tweede intro-alinea"),
+    ("{{HOOFD_CTA_TEKST}}", "hoofdknop"),
+    ("{{SLOT_CTA_TEKST}}", "onderste knop"),
+)
+
+
+def capability_labels(html: str) -> list[str]:
+    """Leesbare opsomming van wat deze template kan, voor de admin-UI.
+
+    Zelfde bron als `template_capabilities`, zodat het schermbeeld nooit iets
+    anders belooft dan wat de assistent te horen krijgt.
+    """
+    html = html or ""
+    feiten = template_capabilities(html)
+    labels = [naam for token, naam in _PLACEHOLDER_LABELS if token in html]
+
+    if feiten["own_card_design"]:
+        labels.append("eigen kaart-ontwerp (herhaalt per item)")
+    elif feiten["generated_blocks"]:
+        labels.append("blokken uit onze standaard-opmaak")
+
+    knoppen = [naam for naam, actief in feiten["buttons"].items() if actief]
+    if knoppen:
+        vertaling = {"product": "blokknoppen", "hero": "headerknop", "cta": "onderste knop"}
+        labels.append("kleur instelbaar: " + ", ".join(vertaling[k] for k in knoppen))
+    if feiten["text_color"]:
+        labels.append("tekstkleur instelbaar")
+    if feiten["spacing_keys"]:
+        labels.append(f"witruimte instelbaar ({len(feiten['spacing_keys'])} zones)")
+    if feiten["custom_slots"]:
+        labels.append(f"{len(feiten['custom_slots'])} eigen invulvakken")
+
+    return labels or ["geen herkende invulplekken; deze template is nog niet tool-proof"]

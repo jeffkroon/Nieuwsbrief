@@ -51,6 +51,7 @@ from app.repositories import images as images_repo
 from app.repositories import newsletters as newsletters_repo
 from app.repositories import secrets as secrets_repo
 from app.repositories import templates as templates_repo
+from app.newsletter.esp_tags import localize_esp_tags
 from app.services.activecampaign import ActiveCampaignClient, ActiveCampaignError
 from app.services.brevo import BrevoClient, BrevoError
 from app.services.crypto import SecretCipher
@@ -185,7 +186,8 @@ TOOL_DEFINITIONS = [
     {
         "name": "create_newsletter_draft",
         "description": "Render de nieuwsbrief en maak hem aan als CONCEPT bij het "
-        "verzendplatform van dit bedrijf (Brevo of Klaviyo). Verstuurt niets. Gebruik "
+        "verzendplatform van dit bedrijf (Brevo, Klaviyo of ActiveCampaign). Verstuurt "
+        "niets. Gebruik "
         "alleen echte inhoud (find_matches/find_products/find_ticket_links); links en "
         "prijzen worden live gevalideerd.",
         "input_schema": {
@@ -1016,6 +1018,12 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         client = ctx.brevo_factory(api_key)
         list_ids = [tenant.brevo_list_id] if tenant.brevo_list_id else None
 
+    # De template is in Brevo-syntax geschreven; Klaviyo en ActiveCampaign kennen
+    # een eigen afmeldlink-tag. Zonder deze omzetting komt de mail daar aan met een
+    # kapotte afmeldlink, terwijl alle drie de platforms er een verplichten.
+    gelokaliseerd = localize_esp_tags(html, esp)
+    html = gelokaliseerd.html
+
     try:
         draft = client.create_draft(
             name=f"{brand['brand_name']} - {content.theme}",
@@ -1061,6 +1069,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
         "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
         "items_used": [{"title": i.title, "url": i.url, "price": i.price} for i in items],
+        "esp_notes": list(gelokaliseerd.notes),
         "message": f"Concept aangemaakt in {esp_label}. Niets verstuurd; controleer en verstuur handmatig."
         + (
             " Let op: ActiveCampaign ondersteunt geen preheader via de API; de "

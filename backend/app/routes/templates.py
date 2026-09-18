@@ -12,23 +12,41 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.deps import get_anthropic_client, get_session, require_admin, require_tenant_access
+from app.deps import (
+    SessionInfo,
+    current_session_info,
+    get_anthropic_client,
+    get_session,
+    get_storage,
+    require_admin,
+    require_tenant_access,
+)
 from app.services.llm_usage import TrackingLLM
+from app.services.storage import StorageError
+from app.newsletter.capabilities import capability_labels, template_capabilities
 from app.newsletter.models import Club, Match, NewsletterContent, Section
+from app.newsletter.preview_content import content_from_draft_input
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.styles import sanitize_styles
 from app.newsletter.save_validation import validate_template_for_save
+from app.newsletter.template_diff import unified_html_diff
 from app.newsletter.template_health import tenant_template_health
+from app.newsletter.template_import import TemplateImportError, import_upload
 from app.newsletter.templates import load_template
 from app.newsletter.toolproof import MAX_TEMPLATE_CHARS, make_toolproof
+from app.repositories import newsletters as newsletters_repo
+from app.repositories import template_versions as versions_repo
 from app.repositories import templates as repo
 from app.repositories import tenants as tenants_repo
 from app.schemas import (
+    TemplateCapabilitiesRequest,
+    TemplateCapabilitiesResult,
     TemplateCreate,
+    TemplateImportResult,
     TemplatePreviewRequest,
     TemplateRead,
     TemplateStyleUpdate,
@@ -38,6 +56,7 @@ from app.schemas import (
     TemplateUpdate,
     TemplateValidateRequest,
     TemplateValidation,
+    TemplateVersionSummary,
 )
 
 router = APIRouter(
@@ -47,6 +66,20 @@ router = APIRouter(
 )
 
 STARTER_TEMPLATE = "voetbalreizenxl-main"
+
+
+def _veilige_naam(naam: str) -> str:
+    """Bestandsnaam zonder pad, zodat een ZIP niet buiten zijn map kan schrijven."""
+    basis = (naam or "afbeelding").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    return basis.replace(" ", "-") or "afbeelding"
+
+
+def _zorg_voor_bucket(storage) -> None:
+    """Bucket aanmaken als die er nog niet is; bestaat hij al, dan is dit een no-op."""
+    try:
+        storage.ensure_bucket()
+    except (StorageError, AttributeError):
+        pass
 
 # Voorbeeld-inhoud voor de preview (geen echte data nodig).
 _SAMPLE = NewsletterContent(
@@ -166,6 +199,8 @@ def toolproof(
     return TemplateToolproofResult(
         ok=result.ok,
         html=result.html,
+        diff=unified_html_diff(body.html, result.html),
+        capabilities=capability_labels(result.html),
         styles=result.styles,
         applied=result.applied,
         failed=result.failed,
@@ -177,13 +212,87 @@ def toolproof(
 
 
 @router.post(
+    "/templates/upload",
+    response_model=TemplateImportResult,
+    dependencies=[Depends(require_admin)],
+)
+def upload_template(
+    tenant_id: uuid.UUID,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    storage=Depends(get_storage),
+) -> TemplateImportResult:
+    """Een .html-bestand of .zip-export inlezen (nog niet opslaan).
+
+    Bij een ZIP gaan de meegeleverde afbeeldingen naar de beeldopslag van dit
+    bedrijf en worden de verwijzingen in de HTML vervangen door de publieke URL;
+    anders zou de mail bij de ontvanger met kapotte plaatjes aankomen.
+    """
+    _require_tenant(session, tenant_id)
+    raw = file.file.read()
+
+    def _store(naam: str, inhoud: bytes, content_type: str) -> str:
+        pad = f"{tenant_id}/templates/{uuid.uuid4().hex}-{_veilige_naam(naam)}"
+        return storage.upload(pad, inhoud, content_type).url
+
+    try:
+        _zorg_voor_bucket(storage)
+        imported = import_upload(file.filename or "", raw, store=_store)
+    except TemplateImportError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except StorageError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail=f"De afbeeldingen uit de ZIP konden niet worden opgeslagen: {exc}",
+        ) from exc
+
+    if len(imported.html) > MAX_TEMPLATE_CHARS:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Template te groot (max {MAX_TEMPLATE_CHARS} tekens).",
+        )
+    return TemplateImportResult(
+        html=imported.html,
+        images=[image.path for image in imported.images],
+        notes=list(imported.notes),
+        capabilities=capability_labels(imported.html),
+    )
+
+
+@router.post(
+    "/templates/capabilities",
+    response_model=TemplateCapabilitiesResult,
+    dependencies=[Depends(require_admin)],
+)
+def capabilities(
+    tenant_id: uuid.UUID,
+    body: TemplateCapabilitiesRequest,
+    session: Session = Depends(get_session),
+) -> TemplateCapabilitiesResult:
+    """Wat ondersteunt deze template? Zelfde feiten als de assistent krijgt."""
+    if body.html is not None:
+        html = body.html
+    elif body.template_id is not None:
+        html = _require_template(session, tenant_id, body.template_id).html
+    else:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Geef html of template_id mee."
+        )
+    return TemplateCapabilitiesResult(
+        summary=capability_labels(html), details=template_capabilities(html)
+    )
+
+@router.post(
     "/templates",
     response_model=TemplateRead,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_admin)],
 )
 def create_template(
-    tenant_id: uuid.UUID, body: TemplateCreate, session: Session = Depends(get_session)
+    tenant_id: uuid.UUID,
+    body: TemplateCreate,
+    session: Session = Depends(get_session),
+    info: SessionInfo = Depends(current_session_info),
 ):
     _require_tenant(session, tenant_id)
     errors, _ = validate_template_for_save(body.html, body.styles)
@@ -200,6 +309,8 @@ def create_template(
             html=body.html,
             styles=body.styles,
             is_default=body.is_default,
+            source=body.source,
+            actor=info.role,
         )
     except IntegrityError as exc:
         session.rollback()
@@ -219,6 +330,7 @@ def update_template(
     template_id: uuid.UUID,
     body: TemplateUpdate,
     session: Session = Depends(get_session),
+    info: SessionInfo = Depends(current_session_info),
 ):
     _require_template(session, tenant_id, template_id)
     if body.html is not None:
@@ -231,7 +343,13 @@ def update_template(
     name = body.name.strip() if body.name is not None else None
     try:
         return repo.update_template(
-            session, template_id, name=name, html=body.html, styles=body.styles
+            session,
+            template_id,
+            name=name,
+            html=body.html,
+            styles=body.styles,
+            source=body.source,
+            actor=info.role,
         )
     except IntegrityError as exc:
         session.rollback()
@@ -252,6 +370,53 @@ def delete_template(
     _require_template(session, tenant_id, template_id)
     repo.delete_template(session, template_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+
+# --- Versies (alleen admin) ------------------------------------------------
+@router.get(
+    "/templates/{template_id}/versions",
+    response_model=list[TemplateVersionSummary],
+    dependencies=[Depends(require_admin)],
+)
+def list_versions(
+    tenant_id: uuid.UUID, template_id: uuid.UUID, session: Session = Depends(get_session)
+) -> list:
+    _require_template(session, tenant_id, template_id)
+    return versions_repo.list_versions(session, template_id)
+
+
+@router.post(
+    "/templates/{template_id}/versions/{version_id}/restore",
+    response_model=TemplateRead,
+    dependencies=[Depends(require_admin)],
+)
+def restore_version(
+    tenant_id: uuid.UUID,
+    template_id: uuid.UUID,
+    version_id: uuid.UUID,
+    session: Session = Depends(get_session),
+    info: SessionInfo = Depends(current_session_info),
+):
+    """Zet een eerdere layout terug; de huidige blijft als versie bewaard."""
+    _require_template(session, tenant_id, template_id)
+    version = versions_repo.get_version(session, version_id)
+    if version is None or version.template_id != template_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="versie niet gevonden")
+    errors, _ = validate_template_for_save(version.html, version.styles)
+    if errors:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="deze versie is niet meer geldig: " + "; ".join(errors),
+        )
+    return repo.update_template(
+        session,
+        template_id,
+        html=version.html,
+        styles=version.styles,
+        source="terugzetten",
+        actor=info.role,
+    )
 
 
 # --- Stijl + standaard (bedrijfsgebruiker mag dit ook) --------------------
@@ -287,8 +452,16 @@ def preview(
     else:
         html_template = load_template(STARTER_TEMPLATE)
     brand = {**tenant.config, "styles": sanitize_styles(body.styles)}
+    content = _SAMPLE
+    if body.newsletter_id is not None:
+        newsletter = newsletters_repo.get_newsletter(session, body.newsletter_id)
+        if newsletter is None or newsletter.tenant_id != tenant_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="nieuwsbrief niet gevonden")
+        content = content_from_draft_input(
+            newsletter.input, subject=newsletter.subject or "", theme=newsletter.theme or ""
+        )
     try:
-        rendered = render_newsletter(html_template, brand, _SAMPLE)
+        rendered = render_newsletter(html_template, brand, content)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return Response(content=rendered, media_type="text/html")
