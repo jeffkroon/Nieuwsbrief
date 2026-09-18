@@ -293,7 +293,7 @@ def test_price_override_still_validates_url(session, cipher) -> None:
         brevo_factory=lambda key: FakeBrevo(key),
         http_client=_http(lambda r: httpx.Response(404, text="weg")),
     )
-    with pytest.raises(ValueError, match="onbereikbaar"):
+    with pytest.raises(ValueError, match="404"):
         execute_tool("create_newsletter_draft", payload, ctx)
 
 
@@ -397,7 +397,7 @@ def test_items_with_unreachable_url_rejected(session, cipher) -> None:
         http_client=_http(lambda r: httpx.Response(404, text="nee")),
         preview_holder=[],
     )
-    with pytest.raises(ValueError, match="onbereikbaar"):
+    with pytest.raises(ValueError, match="404"):
         execute_tool("preview_newsletter", payload, ctx)
 
 
@@ -551,7 +551,7 @@ def test_sections_button_url_must_be_reachable(session, cipher) -> None:
         http_client=_http(lambda r: httpx.Response(404, text="weg")),
         preview_holder=[],
     )
-    with pytest.raises(ValueError, match="onbereikbaar"):
+    with pytest.raises(ValueError, match="404"):
         execute_tool("preview_newsletter", payload, ctx)
 
 
@@ -592,7 +592,7 @@ def test_find_products_unreachable_page(session, cipher) -> None:
         session=session, tenant_id=tenant.id, cipher=cipher, llm=FakeLLM({"products": []}),
         http_client=_http(lambda r: httpx.Response(500, text="stuk")),
     )
-    with pytest.raises(ValueError, match="status 500"):
+    with pytest.raises(ValueError, match="storing"):
         execute_tool("find_products", {"url": "https://shop.nl/x"}, ctx)
 
 
