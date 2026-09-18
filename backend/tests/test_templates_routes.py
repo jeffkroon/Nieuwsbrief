@@ -198,3 +198,200 @@ def test_toolproof_is_admin_only(client, session) -> None:
         assert resp.status_code == 403
     finally:
         app.dependency_overrides.pop(current_role, None)
+
+
+# --- Upload, versies en capabilities ---------------------------------------
+class _FakeStorage:
+    """Slaat niets echt op; geeft een voorspelbare publieke URL terug."""
+
+    def __init__(self) -> None:
+        self.uploaded: list[str] = []
+
+    def ensure_bucket(self) -> None:
+        pass
+
+    def upload(self, path: str, content: bytes, content_type: str):
+        from app.services.storage import StoredImage
+
+        self.uploaded.append(path)
+        return StoredImage(storage_path=path, url=f"https://cdn.fake/{path}")
+
+    def delete(self, path: str) -> None:
+        pass
+
+
+@pytest.fixture
+def fake_storage():
+    from app.deps import get_storage
+
+    storage = _FakeStorage()
+    app.dependency_overrides[get_storage] = lambda: storage
+    yield storage
+    app.dependency_overrides.pop(get_storage, None)
+
+
+def _zip_export() -> bytes:
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archief:
+        archief.writestr("export/index.html", '<html><img src="images/logo.png"></html>')
+        archief.writestr("export/images/logo.png", b"png-bytes")
+    return buffer.getvalue()
+
+
+def test_upload_los_html_bestand(client, session, fake_storage) -> None:
+    t = _tenant(session)
+    resp = client.post(
+        f"/tenants/{t.id}/templates/upload",
+        files={"file": ("basis.html", MARKER_HTML, "text/html")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["html"] == MARKER_HTML
+    assert body["images"] == []
+    assert body["capabilities"]  # altijd een uitspraak over wat de template kan
+
+
+def test_upload_zip_slaat_afbeeldingen_op_en_zet_verwijzingen_om(
+    client, session, fake_storage
+) -> None:
+    t = _tenant(session)
+    resp = client.post(
+        f"/tenants/{t.id}/templates/upload",
+        files={"file": ("export.zip", _zip_export(), "application/zip")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["images"] == ["export/images/logo.png"]
+    assert "https://cdn.fake/" in body["html"]
+    assert 'src="images/logo.png"' not in body["html"]
+    assert fake_storage.uploaded and str(t.id) in fake_storage.uploaded[0]
+
+
+def test_upload_onbruikbaar_bestand_geeft_nette_fout(client, session, fake_storage) -> None:
+    t = _tenant(session)
+    resp = client.post(
+        f"/tenants/{t.id}/templates/upload",
+        files={"file": ("template.docx", b"geen html of zip", "application/msword")},
+    )
+    assert resp.status_code == 400
+    assert "Alleen een .html-bestand" in resp.json()["detail"]
+
+
+def test_upload_mag_niet_door_een_bedrijfsgebruiker(client, session, as_company, fake_storage) -> None:
+    t = _tenant(session)
+    resp = client.post(
+        f"/tenants/{t.id}/templates/upload",
+        files={"file": ("basis.html", MARKER_HTML, "text/html")},
+    )
+    assert resp.status_code == 403
+
+
+def test_versies_worden_bewaard_en_teruggezet(client, session) -> None:
+    t = _tenant(session)
+    eerste = "<html>versie een<!-- ##BANNERS## --></html>"
+    tweede = "<html>versie twee<!-- ##BANNERS## --></html>"
+    created = client.post(
+        f"/tenants/{t.id}/templates", json={"name": "Basis", "html": eerste, "source": "upload"}
+    ).json()
+
+    versies = client.get(f"/tenants/{t.id}/templates/{created['id']}/versions").json()
+    assert [v["source"] for v in versies] == ["upload"]
+
+    client.put(
+        f"/tenants/{t.id}/templates/{created['id']}",
+        json={"html": tweede, "source": "handmatig"},
+    )
+    versies = client.get(f"/tenants/{t.id}/templates/{created['id']}/versions").json()
+    assert [v["source"] for v in versies] == ["handmatig", "upload"]  # nieuwste eerst
+
+    oudste = versies[-1]
+    hersteld = client.post(
+        f"/tenants/{t.id}/templates/{created['id']}/versions/{oudste['id']}/restore"
+    )
+    assert hersteld.status_code == 200
+    assert hersteld.json()["html"] == eerste
+    # Het terugzetten is zelf ook een versie, zodat niets verloren gaat.
+    bronnen = [v["source"] for v in client.get(
+        f"/tenants/{t.id}/templates/{created['id']}/versions"
+    ).json()]
+    assert bronnen[0] == "terugzetten"
+
+
+def test_stijlwijziging_maakt_geen_nieuwe_versie(client, session) -> None:
+    """Alleen layout-wijzigingen horen in de geschiedenis; kleuren vervuilen de lijst."""
+    t = _tenant(session)
+    created = client.post(
+        f"/tenants/{t.id}/templates", json={"name": "Basis", "html": MARKER_HTML}
+    ).json()
+    client.patch(
+        f"/tenants/{t.id}/templates/{created['id']}/styles",
+        json={"styles": {"button_bg": "#112233"}},
+    )
+    versies = client.get(f"/tenants/{t.id}/templates/{created['id']}/versions").json()
+    assert len(versies) == 1
+
+
+def test_versie_van_andere_template_kan_niet_worden_teruggezet(client, session) -> None:
+    t = _tenant(session)
+    een = client.post(f"/tenants/{t.id}/templates", json={"name": "Een", "html": MARKER_HTML}).json()
+    twee = client.post(f"/tenants/{t.id}/templates", json={"name": "Twee", "html": MARKER_HTML}).json()
+    versie_van_een = client.get(f"/tenants/{t.id}/templates/{een['id']}/versions").json()[0]
+    resp = client.post(
+        f"/tenants/{t.id}/templates/{twee['id']}/versions/{versie_van_een['id']}/restore"
+    )
+    assert resp.status_code == 404
+
+
+def test_capabilities_van_losse_html(client, session) -> None:
+    t = _tenant(session)
+    resp = client.post(
+        f"/tenants/{t.id}/templates/capabilities",
+        json={"html": "<p>{{INTRO_1}} {{VAK_QUOTE}}</p>"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert any("intro" in regel for regel in body["summary"])
+    assert body["details"]["custom_slots"] == ["QUOTE"]
+
+
+def test_capabilities_zonder_invoer_geeft_nette_fout(client, session) -> None:
+    t = _tenant(session)
+    assert client.post(f"/tenants/{t.id}/templates/capabilities", json={}).status_code == 400
+
+
+def test_preview_met_eerdere_nieuwsbrief_als_inhoud(client, session) -> None:
+    from app.repositories import newsletters as newsletters_repo
+
+    t = _brand_tenant(session)
+    nieuwsbrief = newsletters_repo.create_newsletter(
+        session,
+        tenant_id=t.id,
+        subject="Kerstaanbieding",
+        html="<html>oud</html>",
+        theme="Kerst",
+        input={"intro_1": "Dit is de echte introtekst.", "matches": []},
+    )
+    resp = client.post(
+        f"/tenants/{t.id}/templates/preview",
+        json={"html": "<html>{{INTRO_1}}<!-- ##BANNERS## --></html>", "newsletter_id": str(nieuwsbrief.id)},
+    )
+    assert resp.status_code == 200
+    assert "Dit is de echte introtekst." in resp.text
+
+
+def test_preview_met_nieuwsbrief_van_ander_bedrijf_faalt(client, session) -> None:
+    from app.repositories import newsletters as newsletters_repo
+
+    eigen = _brand_tenant(session)
+    ander = _tenant(session)
+    vreemd = newsletters_repo.create_newsletter(
+        session, tenant_id=ander.id, subject="x", html="<html></html>", input={}
+    )
+    resp = client.post(
+        f"/tenants/{eigen.id}/templates/preview",
+        json={"html": MARKER_HTML, "newsletter_id": str(vreemd.id)},
+    )
+    assert resp.status_code == 404
