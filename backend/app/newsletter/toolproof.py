@@ -43,11 +43,11 @@ from app.newsletter.toolproof_ops import (
 
 _log = logging.getLogger(__name__)
 
-TRANSFORM_MODEL = "claude-sonnet-4-6"
+TRANSFORM_MODEL = "claude-sonnet-5"
 MAX_TEMPLATE_CHARS = 150_000
 # Grote (Stripo/ActiveCampaign) exports leveren tientallen operaties op; 16000
 # tokens kapte het JSON-antwoord af (json.loads faalde -> "kon niet gelezen").
-# claude-sonnet-4-6 kan tot 128K output, maar boven ~16K moet er gestreamd
+# claude-sonnet-5 kan tot 128K output, maar boven ~16K moet er gestreamd
 # worden om SDK-HTTP-timeouts te vermijden (zie propose_replacements).
 MAX_OUTPUT_TOKENS = 64000
 

@@ -51,7 +51,10 @@ from app.repositories import images as images_repo
 from app.repositories import newsletters as newsletters_repo
 from app.repositories import secrets as secrets_repo
 from app.repositories import templates as templates_repo
+from app.newsletter.css_inlining import inline_css
 from app.newsletter.esp_tags import localize_esp_tags
+from app.newsletter.mail_checks import advisory_messages, blocking_messages, check_newsletter
+from app.newsletter.utm import add_utm, utm_params
 from app.services.activecampaign import ActiveCampaignClient, ActiveCampaignError
 from app.services.brevo import BrevoClient, BrevoError
 from app.services.crypto import SecretCipher
@@ -955,6 +958,13 @@ def _tool_preview_newsletter(ctx: ToolContext, tool_input: dict) -> dict:
             "(personen, projecten, prijzen, quotes, foto-URL's) alleen met informatie van "
             "de gebruiker; vraag ernaar of laat ze bewust leeg."
         )
+    bevindingen = check_newsletter(
+        html, subject=content.subject, preheader=content.preview_text
+    )
+    aandachtspunten = blocking_messages(bevindingen) + advisory_messages(bevindingen)
+    if aandachtspunten:
+        result_extra["aandachtspunten"] = aandachtspunten
+
     return {
         **result_extra,
         "status": "preview",
@@ -1024,6 +1034,32 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
     gelokaliseerd = localize_esp_tags(html, esp)
     html = gelokaliseerd.html
 
+    # UTM's op de eigen links, zodat de klant het resultaat kan meten. Staat uit
+    # tot een bedrijf het instelt; externe links blijven altijd ongemoeid.
+    parameters = utm_params(brand, campaign=content.theme)
+    if parameters:
+        html = add_utm(html, parameters, website_url=brand.get("website_url", ""))
+
+    # CSS inline zetten zodat Outlook de opmaak ook toont. Per bedrijf uit te
+    # zetten; bij twijfel gebruikt de inliner zelf de originele HTML.
+    inline_notes: list[str] = []
+    if brand.get("inline_css", True):
+        ingelijnd = inline_css(html)
+        html = ingelijnd.html
+        if ingelijnd.note:
+            inline_notes.append(ingelijnd.note)
+
+    # Laatste controle voor het concept de deur uit gaat. Harde fouten (geen
+    # afmeldlink, javascript-link, script-tag) blokkeren: die kosten de klant
+    # anders een onbruikbare of niet-verzendbare campagne.
+    bevindingen = check_newsletter(html, subject=content.subject, preheader=content.preview_text)
+    blokkerend = blocking_messages(bevindingen)
+    if blokkerend:
+        raise ValueError(
+            "De nieuwsbrief kan zo niet als concept worden klaargezet: "
+            + " ".join(blokkerend)
+        )
+
     try:
         draft = client.create_draft(
             name=f"{brand['brand_name']} - {content.theme}",
@@ -1069,7 +1105,8 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
         "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
         "items_used": [{"title": i.title, "url": i.url, "price": i.price} for i in items],
-        "esp_notes": list(gelokaliseerd.notes),
+        "esp_notes": [*gelokaliseerd.notes, *inline_notes],
+        "aandachtspunten": advisory_messages(bevindingen),
         "message": f"Concept aangemaakt in {esp_label}. Niets verstuurd; controleer en verstuur handmatig."
         + (
             " Let op: ActiveCampaign ondersteunt geen preheader via de API; de "
