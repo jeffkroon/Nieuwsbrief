@@ -5,6 +5,11 @@
 > de drie ESP-API's tegen hun documentatie, met twee echte fouten opgelost
 > (ESP-API-VERIFICATIE.md). 493 tests groen tegen een echte Postgres.
 > Niet gebouwd: de testmail-knop (blok 3), zie de toelichting in PR #74.
+>
+> **Afgerond 18 september:** alles gemerged naar main (#71, #72, #76, #74, #77,
+> #75, #78). De code-review vond een kritieke fout (gedeelde DB-sessie tussen
+> request en worker-thread) en een hoge (zip-bom-check vertrouwde de
+> ZIP-header); beide opgelost in #77. 511 tests groen, branches opgeruimd.
 
 Doel: alles wat nu clunky of half is werkend en soepel maken, in zes blokken van
 elk een eigen PR. Volgorde is op impact voor de accountmanager. Wat onder de
@@ -109,7 +114,7 @@ Nu: `Newsletter`-tabel wordt gevuld maar is nergens zichtbaar.
       harde punten (unsubscribe ontbreekt).
 - [x] **UTM-parameters**: per tenant `config.utm` (source/medium/campaign-patroon);
       `_require_reachable` plakt ze op uitgaande links ná de 200-check.
-- [ ] **Alt-tekst en beschrijving bij afbeelding-upload** (niet gebouwd, schuift door): Haiku 4.5 met
+- [x] **Alt-tekst en beschrijving bij afbeelding-upload** (Haiku-beeldherkenning, #78): Haiku 4.5 met
       vision genereert beschrijving + alt + herkent club/product; admin kan
       overschrijven. `list_images` geeft daardoor betere matches.
 
