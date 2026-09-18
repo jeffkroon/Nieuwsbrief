@@ -279,6 +279,22 @@ class TemplateVersionSummary(_ORMModel):
     created_at: datetime
 
 
+class NewsletterSummary(BaseModel):
+    """Een gemaakt concept in de nieuwsbrieven-lijst."""
+
+    id: uuid.UUID
+    subject: str | None
+    theme: str | None
+    status: str
+    esp: str | None = None
+    campaign_ref: str | None = None
+    link_url: str | None = None
+    link_label: str | None = None
+    link_is_deeplink: bool = False
+    conversation_id: uuid.UUID | None = None
+    created_at: datetime
+
+
 class ConversationSummary(BaseModel):
     """Eén regel in de gesprekkenlijst; `title` is het eerste bericht."""
 

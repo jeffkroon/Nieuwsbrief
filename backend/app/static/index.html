@@ -123,6 +123,10 @@
   .diff .hunk { background: #eef2f7; color: var(--muted); }
   .tmpl-item .edit { color: #0b62c4; }
   .tmpl-item .ghost { color: var(--muted); }
+  .nl-item { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .nl-item .meta { color: var(--muted); font-size: 12px; }
+  .nl-item a, .nl-item button { font-size: 12px; background: none; border: none; cursor: pointer; font-family: inherit; color: #0b62c4; text-decoration: none; }
+  .nl-item .status-failed { color: var(--danger); font-weight: 600; font-size: 11.5px; }
   .versions { border-top: 1px solid var(--border); padding: 8px 0 10px; font-size: 13px; }
   .versions .v { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .versions .v small { color: var(--muted); }
@@ -164,6 +168,7 @@
     <nav id="mainNav">
       <button id="navChat" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>Chat</button>
       <button id="navImages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>Foto's</button>
+      <button id="navNewsletters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 5 8-5"/></svg>Nieuwsbrieven</button>
       <button id="navTemplates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>Templates</button>
       <button id="navCompanies" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Bedrijven</button>
     </nav>
@@ -232,6 +237,19 @@
           <select id="viewCategory" class="field"></select>
         </div>
         <div id="imageGrid" class="grid"></div>
+      </div>
+    </div>
+
+    <div id="newslettersView" class="view">
+      <div class="card">
+        <h2>Gemaakte nieuwsbrieven</h2>
+        <p class="hint" style="margin:0 0 12px;">Alles wat als concept is klaargezet. Verzenden doe je in het verzendplatform zelf.</p>
+        <div id="nlList"></div>
+      </div>
+      <div class="card">
+        <h2>Voorbeeld</h2>
+        <div id="nlPreviewEmpty" class="hint">Kies hierboven een nieuwsbrief om hem hier te bekijken.</div>
+        <iframe id="nlPreviewFrame" class="preview-frame" title="Voorbeeld nieuwsbrief" style="display:none;"></iframe>
       </div>
     </div>
 
@@ -483,12 +501,14 @@ async function loadChatTemplates() {
 const views = {
   chat: document.getElementById("chatView"),
   images: document.getElementById("imagesView"),
+  newsletters: document.getElementById("newslettersView"),
   templates: document.getElementById("templatesView"),
   companies: document.getElementById("companiesView"),
 };
 const navButtons = {
   chat: document.getElementById("navChat"),
   images: document.getElementById("navImages"),
+  newsletters: document.getElementById("navNewsletters"),
   templates: document.getElementById("navTemplates"),
   companies: document.getElementById("navCompanies"),
 };
@@ -498,6 +518,7 @@ function showView(name) {
   for (const k in navButtons) navButtons[k].classList.toggle("active", k === name);
   chatFooter.style.display = name === "chat" ? "block" : "none";
   if (name === "images") loadCategories();
+  if (name === "newsletters") laadNieuwsbrieven();
   if (name === "templates") { loadTemplates(); loadTone(); }
   if (name === "companies") loadCompanies();
 }
@@ -766,6 +787,90 @@ tenantSel.addEventListener("change", () => {
   loadChatTemplates();
   if (views.templates.classList.contains("active")) { loadTemplates(); loadTone(); }
 });
+
+// ---- nieuwsbrieven ----
+async function laadNieuwsbrieven() {
+  const lijst = document.getElementById("nlList");
+  if (!tenantSel.value) { lijst.innerHTML = `<p class="hint">Kies eerst een klant.</p>`; return; }
+  lijst.innerHTML = `<p class="hint">Laden...</p>`;
+  let rijen;
+  try {
+    const res = await fetch(`/tenants/${tenantSel.value}/newsletters`);
+    if (!res.ok) throw new Error("status " + res.status);
+    rijen = await res.json();
+  } catch (e) {
+    lijst.innerHTML = `<p class="hint">Kon de nieuwsbrieven niet laden: ${e.message}</p>`;
+    return;
+  }
+  if (!rijen.length) {
+    lijst.innerHTML = `<p class="hint">Nog geen nieuwsbrieven gemaakt voor deze klant.</p>`;
+    return;
+  }
+  lijst.innerHTML = "";
+  for (const n of rijen) {
+    const el = document.createElement("div");
+    el.className = "nl-item";
+    const datum = new Date(n.created_at).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" });
+    const kop = document.createElement("div");
+    kop.innerHTML = `<div>${n.subject || "(zonder onderwerp)"}</div>`
+      + `<div class="meta">${datum}${n.theme ? " - " + n.theme : ""}</div>`;
+    el.appendChild(kop);
+
+    const rechts = document.createElement("span");
+    rechts.style.marginLeft = "auto";
+    el.appendChild(rechts);
+
+    if (n.status === "failed") {
+      const mislukt = document.createElement("span");
+      mislukt.className = "status-failed";
+      mislukt.textContent = "mislukt";
+      el.appendChild(mislukt);
+    }
+
+    const bekijk = document.createElement("button");
+    bekijk.textContent = "bekijken";
+    bekijk.onclick = () => toonNieuwsbrief(n.id);
+    el.appendChild(bekijk);
+
+    if (n.conversation_id) {
+      const gesprek = document.createElement("button");
+      gesprek.textContent = "gesprek openen";
+      gesprek.onclick = () => { showView("chat"); hervatGesprek(n.conversation_id); };
+      el.appendChild(gesprek);
+    }
+
+    if (n.link_url) {
+      const link = document.createElement("a");
+      link.href = n.link_url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = n.link_label;
+      // Alleen bij Brevo komt de link op de campagne zelf uit; bij de andere
+      // platforms op het overzicht. Dat staat in de tooltip zodat niemand
+      // denkt dat er iets stuk is.
+      link.title = n.link_is_deeplink
+        ? "Opent dit concept in het verzendplatform"
+        : "Opent het campagne-overzicht; zoek daar op het onderwerp";
+      el.appendChild(link);
+    }
+    lijst.appendChild(el);
+  }
+}
+
+async function toonNieuwsbrief(id) {
+  const frame = document.getElementById("nlPreviewFrame");
+  const leeg = document.getElementById("nlPreviewEmpty");
+  try {
+    const res = await fetch(`/tenants/${tenantSel.value}/newsletters/${id}/html`);
+    if (!res.ok) throw new Error("status " + res.status);
+    frame.srcdoc = await res.text();
+    frame.style.display = "";
+    leeg.style.display = "none";
+    frame.scrollIntoView({ behavior: "smooth", block: "center" });
+  } catch (e) {
+    leeg.textContent = "Kon het voorbeeld niet laden: " + e.message;
+  }
+}
 
 // ---- images ----
 const uploadCategory = document.getElementById("uploadCategory");
