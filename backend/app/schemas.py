@@ -248,6 +248,20 @@ class TemplateToolproofResult(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
 
 
+class TemplateStyleSuggestion(BaseModel):
+    """Voorstel voor een heel kleurenpalet, afgeleid uit de huisstijlkleur."""
+
+    styles: dict = Field(default_factory=dict)
+    primary_color: str | None = None
+    note: str = ""
+
+
+class TemplateStyleCheck(BaseModel):
+    """Leesbaarheidscontrole op een kleurcombinatie."""
+
+    warnings: list[str] = Field(default_factory=list)
+
+
 class TemplateImportResult(BaseModel):
     """Resultaat van een geuploade .html of .zip; wordt nog niet opgeslagen."""
 
