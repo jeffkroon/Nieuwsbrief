@@ -14,21 +14,34 @@ def _index(client) -> str:
     return client.get("/").text
 
 
+def _frontend(client) -> str:
+    """De hele frontend: de pagina plus alle losse bestanden die hij inlaadt."""
+    import re
+
+    html = client.get("/").text
+    delen = [html]
+    for pad in re.findall(r'(?:src|href)="(/static/[^"]+)"', html):
+        resp = client.get(pad)
+        assert resp.status_code == 200, f"{pad} wordt niet geserveerd"
+        delen.append(resp.text)
+    return "\n".join(delen)
+
+
 def test_chat_gebruikt_de_streamende_route(client) -> None:
     """Zonder stream ziet de gebruiker een minuut lang alleen 'Aan het werk'."""
-    html = _index(client)
+    html = _frontend(client)
     assert "/conversations/stream" in html
     assert "text/event-stream" not in html  # de browser leest de stroom zelf uit
 
 
 def test_chat_heeft_stopknop_en_gespreksgeschiedenis(client) -> None:
-    html = _index(client)
+    html = _frontend(client)
     for element in ('id="stop"', 'id="chatHistory"', 'id="newChat"', 'id="quickStarts"'):
         assert element in html
 
 
 def test_templatebeheer_heeft_upload_bewerken_en_versies(client) -> None:
-    html = _index(client)
+    html = _frontend(client)
     for element in ('id="tmplDrop"', 'id="tmplFile"', 'id="tmplCancelEdit"', 'id="toolproofDiff"'):
         assert element in html
     assert "/versions" in html
@@ -42,7 +55,7 @@ def test_geen_externe_bronnen_in_de_frontend(client) -> None:
 
 
 def test_nieuwsbrieven_tab_bestaat(client) -> None:
-    html = _index(client)
+    html = _frontend(client)
     for element in ('id="navNewsletters"', 'id="newslettersView"', 'id="nlList"'):
         assert element in html
     assert "/newsletters" in html
@@ -58,5 +71,40 @@ def test_stijlscherm_heeft_hoofdkleur_en_inklapbare_rest(client) -> None:
 
 
 def test_voorbeeld_staat_naast_de_kleuren(client) -> None:
-    html = _index(client)
+    html = _frontend(client)
     assert "style-split" in html and "preview-col" in html
+
+
+def test_frontend_is_opgesplitst_in_leesbare_bestanden(client) -> None:
+    """Eén bestand van tweeduizend regels werd onwerkbaar; de eigen norm is 800."""
+    import re
+
+    html = client.get("/").text
+    bestanden = re.findall(r'(?:src|href)="(/static/[^"]+)"', html)
+    assert len(bestanden) >= 6, "de frontend hoort in losse onderdelen te staan"
+    assert len(html.splitlines()) < 800, "index.html is weer te groot geworden"
+    for pad in bestanden:
+        resp = client.get(pad)
+        assert resp.status_code == 200
+        assert len(resp.text.splitlines()) < 800, f"{pad} is te groot geworden"
+
+
+def test_geen_blokkerende_browser_dialogen(client) -> None:
+    """confirm() blokkeert de pagina en ziet er in elke browser anders uit."""
+    html = _frontend(client)
+    assert "confirm(`" not in html and "confirm('" not in html
+    assert "function bevestig(" in html
+
+
+def test_scripts_zoeken_alleen_elementen_op_die_bestaan(client) -> None:
+    """Vangt de klassieke fout na het opsplitsen: een script dat een element
+    opzoekt dat niet (meer) in de pagina staat, waardoor alles stilvalt."""
+    import re
+
+    html = client.get("/").text
+    ids = set(re.findall(r'\bid="([^"]+)"', html))
+    for pad in re.findall(r'src="(/static/[^"]+\.js)"', html):
+        js = client.get(pad).text
+        gevraagd = set(re.findall(r'getElementById\("([^"]+)"\)', js))
+        ontbreekt = sorted(gevraagd - ids)
+        assert not ontbreekt, f"{pad} zoekt niet-bestaande elementen: {ontbreekt}"

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.middleware import LoginAuthMiddleware
@@ -26,7 +27,14 @@ app.include_router(images.router)
 app.include_router(templates.router)
 app.include_router(newsletters.router)
 
-_INDEX_HTML = Path(__file__).resolve().parent / "static" / "index.html"
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+_INDEX_HTML = _STATIC_DIR / "index.html"
+
+# De frontend is opgesplitst in losse bestanden (app.css, core.js, chat.js, ...)
+# in plaats van een enkel bestand van tweeduizend regels. Ze zitten achter
+# hetzelfde wachtwoord-slot als de rest: de middleware ziet /static net als
+# elke andere pagina.
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
