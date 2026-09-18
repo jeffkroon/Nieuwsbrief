@@ -50,3 +50,26 @@ def test_onbekende_tool_geeft_toch_een_regel() -> None:
 def test_lange_foutmelding_wordt_ingekort() -> None:
     regel = describe(ToolEvent(name="find_matches", input={}, error="x" * 500))
     assert len(regel) < 200 and regel.endswith("...)")
+
+
+def test_uit_werkgeheugen_wordt_zichtbaar_gemeld() -> None:
+    regel = describe(
+        ToolEvent(
+            name="find_products",
+            input={"url": "https://shop.test/"},
+            result={"products": ["a", "b", "c"], "source_url": "https://shop.test/", "from_memory": True},
+        )
+    )
+    assert "3 items opgehaald" in regel
+    assert "al eerder in dit gesprek opgehaald" in regel
+
+
+def test_verse_aanroep_krijgt_geen_geheugen_notitie() -> None:
+    regel = describe(
+        ToolEvent(
+            name="find_products",
+            input={"url": "https://shop.test/"},
+            result={"count": 3, "source_url": "https://shop.test/"},
+        )
+    )
+    assert "al eerder" not in regel
