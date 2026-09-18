@@ -18,6 +18,23 @@ import httpx
 from app.newsletter.models import PRICE_ON_REQUEST
 
 EXTRACT_MODEL = "claude-haiku-4-5"  # goedkoop model voor extractie
+
+# Hoe we ons melden bij de website van een klant.
+#
+# httpx meldt zich standaard als "python-httpx/0.x", en bot-filters (Cloudflare en
+# soortgelijke) blokkeren dat met een 403. Zo werd voetbalticketshop.nl in september
+# 2026 ineens onbereikbaar terwijl de site het gewoon deed. Getest: met deze eerlijke
+# naam geeft die site weer 200, dus we hoeven ons niet voor te doen als Chrome.
+#
+# We halen alleen publieke pagina's op van klanten die deze tool zelf gebruiken, dus
+# wie ons blokkeert of wil contacteren kan dat: de naam en de URL staan erin.
+USER_AGENT = "DunionNieuwsbrief/1.0 (+https://dunion.nl)"
+SITE_HEADERS = {
+    "User-Agent": USER_AGENT,
+    # Sommige filters kijken ook hiernaar; een browser stuurt ze altijd mee.
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
+}
 MAX_PAGE_CHARS = 40000
 
 _MATCHES_SCHEMA = {
@@ -210,10 +227,10 @@ def fetch_page(url: str, client: httpx.Client | None = None, timeout: float = 20
     """Haal een pagina op. Geeft (status, html) terug; (None, '') bij netwerkfout."""
     try:
         if client is not None:
-            resp = client.get(url)
+            resp = client.get(url, headers=SITE_HEADERS)
         else:
             with httpx.Client(timeout=timeout, follow_redirects=True) as c:
-                resp = c.get(url)
+                resp = c.get(url, headers=SITE_HEADERS)
         return resp.status_code, resp.text
     except httpx.HTTPError:
         return None, ""
