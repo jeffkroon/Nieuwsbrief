@@ -46,3 +46,17 @@ def test_nieuwsbrieven_tab_bestaat(client) -> None:
     for element in ('id="navNewsletters"', 'id="newslettersView"', 'id="nlList"'):
         assert element in html
     assert "/newsletters" in html
+
+
+def test_stijlscherm_heeft_hoofdkleur_en_inklapbare_rest(client) -> None:
+    """21 losse kleurkiezers is een bedieningspaneel, geen klantproduct."""
+    html = _index(client)
+    assert 'id="stPrimary"' in html
+    assert 'id="stFromBrand"' in html
+    assert "Alle kleuren apart instellen" in html
+    assert 'id="stWarnings"' in html
+
+
+def test_voorbeeld_staat_naast_de_kleuren(client) -> None:
+    html = _index(client)
+    assert "style-split" in html and "preview-col" in html

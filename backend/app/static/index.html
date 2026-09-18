@@ -130,6 +130,14 @@
   .versions { border-top: 1px solid var(--border); padding: 8px 0 10px; font-size: 13px; }
   .versions .v { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .versions .v small { color: var(--muted); }
+  .style-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .style-split .preview-col { position: sticky; top: 12px; }
+  .style-split .preview-frame { margin-top: 6px; height: 560px; }
+  .style-lead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .style-grid label .hint { font-weight: 400; }
+  .warn-box { margin-top: 12px; padding: 10px 12px; border: 1px solid #f0c9c4; background: #fdf3f2; border-radius: 8px; font-size: 13px; color: #8c2c20; }
+  .warn-box div { padding: 1px 0; }
+  @media (max-width: 1100px) { .style-split { grid-template-columns: 1fr; } .style-split .preview-col { position: static; } }
   #chatBar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
   #chatBar select { font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-family: inherit; max-width: 230px; }
   .chip { font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 20px; border: 1px solid var(--border); background: #fff; color: var(--text); cursor: pointer; font-family: inherit; }
@@ -269,8 +277,19 @@
           <select id="tmplSelect" class="field"></select>
           <button class="btn secondary" id="tmplSetDefault">Als standaard instellen</button>
         </div>
-        <h3 class="style-head">Tekst & knoppen</h3>
+        <div class="style-split">
+        <div class="controls-col">
+        <div class="style-lead">
+          <button class="btn secondary" id="stFromBrand">Gebruik onze huisstijlkleur</button>
+          <span id="stBrandNote" class="hint"></span>
+        </div>
+
         <div class="style-grid">
+          <label>Hoofdkleur <input type="color" id="stPrimary" value="#ff7200">
+            <span class="hint">Knoppen, accenten en randen volgen deze kleur.</span>
+          </label>
+          <label>Tekstkleur <input type="color" id="stText" value="#3b3f44"></label>
+          <label>Achtergrond <input type="color" id="stPageBg" value="#ffffff"></label>
           <label>Lettertype
             <select id="stFont" class="field">
               <option value="arial">Arial</option>
@@ -283,44 +302,59 @@
               <option value="courier">Courier New</option>
             </select>
           </label>
-          <label>Tekstkleur <input type="color" id="stText" value="#3b3f44"></label>
-          <label>Kopkleur (op foto) <input type="color" id="stHeading" value="#ffffff"></label>
-          <label>Linkkleur <input type="color" id="stLink" value="#0092ff"></label>
-          <label>Productknoppen <input type="color" id="stButtonBg" value="#ff7200"></label>
-          <label>Productknop-tekst <input type="color" id="stButtonText" value="#ffffff"></label>
-          <label>Banner-knop <input type="color" id="stHeroBtnBg" value="#ff7200"></label>
-          <label>Banner-knoptekst <input type="color" id="stHeroBtnText" value="#ffffff"></label>
-          <label>Onderste knop <input type="color" id="stCtaBtnBg" value="#ff7200"></label>
-          <label>Onderste knoptekst <input type="color" id="stCtaBtnText" value="#ffffff"></label>
         </div>
-        <p class="hint">De banner-knop en de onderste knop volgen de productknop-kleur totdat je ze hier (of via de chat) een eigen kleur geeft.</p>
-        <h3 class="style-head">Kaarten & prijs</h3>
-        <div class="style-grid">
-          <label>Naam op kaart (accent) <input type="color" id="stAccent" value="#ff7200"></label>
-          <label>Kaartrand <input type="color" id="stCardBorder" value="#e8e8e8"></label>
-          <label>Kaart-achtergrond <input type="color" id="stCardBg" value="#ffffff"></label>
-          <label>Prijskleur <input type="color" id="stPrice" value="#1a3a6e"></label>
-          <label>Badge-kleur (label) <input type="color" id="stBadge" value="#1a3a6e"></label>
-        </div>
-        <h3 class="style-head">Wedstrijdblokken</h3>
-        <div class="style-grid">
-          <label>Thuisclub-naam <input type="color" id="stHome" value="#00aeef"></label>
-          <label>Uitclub-/clubnaam <input type="color" id="stAway" value="#1a3a6e"></label>
-          <label>Rand van het blok <input type="color" id="stBlockBorder" value="#ff7200"></label>
-        </div>
-        <h3 class="style-head">Achtergrond & footer</h3>
-        <div class="style-grid">
-          <label>E-mail-achtergrond <input type="color" id="stPageBg" value="#ffffff"></label>
-          <label>Footer-achtergrond <input type="color" id="stFooterBg" value="#6a6a6b"></label>
-          <label>Footer-tekst <input type="color" id="stFooterText" value="#ffffff"></label>
-        </div>
+        <div id="stWarnings" class="warn-box" style="display:none;"></div>
+
+        <details class="co-sec" style="margin-top:14px;">
+          <summary>Alle kleuren apart instellen</summary>
+          <div class="co-sec-body">
+            <h3 class="style-head">Knoppen</h3>
+            <div class="style-grid">
+              <label>Productknoppen <input type="color" id="stButtonBg" value="#ff7200"></label>
+              <label>Productknop-tekst <input type="color" id="stButtonText" value="#ffffff"></label>
+              <label>Banner-knop <input type="color" id="stHeroBtnBg" value="#ff7200"></label>
+              <label>Banner-knoptekst <input type="color" id="stHeroBtnText" value="#ffffff"></label>
+              <label>Onderste knop <input type="color" id="stCtaBtnBg" value="#ff7200"></label>
+              <label>Onderste knoptekst <input type="color" id="stCtaBtnText" value="#ffffff"></label>
+            </div>
+            <h3 class="style-head">Tekst</h3>
+            <div class="style-grid">
+              <label>Kopkleur (op foto) <input type="color" id="stHeading" value="#ffffff"></label>
+              <label>Linkkleur <input type="color" id="stLink" value="#0092ff"></label>
+            </div>
+            <h3 class="style-head">Kaarten &amp; prijs</h3>
+            <div class="style-grid">
+              <label>Naam op kaart (accent) <input type="color" id="stAccent" value="#ff7200"></label>
+              <label>Kaartrand <input type="color" id="stCardBorder" value="#e8e8e8"></label>
+              <label>Kaart-achtergrond <input type="color" id="stCardBg" value="#ffffff"></label>
+              <label>Prijskleur <input type="color" id="stPrice" value="#1a3a6e"></label>
+              <label>Badge-kleur (label) <input type="color" id="stBadge" value="#1a3a6e"></label>
+            </div>
+            <h3 class="style-head">Wedstrijdblokken</h3>
+            <div class="style-grid">
+              <label>Thuisclub-naam <input type="color" id="stHome" value="#00aeef"></label>
+              <label>Uitclub-/clubnaam <input type="color" id="stAway" value="#1a3a6e"></label>
+              <label>Rand van het blok <input type="color" id="stBlockBorder" value="#ff7200"></label>
+            </div>
+            <h3 class="style-head">Footer</h3>
+            <div class="style-grid">
+              <label>Footer-achtergrond <input type="color" id="stFooterBg" value="#6a6a6b"></label>
+              <label>Footer-tekst <input type="color" id="stFooterText" value="#ffffff"></label>
+            </div>
+          </div>
+        </details>
+
         <div class="row" style="margin-top:14px;">
           <button class="btn secondary" id="tmplPreview">Voorbeeld verversen</button>
           <button class="btn" id="tmplSaveStyles">Stijl opslaan</button>
           <span id="tmplStatus" class="hint"></span>
         </div>
-        <p class="hint" style="margin:10px 0 0;">Live voorbeeld, verandert direct mee met je kleuren en lettertype:</p>
-        <iframe id="tmplPreviewFrame" class="preview-frame" title="Voorbeeld"></iframe>
+        </div>
+        <div class="preview-col">
+          <p class="hint" style="margin:0;">Live voorbeeld, verandert direct mee:</p>
+          <iframe id="tmplPreviewFrame" class="preview-frame" title="Voorbeeld"></iframe>
+        </div>
+        </div>
       </div>
 
       <div class="card" id="adminCard" style="display:none;">
@@ -1015,6 +1049,66 @@ function readStyleInputs() {
   return out;
 }
 
+// ---- hoofdkleur, palet en leesbaarheid ----
+const stPrimary = document.getElementById("stPrimary");
+const stBrandNote = document.getElementById("stBrandNote");
+const stWarnings = document.getElementById("stWarnings");
+
+// Het palet komt altijd van de server, ook als je zelf een hoofdkleur kiest:
+// één plek waar de afleiding staat, geen tweede versie in JavaScript.
+async function paletFromServer(primary) {
+  const url = `/tenants/${tenantSel.value}/templates/style-suggestion`
+    + (primary ? `?primary=${encodeURIComponent(primary)}` : "");
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function vulUitHuisstijl(primary) {
+  if (!tenantSel.value) return;
+  const voorstel = await paletFromServer(primary);
+  if (!voorstel) { stBrandNote.textContent = "Kon het voorstel niet ophalen."; return; }
+  stBrandNote.textContent = voorstel.note || "";
+  if (!Object.keys(voorstel.styles).length) return;
+  for (const k in voorstel.styles) {
+    if (STYLE_INPUTS[k]) STYLE_INPUTS[k].value = voorstel.styles[k];
+  }
+  if (voorstel.primary_color) stPrimary.value = voorstel.primary_color;
+  renderStylePreview();
+  checkContrast();
+}
+
+document.getElementById("stFromBrand").onclick = () => vulUitHuisstijl(null);
+stPrimary.addEventListener("input", () => {
+  clearTimeout(stPrimary._timer);
+  stPrimary._timer = setTimeout(() => vulUitHuisstijl(stPrimary.value), 250);
+});
+
+// Wit op wit kan een klant nu nog gewoon kiezen; dit meldt het, zonder te blokkeren.
+let contrastTimer = null;
+function scheduleContrast() {
+  clearTimeout(contrastTimer);
+  contrastTimer = setTimeout(checkContrast, 400);
+}
+
+async function checkContrast() {
+  if (!tenantSel.value) return;
+  try {
+    const res = await fetch(`/tenants/${tenantSel.value}/templates/style-check`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ styles: readStyleInputs() }) });
+    if (!res.ok) return;
+    const { warnings } = await res.json();
+    stWarnings.innerHTML = "";
+    for (const w of warnings) {
+      const div = document.createElement("div");
+      div.textContent = w;
+      stWarnings.appendChild(div);
+    }
+    stWarnings.style.display = warnings.length ? "block" : "none";
+  } catch (e) { /* leesbaarheidshulp mag de pagina nooit blokkeren */ }
+}
+
 function applyStyleInputs(styles) {
   for (const k in STYLE_INPUTS) STYLE_INPUTS[k].value = styles[k] || STYLE_DEFAULTS[k];
   // Banner-/onderste knop volgen de productknop zolang ze zelf niet gezet zijn.
@@ -1024,6 +1118,9 @@ function applyStyleInputs(styles) {
   if (!styles.hero_button_text) STYLE_INPUTS.hero_button_text.value = btnText;
   if (!styles.cta_button_bg) STYLE_INPUTS.cta_button_bg.value = btnBg;
   if (!styles.cta_button_text) STYLE_INPUTS.cta_button_text.value = btnText;
+  // De hoofdkleur-kiezer volgt de knopkleur; die bepaalt het meeste beeld.
+  if (stPrimary) stPrimary.value = btnBg;
+  scheduleContrast();
 }
 
 async function loadTemplates() {
@@ -1163,6 +1260,7 @@ document.getElementById("newTmplHtml").addEventListener("input", scheduleAdminPr
 document.getElementById("adminPreview").onclick = renderAdminPreview;
 for (const k in STYLE_INPUTS) STYLE_INPUTS[k].addEventListener("input", () => {
   scheduleStylePreview();
+  scheduleContrast();
   // Na toolproof telt de actuele kiezer-stand: een handmatige kleuraanpassing
   // gaat mee bij het opslaan in plaats van stil te verdwijnen.
   if (toolproofStyles) toolproofStyles = readStyleInputs();

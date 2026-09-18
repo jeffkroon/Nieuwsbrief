@@ -27,6 +27,7 @@ from app.deps import (
 )
 from app.services.llm_usage import TrackingLLM
 from app.services.storage import StorageError
+from app.newsletter.brand_colors import contrast_waarschuwingen, palette_from_primary
 from app.newsletter.capabilities import capability_labels, template_capabilities
 from app.newsletter.models import Club, Match, NewsletterContent, Section
 from app.newsletter.preview_content import content_from_draft_input
@@ -49,6 +50,8 @@ from app.schemas import (
     TemplateImportResult,
     TemplatePreviewRequest,
     TemplateRead,
+    TemplateStyleCheck,
+    TemplateStyleSuggestion,
     TemplateStyleUpdate,
     TemplateSummary,
     TemplateToolproofRequest,
@@ -151,6 +154,39 @@ def template_health(
     """Groen/rood-rapport: heeft deze tenant een geldige eigen standaard-template?"""
     _require_tenant(session, tenant_id)
     return tenant_template_health(session, tenant_id)
+
+
+@router.get("/templates/style-suggestion", response_model=TemplateStyleSuggestion)
+def style_suggestion(
+    tenant_id: uuid.UUID,
+    primary: str | None = None,
+    session: Session = Depends(get_session),
+) -> TemplateStyleSuggestion:
+    """Stel een heel palet voor op basis van de huisstijlkleur van dit bedrijf.
+
+    Bewust niet de website scrapen: sites op Bootstrap leveren honderden
+    framework-kleuren op en het meest voorkomende is dan Bootstrap-blauw, niet de
+    merkkleur. De huisstijlkleur bij het bedrijf is door een mens gecontroleerd.
+    """
+    tenant = _require_tenant(session, tenant_id)
+    # Zelf een kleur kiezen mag; zonder keuze geldt de huisstijlkleur van het bedrijf.
+    primair = (primary or "").strip() or (tenant.config or {}).get("primary_color") or ""
+    styles = palette_from_primary(primair)
+    if not styles:
+        return TemplateStyleSuggestion(
+            note=(
+                "Geen geldige kleur. Zet de huisstijlkleur van dit bedrijf in de "
+                "Bedrijven-tab, of kies hier zelf een hoofdkleur."
+            )
+        )
+    return TemplateStyleSuggestion(
+        styles=styles,
+        primary_color=primair,
+        note=(
+            "Voorstel op basis van de huisstijlkleur. De knopteksten zijn berekend op "
+            "leesbaarheid. Bekijk het voorbeeld en sla op als het klopt."
+        ),
+    )
 
 
 @router.get("/templates/{template_id}", response_model=TemplateRead)
@@ -417,6 +453,14 @@ def restore_version(
         source="terugzetten",
         actor=info.role,
     )
+
+
+
+# --- Kleuren: voorstel en leesbaarheidscontrole ---------------------------
+@router.post("/templates/style-check", response_model=TemplateStyleCheck)
+def style_check(tenant_id: uuid.UUID, body: TemplateStyleUpdate) -> TemplateStyleCheck:
+    """Kan de lezer deze kleurcombinatie lezen? Alleen melden, nooit blokkeren."""
+    return TemplateStyleCheck(warnings=contrast_waarschuwingen(body.styles))
 
 
 # --- Stijl + standaard (bedrijfsgebruiker mag dit ook) --------------------

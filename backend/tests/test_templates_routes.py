@@ -395,3 +395,39 @@ def test_preview_met_nieuwsbrief_van_ander_bedrijf_faalt(client, session) -> Non
         json={"html": MARKER_HTML, "newsletter_id": str(vreemd.id)},
     )
     assert resp.status_code == 404
+
+
+def test_kleurvoorstel_uit_de_huisstijlkleur(client, session) -> None:
+    t = _brand_tenant(session)  # primary_color #FF7200
+    body = client.get(f"/tenants/{t.id}/templates/style-suggestion").json()
+    assert body["primary_color"] == "#FF7200"
+    assert body["styles"]["button_bg"] == "#ff7200"
+    assert body["styles"]["button_text"] == "#111111"  # berekend op leesbaarheid
+
+
+def test_kleurvoorstel_met_een_eigen_hoofdkleur(client, session) -> None:
+    t = _brand_tenant(session)
+    body = client.get(
+        f"/tenants/{t.id}/templates/style-suggestion", params={"primary": "#1a3a6e"}
+    ).json()
+    assert body["styles"]["button_bg"] == "#1a3a6e"
+    assert body["styles"]["button_text"] == "#ffffff"
+
+
+def test_kleurvoorstel_zonder_huisstijlkleur_legt_uit_wat_er_moet_gebeuren(
+    client, session
+) -> None:
+    t = _tenant(session)  # geen primary_color in de config
+    body = client.get(f"/tenants/{t.id}/templates/style-suggestion").json()
+    assert body["styles"] == {}
+    assert "Bedrijven-tab" in body["note"]
+
+
+def test_leesbaarheidscontrole_meldt_maar_blokkeert_niet(client, session) -> None:
+    t = _tenant(session)
+    resp = client.post(
+        f"/tenants/{t.id}/templates/style-check",
+        json={"styles": {"text_color": "#ffffff", "page_bg": "#ffffff"}},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["warnings"]) == 1
