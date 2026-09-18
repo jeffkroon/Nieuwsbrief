@@ -107,17 +107,25 @@ def html_to_text(
     """
     s = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", raw_html)
 
+    if keep_images:
+        # BELANGRIJK: dit moet VOOR de link-verwerking, niet erna. Een productkaart
+        # nest de foto bijna altijd binnen dezelfde <a href="/products/..."> als de
+        # titel (bv. <a href="..."><img src="..."><span>Naam</span></a>). De
+        # link-verwerking hieronder strip alle tags uit de inhoud van een link; een
+        # <img> die daarna pas wordt omgezet, is dan al vernietigd en het LLM ziet
+        # nooit een AFBEELDING-marker voor dat product. Eerst de afbeelding als platte
+        # tekst neerzetten voorkomt dat: die tekst overleeft het strippen van tags.
+        def _img(match: re.Match) -> str:
+            return f" AFBEELDING({urljoin(base_url, html_lib.unescape(match.group(1)))}) "
+
+        s = re.sub(r'(?is)<img[^>]*\bsrc="([^"]+)"[^>]*>', _img, s)
+
     def _anchor(match: re.Match) -> str:
         href = match.group(1)
         inner = html_lib.unescape(re.sub(r"<[^>]+>", "", match.group(2))).strip()
         return f" {inner} ({urljoin(base_url, href)}) "
 
     s = re.sub(r'(?is)<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>', _anchor, s)
-    if keep_images:
-        def _img(match: re.Match) -> str:
-            return f" AFBEELDING({urljoin(base_url, html_lib.unescape(match.group(1)))}) "
-
-        s = re.sub(r'(?is)<img[^>]*\bsrc="([^"]+)"[^>]*>', _img, s)
     s = re.sub(r"(?s)<[^>]+>", " ", s)
     s = html_lib.unescape(s)
     s = re.sub(r"\s+", " ", s).strip()
