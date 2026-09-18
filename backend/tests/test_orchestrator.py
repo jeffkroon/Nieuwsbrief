@@ -197,3 +197,82 @@ def test_tool_results_get_cache_marker() -> None:
         if isinstance(b, dict) and "cache_control" in b
     )
     assert markers == 1
+
+
+# --- Voortgang en afbreken --------------------------------------------------
+def test_on_event_krijgt_elke_tool_stap() -> None:
+    """De chat moet kunnen tonen waar de assistent mee bezig is."""
+    from app.newsletter.orchestrator import run_agent_turn
+
+    gezien = []
+    client = FakeAnthropic(
+        [
+            FakeResponse([FakeToolUse("t1", "find_matches", {"url": "https://x/tickets/"})], "tool_use"),
+            FakeResponse([FakeText("klaar")], "end_turn"),
+        ]
+    )
+    run_agent_turn(
+        client,
+        system="s",
+        messages=[{"role": "user", "content": "hoi"}],
+        tools=[],
+        dispatch=lambda naam, invoer: {"count": 3},
+        on_event=gezien.append,
+    )
+    assert [e.name for e in gezien] == ["find_matches"]
+    assert gezien[0].result == {"count": 3}
+    assert gezien[0].error is None
+
+
+def test_falende_tool_komt_ook_als_event_binnen() -> None:
+    from app.newsletter.orchestrator import run_agent_turn
+
+    gezien = []
+
+    def _stuk(naam, invoer):
+        raise ValueError("pagina onbereikbaar")
+
+    client = FakeAnthropic(
+        [
+            FakeResponse([FakeToolUse("t1", "find_products", {})], "tool_use"),
+            FakeResponse([FakeText("klaar")], "end_turn"),
+        ]
+    )
+    run_agent_turn(
+        client, system="s", messages=[{"role": "user", "content": "hoi"}], tools=[],
+        dispatch=_stuk, on_event=gezien.append,
+    )
+    assert gezien[0].error == "pagina onbereikbaar"
+
+
+def test_kapotte_luisteraar_breekt_de_beurt_niet() -> None:
+    """Voortgang melden is bijzaak; het mag de nieuwsbrief nooit laten mislukken."""
+    from app.newsletter.orchestrator import run_agent_turn
+
+    def _kapot(event):
+        raise RuntimeError("luisteraar stuk")
+
+    client = FakeAnthropic(
+        [
+            FakeResponse([FakeToolUse("t1", "get_brand_config", {})], "tool_use"),
+            FakeResponse([FakeText("toch klaar")], "end_turn"),
+        ]
+    )
+    resultaat = run_agent_turn(
+        client, system="s", messages=[{"role": "user", "content": "hoi"}], tools=[],
+        dispatch=lambda n, i: {}, on_event=_kapot,
+    )
+    assert resultaat.final_text == "toch klaar"
+
+
+def test_afbreken_stopt_voor_de_volgende_dure_stap() -> None:
+    from app.newsletter.orchestrator import TurnCancelled, run_agent_turn
+
+    client = FakeAnthropic([FakeResponse([FakeText("nooit")], "end_turn")])
+    with pytest.raises(TurnCancelled):
+        run_agent_turn(
+            client, system="s", messages=[{"role": "user", "content": "hoi"}], tools=[],
+            dispatch=lambda n, i: {}, should_stop=lambda: True,
+        )
+    # Er is geen enkele (dure) call naar Claude gedaan.
+    assert client.messages.calls == []

@@ -259,3 +259,113 @@ def test_template_choice_is_remembered_per_conversation(client, session, fake_an
     # De tweede beurt (zonder template_id) gebruikt nog steeds de gekozen template.
     system_text = fake.messages.calls[1]["system"][0]["text"]
     assert '"Speciale Shell"' in system_text and "OPZET-SECTIES" in system_text
+
+
+# --- Gesprekken teruglezen en streamen -------------------------------------
+def _sse_events(tekst: str) -> list[dict]:
+    import json
+
+    return [
+        json.loads(regel[len("data: "):])
+        for regel in tekst.splitlines()
+        if regel.startswith("data: ")
+    ]
+
+
+def test_stream_geeft_stappen_en_een_slotbericht(client, session, fake_anthropic) -> None:
+    tenant = _tenant(session)
+    fake_anthropic(
+        [
+            FakeResponse([FakeToolUse("t1", "get_brand_config", {})], "tool_use"),
+            FakeResponse([FakeText("Ik gebruik de oranje huisstijl.")], "end_turn"),
+        ]
+    )
+    resp = client.post(
+        "/conversations/stream",
+        json={"tenant_id": str(tenant.id), "message": "Maak een nieuwsbrief"},
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+
+    events = _sse_events(resp.text)
+    soorten = [e["type"] for e in events]
+    assert soorten[0] == "start"  # gesprek-id komt meteen, ook als het daarna misgaat
+    assert "step" in soorten and soorten[-1] == "done"
+    assert any("Bedrijfsgegevens" in e.get("text", "") for e in events if e["type"] == "step")
+
+    slot = events[-1]
+    assert slot["reply"] == "Ik gebruik de oranje huisstijl."
+    assert uuid.UUID(slot["conversation_id"]) == uuid.UUID(events[0]["conversation_id"])
+
+
+def test_stream_zet_het_gesprek_voort(client, session, fake_anthropic) -> None:
+    tenant = _tenant(session)
+    fake_anthropic([FakeResponse([FakeText("eerste")], "end_turn")])
+    eerste = _sse_events(
+        client.post(
+            "/conversations/stream", json={"tenant_id": str(tenant.id), "message": "hoi"}
+        ).text
+    )[-1]
+
+    fake_anthropic([FakeResponse([FakeText("tweede")], "end_turn")])
+    tweede = _sse_events(
+        client.post(
+            "/conversations/stream",
+            json={
+                "tenant_id": str(tenant.id),
+                "message": "en nu verder",
+                "conversation_id": eerste["conversation_id"],
+            },
+        ).text
+    )[-1]
+    assert tweede["conversation_id"] == eerste["conversation_id"]
+
+    detail = client.get(f"/conversations/{eerste['conversation_id']}").json()
+    assert [m["content"] for m in detail["messages"]] == ["hoi", "eerste", "en nu verder", "tweede"]
+
+
+def test_stream_meldt_een_fout_als_event(client, session, fake_anthropic) -> None:
+    """Een kapotte AI-dienst mag geen kale 500 geven maar een leesbare melding."""
+    tenant = _tenant(session)
+
+    class _Stuk:
+        def create(self, **kwargs):
+            raise RuntimeError("iteratielimiet")
+
+    fake = fake_anthropic([])
+    fake.messages = _Stuk()
+    fake.beta = SimpleNamespace(messages=_Stuk())
+
+    events = _sse_events(
+        client.post(
+            "/conversations/stream", json={"tenant_id": str(tenant.id), "message": "hoi"}
+        ).text
+    )
+    assert events[-1]["type"] == "error"
+    assert "te veel stappen" in events[-1]["detail"]
+
+
+def test_gesprekkenlijst_toont_titel_en_nieuwste_eerst(client, session, fake_anthropic) -> None:
+    tenant = _tenant(session)
+    for tekst in ("eerste vraag", "tweede vraag"):
+        fake_anthropic([FakeResponse([FakeText("ok")], "end_turn")])
+        client.post("/conversations", json={"tenant_id": str(tenant.id), "message": tekst})
+
+    lijst = client.get(f"/conversations?tenant_id={tenant.id}").json()
+    assert [g["title"] for g in lijst] == ["tweede vraag", "eerste vraag"]
+
+
+def test_gesprekkenlijst_is_per_bedrijf_gescheiden(client, session, fake_anthropic) -> None:
+    een = _tenant(session)
+    ander = tenants_repo.create_tenant(
+        session, TenantCreate(slug="ander", name="Ander", config=CONFIG)
+    )
+    fake_anthropic([FakeResponse([FakeText("ok")], "end_turn")])
+    client.post("/conversations", json={"tenant_id": str(een.id), "message": "van bedrijf een"})
+
+    assert client.get(f"/conversations?tenant_id={ander.id}").json() == []
+    assert len(client.get(f"/conversations?tenant_id={een.id}").json()) == 1
+
+
+def test_onbekend_gesprek_geeft_404(client, session) -> None:
+    assert client.get(f"/conversations/{uuid.uuid4()}").status_code == 404
