@@ -403,10 +403,10 @@ def _require_image(ctx: ToolContext, url: str) -> None:
     """Garandeer dat de URL een bereikbare afbeelding is (200 + image/*)."""
     try:
         if ctx.http_client is not None:
-            resp = ctx.http_client.get(url)
+            resp = ctx.http_client.get(url, headers=extraction.SITE_HEADERS)
         else:
             with httpx.Client(timeout=20.0, follow_redirects=True) as client:
-                resp = client.get(url)
+                resp = client.get(url, headers=extraction.SITE_HEADERS)
     except httpx.HTTPError as exc:
         raise ValueError(f"banner-URL is onbereikbaar: {url} ({exc})") from exc
     content_type = resp.headers.get("content-type", "")

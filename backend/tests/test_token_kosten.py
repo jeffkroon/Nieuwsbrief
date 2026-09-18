@@ -50,9 +50,13 @@ class _FakeResp:
 @dataclass
 class _CountingHttp:
     calls: int = 0
+    laatste_headers: dict | None = None
 
-    def get(self, url):
+    # Zelfde signatuur als httpx.Client.get: we sturen sinds de bot-filter-fix
+    # eigen headers mee naar klantsites.
+    def get(self, url, headers=None, **kwargs):
         self.calls += 1
+        self.laatste_headers = dict(headers or {})
         return _FakeResp("<html><body>Wedstrijd € 99</body></html>")
 
 
