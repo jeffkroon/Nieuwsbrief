@@ -1110,7 +1110,7 @@ def test_find_page_images_zonder_bruikbaar_beeld(session, cipher) -> None:
     )
     result = execute_tool("find_page_images", {"url": "https://shop.test/leeg"}, ctx)
     assert result["images"] == []
-    assert "geen foto" in result["message"]
+    assert "geen enkele bruikbare foto" in result["message"]
 
 
 def test_find_page_images_requires_url_or_website(session, cipher) -> None:
@@ -1320,3 +1320,74 @@ def test_geheugen_verzint_geen_prijs_de_draft_valideert_alsnog_live(session, cip
     bereikbaar["waarde"] = False
     with pytest.raises(ValueError, match="404"):
         execute_tool("create_newsletter_draft", {**payload, "confirmed": True}, ctx)
+
+
+# --- bugfix: productfoto's (vierkant/staand) onzichtbaar in de tool-output --
+def test_preview_items_used_bevat_image_url(session, cipher) -> None:
+    """Zonder image_url in het resultaat kan de assistent nooit zien of een og:image
+    is gebruikt; hij moest dan gokken via find_page_images (dat alleen liggend beeld
+    vindt) en trok daaruit de verkeerde conclusie ("geen foto") bij vierkante
+    productfoto's die wel degelijk bestonden. Zie het Ohcascas-gesprek."""
+    tenant = _tenant(session)
+    html_met_og = (
+        '<html><head><meta property="og:image" '
+        'content="https://cdn.shop/vierkant.jpg?width=2048"></head><body>x</body></html>'
+    )
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["items"] = [{"title": "Ring", "url": "https://shop.test/ring"}]
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text=html_met_og)),
+        preview_holder=[],
+    )
+    result = execute_tool("preview_newsletter", payload, ctx)
+    assert result["items_used"][0]["image_url"] == "https://cdn.shop/vierkant.jpg?width=2048"
+
+
+def test_preview_matches_en_clubs_used_bevatten_ook_image_url(session, cipher) -> None:
+    tenant = _tenant(session)
+    payload = {**DRAFT_INPUT, "clubs": [{"name": "Ajax", "url": MATCH_URL, "image_url": "ajax.jpg"}]}
+    from app.repositories import images as images_repo
+    images_repo.create_image(
+        session, tenant_id=tenant.id, category="club", filename="ajax.jpg",
+        description=None, storage_path="p/ajax.jpg", url="https://cdn/ajax.jpg",
+    )
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, llm=FakeLLM({"price": None}),
+        http_client=_http(lambda r: httpx.Response(200, text="<html>x</html>")),
+        preview_holder=[],
+    )
+    result = execute_tool("preview_newsletter", payload, ctx)
+    assert result["matches_used"][0]["image_url"] is None  # geen foto meegegeven, geen og:image
+    assert result["clubs_used"][0]["image_url"] == "https://cdn/ajax.jpg"
+
+
+def test_find_page_images_meldt_bestaande_og_image_bij_vierkante_foto(session, cipher) -> None:
+    """0 liggende kandidaten mag nooit lezen als 'geen foto op deze pagina' als er wel
+    een (niet-liggende) og:image bestaat: dat IS de productfoto die automatisch gebruikt
+    wordt, alleen niet bannervormig."""
+    tenant = _tenant(session)
+    html = (
+        '<html><head><meta property="og:image" '
+        'content="https://cdn.shop/vierkant.jpg"></head>'
+        '<body><img src="https://cdn.shop/vierkant.jpg" width="2048" height="2048"></body></html>'
+    )
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text=html)),
+    )
+    result = execute_tool("find_page_images", {"url": "https://shop.test/product"}, ctx)
+    assert result["images"] == []
+    assert "wel een og:image" in result["message"]
+    assert "AUTOMATISCH" in result["message"]
+
+
+def test_find_page_images_meldt_echt_niets_zonder_og_image(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>leeg</html>")),
+    )
+    result = execute_tool("find_page_images", {"url": "https://shop.test/leeg"}, ctx)
+    assert "wel een og:image" not in result["message"]
+    assert "geen enkele bruikbare foto, ook geen og:image" in result["message"]

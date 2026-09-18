@@ -94,22 +94,26 @@ _PROMPT_TAIL = """2b. OPZET (alleen voor templates met een secties-marker): besp
    opzet toon je direct opnieuw met `preview_newsletter`.
 3. KOP & ONDERTITEL: stel een kop (`header_title`) en ondertitel (`header_subtitle`)
    voor in de tone of voice, en vraag of het zo goed is of aangepast moet worden.
-4. FOTO'S: roep `list_images` eenmaal ZONDER categorie aan om te zien wat er is. Is de
-   bibliotheek leeg of past er niets, gebruik dan `find_page_images` op de pagina waar
-   de nieuwsbrief over gaat (of de homepage): bijna elke site heeft zelf hero- en
-   productfoto's, en die tool geeft ze gemeten en zonder logo's terug. Stel een banner
-   voor en per blok een passende foto, gematcht op bestandsnaam/omschrijving. Geef de
-   foto ALTIJD door als de exacte BESTANDSNAAM uit list_images (bv. "bayern.jpg") in
-   `header_image_url` en `image_url`, NOOIT als verkorte of verzonnen URL. De backend
-   zoekt zelf de juiste link op. Laat de gebruiker bevestigen of kiezen. Is er geen
-   passende BANNERfoto in de bibliotheek, stel dan voor om met `find_banner` de eigen
-   banner van de website te pakken (geef de pagina-URL mee waar de nieuwsbrief over
-   gaat, bv. de collectiepagina); de `banner_url` uit dat resultaat mag je letterlijk
-   doorgeven als `header_image_url`. Geeft `find_banner` een lijst `candidates` terug
-   (banners van collecties op de site), toon die opties dan aan de gebruiker en laat
-   KIEZEN; gebruik daarna de gekozen `banner_url`. Is er ook geen site-banner, meld
-   dat eerlijk en vraag of ze er een uploaden of dat de fallback oké is. Verzin nooit
-   een foto-naam of URL.
+4. FOTO'S: twee LOSSE zaken, niet met elkaar verwarren.
+   a) BANNER (header, moet liggend zijn): roep `list_images` eenmaal ZONDER categorie
+      aan om te zien wat er is. Past er niets, gebruik dan `find_banner` op de pagina
+      waar de nieuwsbrief over gaat; die geeft `banner_url` en eventueel `candidates`
+      terug (laat de gebruiker KIEZEN). Alleen als dat niets oplevert nog `find_page_images`
+      proberen (liggende foto's elders op de site). Is er ook geen site-banner, meld
+      dat eerlijk en vraag of ze er een uploaden of dat de fallback oké is.
+   b) FOTO PER PRODUCT/WEDSTRIJD/CLUB/ITEM: hoef je NIET los te controleren. Die foto
+      wordt AUTOMATISCH gevonden (via de og:image van de eigen productpagina) zodra je
+      `preview_newsletter` aanroept. Gebruik `find_page_images`/`find_banner` hier NIET
+      voor: die zoeken alleen LIGGEND beeld (voor een banner), en productfoto's zijn
+      vaak vierkant of staand, dus die tools geven dan "0 foto's" terug terwijl de foto
+      wel degelijk bestaat en gebruikt wordt. Controleer na `preview_newsletter` gewoon
+      `image_url` in `matches_used`/`clubs_used`/`items_used` (null = geen foto
+      gevonden, dan valt dat blok terug op de neutrale afbeelding) en rapporteer
+      daarop, niet op basis van een aparte foto-zoekopdracht per product.
+   Geef een uit `list_images` gekozen foto ALTIJD door als de exacte BESTANDSNAAM
+   (bv. "bayern.jpg") in `header_image_url`/`image_url`, NOOIT als verkorte of
+   verzonnen URL; de backend zoekt zelf de juiste link op. Laat de gebruiker de
+   banner bevestigen of kiezen. Verzin nooit een foto-naam of URL.
 5. TEKSTEN: stel de intro (twee korte alinea's), de onderwerpregel en de preheader
    voor, en vraag akkoord of aanpassingen.
 

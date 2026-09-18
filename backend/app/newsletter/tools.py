@@ -174,11 +174,16 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "find_page_images",
-        "description": "Alle bruikbare foto's op een pagina van de klantensite, gemeten op "
-        "formaat en ontdaan van logo's, iconen en pixels. Gebruik dit als list_images leeg "
-        "is of niets passends heeft: bijna elke site heeft zelf hero- en productfoto's. "
-        "Toon de opties met naam en formaat en laat de gebruiker kiezen; verzin nooit "
-        "zelf een beeld-URL.",
+        "description": "LIGGENDE foto's (minimaal 600px breed) op een pagina van de klantensite, "
+        "gemeten op formaat en ontdaan van logo's, iconen en pixels; bedoeld voor de BANNER/header, "
+        "niet voor productfoto's. Gebruik dit als list_images geen bannerfoto heeft: bijna elke "
+        "site heeft zelf een liggende hero-foto. GEBRUIK DIT NOOIT om te checken of een los "
+        "product/wedstrijd/club een foto heeft: die foto's zijn vaak vierkant of staand (tellen "
+        "hier dus niet mee, ook al bestaan ze) en worden AUTOMATISCH gevonden door "
+        "preview_newsletter/create_newsletter_draft (via de og:image van de eigen pagina). "
+        "Kijk na preview_newsletter naar image_url in matches_used/clubs_used/items_used om te "
+        "zien wat er echt is gebruikt; 0 resultaten hier zegt daar niets over. Toon de opties met "
+        "naam en formaat en laat de gebruiker kiezen; verzin nooit zelf een beeld-URL.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -528,17 +533,32 @@ def _tool_find_page_images(ctx: ToolContext, tool_input: dict) -> dict:
         if status != 200:
             raise ValueError(extraction.fetch_probleem(url, status))
         banners = _page_banner_candidates(ctx, url, html, limit=8)
+        if banners:
+            bericht = (
+                "Echte foto's van deze pagina (logo's, iconen en pixels zijn er al uit; "
+                "formaat is gemeten). Toon ze met naam en formaat en laat de gebruiker "
+                "KIEZEN; een gekozen banner_url mag letterlijk als header_image_url."
+            )
+        else:
+            # Geen LIGGEND beeld gevonden; dat is normaal bij een productpagina (die foto's
+            # zijn vaak vierkant/staand). Zeg dat er eventueel toch een og:image bestaat, zodat
+            # dit niet wordt gelezen als "geen foto beschikbaar" voor een product/item.
+            og_image = extraction.extract_og_image(html)
+            if og_image:
+                bericht = (
+                    f"Op {url} staat geen LIGGENDE foto van minimaal 600px (nodig voor een "
+                    "banner). Er is wel een og:image op deze pagina; als dit een product- of "
+                    "itempagina is, wordt die foto AUTOMATISCH gebruikt door "
+                    "preview_newsletter/create_newsletter_draft. Roep dit hier niet opnieuw voor "
+                    "op; controleer na preview_newsletter gewoon image_url in items_used."
+                )
+            else:
+                bericht = f"Op {url} staat geen enkele bruikbare foto, ook geen og:image."
         return {
             "source_url": url,
             "count": len(banners),
             "images": banners,
-            "message": (
-                "Echte foto's van deze pagina (logo's, iconen en pixels zijn er al uit; "
-                "formaat is gemeten). Toon ze met naam en formaat en laat de gebruiker "
-                "KIEZEN; een gekozen banner_url mag letterlijk als header_image_url."
-                if banners else
-                f"Op {url} staat geen foto die liggend en minimaal 600px breed is."
-            ),
+            "message": bericht,
         }
 
     return with_memory(ctx.session, ctx.conversation_id, "find_page_images", {"url": url}, _haal_op)
@@ -1066,11 +1086,23 @@ def _tool_preview_newsletter(ctx: ToolContext, tool_input: dict) -> dict:
         **result_extra,
         "status": "preview",
         "subject": content.subject,
-        "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
-        "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
-        "items_used": [{"title": i.title, "url": i.url, "price": i.price} for i in items],
-        "message": "Voorbeeld gerenderd en getoond in het paneel naast de chat. Vat kort samen "
-        "en vraag de gebruiker om toestemming voordat je create_newsletter_draft (confirmed=true) aanroept.",
+        "matches_used": [
+            {"home": m.home, "away": m.away, "url": m.url, "price": m.price, "image_url": m.image_url}
+            for m in matches
+        ],
+        "clubs_used": [
+            {"name": c.name, "url": c.url, "price": c.price, "image_url": c.image_url} for c in clubs
+        ],
+        "items_used": [
+            {"title": i.title, "url": i.url, "price": i.price, "image_url": i.image_url} for i in items
+        ],
+        "message": "Voorbeeld gerenderd en getoond in het paneel naast de chat. Kijk in "
+        "*_used naar image_url om te zien welke foto per blok echt is gebruikt (null = geen "
+        "foto gevonden, dan valt het blok terug op de neutrale afbeelding); dat is de "
+        "waarheid, niet wat find_page_images/find_banner apart teruggeeft (die zoeken alleen "
+        "LIGGEND beeld voor een banner, productfoto's zijn vaak vierkant of staand en tellen "
+        "daar dus niet in mee). Vat kort samen en vraag de gebruiker om toestemming voordat "
+        "je create_newsletter_draft (confirmed=true) aanroept.",
     }
 
 
@@ -1199,9 +1231,16 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         "campaign_id": draft.campaign_id,
         "brevo_campaign_id": None if use_text_ref else draft.campaign_id,
         "status": "ready",
-        "matches_used": [{"home": m.home, "away": m.away, "url": m.url, "price": m.price} for m in matches],
-        "clubs_used": [{"name": c.name, "url": c.url, "price": c.price} for c in clubs],
-        "items_used": [{"title": i.title, "url": i.url, "price": i.price} for i in items],
+        "matches_used": [
+            {"home": m.home, "away": m.away, "url": m.url, "price": m.price, "image_url": m.image_url}
+            for m in matches
+        ],
+        "clubs_used": [
+            {"name": c.name, "url": c.url, "price": c.price, "image_url": c.image_url} for c in clubs
+        ],
+        "items_used": [
+            {"title": i.title, "url": i.url, "price": i.price, "image_url": i.image_url} for i in items
+        ],
         "esp_notes": [*gelokaliseerd.notes, *inline_notes],
         "aandachtspunten": advisory_messages(bevindingen),
         "message": f"Concept aangemaakt in {esp_label}. Niets verstuurd; controleer en verstuur handmatig."
