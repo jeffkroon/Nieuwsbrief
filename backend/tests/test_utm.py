@@ -54,3 +54,16 @@ def test_www_en_kaal_domein_gelden_als_dezelfde_site() -> None:
 def test_zonder_parameters_verandert_er_niets() -> None:
     html = f'<a href="{SITE}/x">x</a>'
     assert add_utm(html, {}, website_url=SITE) == html
+
+
+def test_activecampaign_tag_in_de_url_wordt_met_rust_gelaten() -> None:
+    """De oude check keek alleen naar het eerste teken van de host en deed dus
+    niets; een %TAG% in het pad moet wel worden herkend."""
+    html = f'<a href="{SITE}/volg/%UNSUBSCRIBELINK%">weg</a>'
+    assert add_utm(html, PARAMS, website_url=SITE) == html
+
+
+def test_gewone_procent_codering_krijgt_gewoon_utm() -> None:
+    """%20 is geen platform-tag; zo'n link hoort wel gemeten te worden."""
+    html = f'<a href="{SITE}/reis%20naar%20rome">x</a>'
+    assert "utm_source=nieuwsbrief" in add_utm(html, PARAMS, website_url=SITE)

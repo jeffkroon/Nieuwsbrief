@@ -16,6 +16,11 @@ from __future__ import annotations
 import re
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+# Platform-tags in een URL, bv. %UNSUBSCRIBELINK% van ActiveCampaign. Niet te
+# verwarren met gewone procent-codering (%20): die heeft geen sluitend procent
+# na een rij hoofdletters.
+_PLATFORM_TAG = re.compile(r"%[A-Z][A-Z_]{2,}%")
+
 _HREF = re.compile(r"""(?is)(\bhref\s*=\s*)(["'])(.*?)\2""")
 _TOEGESTANE_SLEUTELS = ("source", "medium", "campaign", "content", "term")
 
@@ -62,7 +67,7 @@ def _met_utm(url: str, params: dict[str, str], eigen_host: str) -> str | None:
     schoon = (url or "").strip()
     if not schoon.lower().startswith(("http://", "https://")):
         return None  # mailto, tel, anker, of een tag van het verzendplatform
-    if "{{" in schoon or "{%" in schoon or "%" in schoon.split("//", 1)[-1][:1]:
+    if "{{" in schoon or "{%" in schoon or _PLATFORM_TAG.search(schoon):
         return None  # bevat een platform-tag; niet aankomen
     deel = urlsplit(schoon)
     if _kale_host(deel.netloc) != eigen_host:
