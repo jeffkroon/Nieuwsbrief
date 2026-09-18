@@ -279,6 +279,34 @@ class TemplateVersionSummary(_ORMModel):
     created_at: datetime
 
 
+class ConversationSummary(BaseModel):
+    """Eén regel in de gesprekkenlijst; `title` is het eerste bericht."""
+
+    id: uuid.UUID
+    title: str
+    channel: str
+    status: str
+    template_id: uuid.UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationMessage(_ORMModel):
+    role: str
+    content: str
+    created_at: datetime
+
+
+class ConversationDetail(BaseModel):
+    """Een hervat gesprek: de berichten plus het laatst getoonde voorbeeld."""
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    template_id: uuid.UUID | None = None
+    messages: list[ConversationMessage] = Field(default_factory=list)
+    preview_html: str | None = None
+
+
 # --- Conversation turns (chat) --------------------------------------------
 # Max berichtlengte: ruim genoeg om een nieuwsbrief te beschrijven, maar voorkomt dat
 # iemand een enorme lap tekst plakt die elke tool-stap opnieuw (duur) wordt meegestuurd.
@@ -290,6 +318,8 @@ class ConversationStart(BaseModel):
     channel: Channel = "web"
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     template_id: uuid.UUID | None = None  # gekozen layout; None = standaard van het bedrijf
+    # Gevuld = doorgaan in een bestaand gesprek (alleen de streamende route).
+    conversation_id: uuid.UUID | None = None
 
 
 class MessageSend(BaseModel):

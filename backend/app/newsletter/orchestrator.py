@@ -38,6 +38,28 @@ MAX_ITERATIONS = 12
 ToolDispatch = Callable[[str, dict], dict]
 
 
+@dataclass(frozen=True)
+class ToolEvent:
+    """Wat de assistent zojuist deed; ruw, zonder tekst voor de gebruiker.
+
+    De orchestrator blijft zo taalvrij: het omzetten naar een leesbare regel
+    gebeurt in `app/newsletter/progress.py`, dicht bij de tools zelf.
+    """
+
+    name: str
+    input: dict
+    result: dict | None = None
+    error: str | None = None
+
+
+# Voortgang melden tijdens een beurt (voor de streamende chat); optioneel.
+EventSink = Callable[[ToolEvent], None]
+
+
+class TurnCancelled(RuntimeError):
+    """De gebruiker (of een verbroken verbinding) heeft de beurt afgebroken."""
+
+
 class AnthropicLike(Protocol):
     """Minimale interface die we van de Anthropic-client gebruiken (injecteerbaar)."""
 
@@ -93,8 +115,16 @@ def run_agent_turn(
     dispatch: ToolDispatch,
     model: str = DEFAULT_MODEL,
     max_iterations: int = MAX_ITERATIONS,
+    on_event: EventSink | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> ConversationResult:
-    """Voer één agent-beurt uit tot Claude stopt of een limiet bereikt is."""
+    """Voer één agent-beurt uit tot Claude stopt of een limiet bereikt is.
+
+    `on_event` krijgt elke tool-stap door, zodat de chat kan laten zien waar de
+    assistent mee bezig is. `should_stop` wordt tussen de stappen gecontroleerd:
+    geeft die True, dan stopt de beurt met TurnCancelled in plaats van nog een
+    (dure) ronde te doen.
+    """
     convo: list[dict] = list(messages)
     # Cache de system-prompt (rendert na de tools, dus dit cachet tools + system samen).
     # Dat vaste prefix wordt elke loop-stap en elke beurt opnieuw verstuurd; gecachet
@@ -102,6 +132,8 @@ def run_agent_turn(
     cached_system = [{"type": "text", "text": system, "cache_control": CACHE_CONTROL}]
 
     for iteration in range(1, max_iterations + 1):
+        if should_stop is not None and should_stop():
+            raise TurnCancelled("beurt afgebroken voor de volgende stap")
         response = client.beta.messages.create(
             model=model,
             max_tokens=MAX_OUTPUT_TOKENS,
@@ -119,7 +151,9 @@ def run_agent_turn(
         convo.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason == "tool_use":
-            convo.append({"role": "user", "content": _run_tools(response.content, dispatch)})
+            convo.append(
+                {"role": "user", "content": _run_tools(response.content, dispatch, on_event)}
+            )
             continue
         if response.stop_reason == "pause_turn":
             continue  # server-side tool pauze: opnieuw sturen om door te gaan
@@ -135,19 +169,24 @@ def run_agent_turn(
     raise RuntimeError(f"agent-beurt bereikte de iteratielimiet ({max_iterations})")
 
 
-def _run_tools(content: list, dispatch: ToolDispatch) -> list[dict]:
+def _run_tools(
+    content: list, dispatch: ToolDispatch, on_event: EventSink | None = None
+) -> list[dict]:
     """Voer alle tool_use-blokken uit en geef de tool_result-blokken terug."""
     results: list[dict] = []
     for block in content:
         if getattr(block, "type", None) != "tool_use":
             continue
+        tool_input = dict(block.input)
         try:
-            output = dispatch(block.name, dict(block.input))
+            output = dispatch(block.name, tool_input)
             result_content = json.dumps(output, ensure_ascii=False)
             is_error = False
+            _emit(on_event, ToolEvent(name=block.name, input=tool_input, result=output))
         except Exception as exc:  # tool-fout terug naar Claude, niet de loop laten crashen
             result_content = f"Fout bij tool '{block.name}': {exc}"
             is_error = True
+            _emit(on_event, ToolEvent(name=block.name, input=tool_input, error=str(exc)))
         results.append(
             {
                 "type": "tool_result",
@@ -157,3 +196,13 @@ def _run_tools(content: list, dispatch: ToolDispatch) -> list[dict]:
             }
         )
     return results
+
+
+def _emit(on_event: EventSink | None, event: ToolEvent) -> None:
+    """Voortgang melden mag de beurt nooit laten mislukken."""
+    if on_event is None:
+        return
+    try:
+        on_event(event)
+    except Exception:  # noqa: BLE001 - een kapotte luisteraar is geen reden te stoppen
+        pass

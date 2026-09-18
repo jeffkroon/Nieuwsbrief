@@ -126,6 +126,15 @@
   .versions { border-top: 1px solid var(--border); padding: 8px 0 10px; font-size: 13px; }
   .versions .v { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .versions .v small { color: var(--muted); }
+  #chatBar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  #chatBar select { font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-family: inherit; max-width: 230px; }
+  .chip { font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 20px; border: 1px solid var(--border); background: #fff; color: var(--text); cursor: pointer; font-family: inherit; }
+  .chip:hover { border-color: var(--accent); color: var(--accent-hover); background: var(--accent-soft); }
+  #stop { background: #fff; color: var(--danger); border: 1px solid var(--border); }
+  .steps { align-self: flex-start; background: #fbfcfd; border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: 12.5px; color: var(--muted); max-width: 85%; }
+  .steps div { padding: 1px 0; }
+  .steps div::before { content: "\2713 "; color: #2e9e5b; }
+  .steps div.busy::before { content: "\21BB "; color: var(--accent); }
   .preview-frame { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; background: #fff; }
   .preview-frame.mini { height: 360px; }
 
@@ -178,11 +187,17 @@
     <div id="chatView" class="view active">
       <div id="chatSplit">
         <div id="chatCol">
+          <div id="chatBar">
+            <button class="chip" id="newChat" title="Begin een leeg gesprek">+ Nieuw gesprek</button>
+            <select id="chatHistory" title="Eerder gesprek hervatten"><option value="">Eerdere gesprekken...</option></select>
+            <span id="quickStarts"></span>
+          </div>
           <div id="chat"></div>
           <footer id="chatFooter">
             <div id="composer">
               <textarea id="input" rows="2" placeholder="Beschrijf de nieuwsbrief die je wilt maken..."></textarea>
               <button id="send">Stuur</button>
+              <button id="stop" style="display:none;">Stop</button>
             </div>
           </footer>
         </div>
@@ -540,19 +555,46 @@ function showChatPreview(html) {
   updatePreviewLayout();
 }
 
+let tenantsCache = [];
+
 async function loadTenants() {
   try {
     const tenants = await (await fetch("/tenants")).json();
+    tenantsCache = tenants;
     if (!tenants.length) { addMsg("system", "Geen klanten gevonden."); return; }
     for (const t of tenants) {
       const opt = document.createElement("option");
       opt.value = t.id; opt.textContent = t.name;
       tenantSel.appendChild(opt);
     }
-    addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
+    // Het laatste gesprek van deze klant hervatten; anders schoon beginnen.
+    let bewaard = null;
+    try { bewaard = localStorage.getItem(chatKey()); } catch (e) { /* prive-modus */ }
+    if (bewaard) {
+      hervatGesprek(bewaard).catch(() => addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?"));
+    } else {
+      addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
+    }
+    laadGesprekken();
+    toonSnelstarts(huidigeContentTypes());
     loadChatTemplates();
   } catch (e) { addMsg("system", "Kon klanten niet laden: " + e.message); }
 }
+
+function huidigeContentTypes() {
+  const t = tenantsCache.find(x => x.id === tenantSel.value) || tenantsCache[0];
+  return (t && t.config && t.config.content_types) || [];
+}
+
+// Het gesprek van deze klant onthouden, zodat F5 het niet wist.
+const chatKey = () => "gesprek:" + (tenantSel.value || "");
+function bewaarGesprek(id) {
+  conversationId = id;
+  try { id ? localStorage.setItem(chatKey(), id) : localStorage.removeItem(chatKey()); } catch (e) { /* prive-modus */ }
+}
+
+// Lopende beurt kunnen afbreken.
+let lopendeBeurt = null;
 
 async function sendMessage() {
   const text = input.value.trim();
@@ -560,36 +602,166 @@ async function sendMessage() {
   input.value = "";
   addMsg("user", text);
   send.disabled = true; input.disabled = true;
-  const typing = addMsg("typing", "Aan het werk... (dit kan even duren)");
+  document.getElementById("stop").style.display = "";
+
+  // Stappenpaneel: laat zien waar de assistent mee bezig is.
+  const stappen = document.createElement("div");
+  stappen.className = "msg steps";
+  const bezig = document.createElement("div");
+  bezig.className = "busy";
+  bezig.textContent = "Aan het werk...";
+  stappen.appendChild(bezig);
+  chat.appendChild(stappen);
+  chat.scrollTop = chat.scrollHeight;
+
+  lopendeBeurt = new AbortController();
   try {
-    let res;
-    const templateId = chatTemplate.value || null;
-    if (!conversationId) {
-      res = await fetch("/conversations", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenant_id: tenantSel.value, message: text, template_id: templateId }) });
-    } else {
-      res = await fetch(`/conversations/${conversationId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, template_id: templateId }) });
-    }
-    typing.remove();
-    if (!res.ok) {
+    const res = await fetch("/conversations/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: lopendeBeurt.signal,
+      body: JSON.stringify({
+        tenant_id: tenantSel.value,
+        message: text,
+        template_id: chatTemplate.value || null,
+        conversation_id: conversationId,
+      }),
+    });
+    if (!res.ok || !res.body) {
       const err = await res.json().catch(() => ({}));
+      stappen.remove();
       addMsg("system", "Fout (" + res.status + "): " + (err.detail || "onbekend"));
-    } else {
-      const data = await res.json();
-      conversationId = data.conversation_id;
-      addMsg("assistant", data.reply);
-      if (data.preview_html) showChatPreview(data.preview_html);
+      return;
     }
-  } catch (e) { typing.remove(); addMsg("system", "Netwerkfout: " + e.message); }
-  finally { send.disabled = false; input.disabled = false; input.focus(); }
+    await leesStroom(res.body, stappen, bezig);
+  } catch (e) {
+    stappen.remove();
+    if (e.name === "AbortError") addMsg("system", "Gestopt. Je vorige antwoorden blijven staan.");
+    else addMsg("system", "Netwerkfout: " + e.message);
+  } finally {
+    lopendeBeurt = null;
+    document.getElementById("stop").style.display = "none";
+    send.disabled = false; input.disabled = false; input.focus();
+    laadGesprekken();
+  }
+}
+
+// Server-sent events lezen: elke "data: {...}"-regel is een gebeurtenis.
+async function leesStroom(body, stappen, bezig) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const delen = buffer.split("\n\n");
+    buffer = delen.pop();
+    for (const deel of delen) {
+      const regel = deel.split("\n").find(r => r.startsWith("data: "));
+      if (!regel) continue;
+      let e;
+      try { e = JSON.parse(regel.slice(6)); } catch (err) { continue; }
+      if (e.type === "start") {
+        bewaarGesprek(e.conversation_id);
+      } else if (e.type === "step") {
+        const stap = document.createElement("div");
+        stap.textContent = e.text;
+        stappen.insertBefore(stap, bezig);
+        chat.scrollTop = chat.scrollHeight;
+      } else if (e.type === "done") {
+        bezig.remove();
+        if (!stappen.childElementCount) stappen.remove();
+        addMsg("assistant", e.reply);
+        if (e.preview_html) showChatPreview(e.preview_html);
+      } else if (e.type === "error") {
+        bezig.remove();
+        addMsg("system", e.detail);
+      } else if (e.type === "cancelled") {
+        bezig.remove();
+        addMsg("system", "Gestopt.");
+      }
+    }
+  }
+}
+
+document.getElementById("stop").onclick = () => {
+  if (lopendeBeurt) lopendeBeurt.abort();
+};
+
+// ---- gesprekken: lijst, hervatten, nieuw ----
+const chatHistory = document.getElementById("chatHistory");
+
+async function laadGesprekken() {
+  if (!tenantSel.value) return;
+  try {
+    const res = await fetch(`/conversations?tenant_id=${tenantSel.value}`);
+    if (!res.ok) return;
+    const lijst = await res.json();
+    chatHistory.innerHTML = `<option value="">Eerdere gesprekken (${lijst.length})...</option>`;
+    for (const g of lijst) {
+      const o = document.createElement("option");
+      o.value = g.id;
+      const datum = new Date(g.updated_at).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+      o.textContent = `${datum} - ${g.title}`;
+      chatHistory.appendChild(o);
+    }
+    chatHistory.value = "";
+  } catch (e) { /* lijst is bijzaak; de chat moet gewoon werken */ }
+}
+
+async function hervatGesprek(id) {
+  const res = await fetch(`/conversations/${id}`);
+  if (!res.ok) { addMsg("system", "Kon dit gesprek niet openen."); return; }
+  const g = await res.json();
+  chat.innerHTML = "";
+  for (const m of g.messages) addMsg(m.role === "user" ? "user" : "assistant", m.content);
+  bewaarGesprek(g.id);
+  if (g.template_id) chatTemplate.value = g.template_id;
+  if (g.preview_html) showChatPreview(g.preview_html);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+chatHistory.onchange = () => { if (chatHistory.value) hervatGesprek(chatHistory.value); };
+
+document.getElementById("newChat").onclick = () => {
+  bewaarGesprek(null);
+  chat.innerHTML = "";
+  addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
+  chatHistory.value = "";
+};
+
+// Snelstarts uit de nieuwsbrief-soorten van het bedrijf: scheelt typen en
+// stuurt de assistent meteen naar de juiste bron.
+function toonSnelstarts(contentTypes) {
+  const balk = document.getElementById("quickStarts");
+  balk.innerHTML = "";
+  for (const soort of (contentTypes || []).slice(0, 3)) {
+    if (!soort || !soort.name) continue;
+    const knop = document.createElement("button");
+    knop.className = "chip";
+    knop.textContent = soort.name;
+    knop.onclick = () => {
+      input.value = `Maak een nieuwsbrief over ${String(soort.name).toLowerCase()}.`;
+      input.focus();
+    };
+    balk.appendChild(knop);
+  }
 }
 send.addEventListener("click", sendMessage);
 input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
 tenantSel.addEventListener("change", () => {
+  chat.innerHTML = "";
+  let bewaard = null;
+  try { bewaard = localStorage.getItem(chatKey()); } catch (e) { /* prive-modus */ }
   conversationId = null;
-  addMsg("system", "Nieuwe klant gekozen, nieuw gesprek gestart.");
-  addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
+  if (bewaard) {
+    hervatGesprek(bewaard).catch(() => addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?"));
+  } else {
+    addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
+  }
+  laadGesprekken();
+  toonSnelstarts(huidigeContentTypes());
   loadCategories();
   loadChatTemplates();
   if (views.templates.classList.contains("active")) { loadTemplates(); loadTone(); }
