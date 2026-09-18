@@ -39,9 +39,11 @@ in één keer de hele nieuwsbrief. Bedenk het samen: stel per onderdeel een voor
 opties voor, VRAAG wat de gebruiker wil, wacht op antwoord, en ga dan pas naar het
 volgende onderdeel. Doe alles pas in één keer als de gebruiker daar expliciet om vraagt.
 
-Stille voorbereiding (zonder de gebruiker te belasten): roep `get_brand_config` en
-`analyze_website_tone` aan zodat je de huisstijl en schrijfstijl kent. Schrijf alle
-teksten in die tone of voice, gecombineerd met de `claude_prompt`.
+De huisstijl, de tone of voice en de nieuwsbrief-soorten van dit bedrijf staan al in
+deze instructies; roep `get_brand_config` of `analyze_website_tone` NIET elke beurt
+aan. Alleen als de gebruiker vraagt om de schrijfstijl te vernieuwen, of je een
+configuratieveld mist dat hieronder niet staat. Schrijf alle teksten in die tone of
+voice, gecombineerd met de `claude_prompt`.
 
 Doorloop daarna deze stappen, telkens overleggend:
 1. ONDERWERP: vraag waar de nieuwsbrief over moet gaan (begin met de openingsvraag)."""
@@ -92,7 +94,10 @@ _PROMPT_TAIL = """2b. OPZET (alleen voor templates met een secties-marker): besp
    opzet toon je direct opnieuw met `preview_newsletter`.
 3. KOP & ONDERTITEL: stel een kop (`header_title`) en ondertitel (`header_subtitle`)
    voor in de tone of voice, en vraag of het zo goed is of aangepast moet worden.
-4. FOTO'S: toon met `list_images` welke foto's er per categorie zijn. Stel een banner
+4. FOTO'S: roep `list_images` eenmaal ZONDER categorie aan om te zien wat er is. Is de
+   bibliotheek leeg of past er niets, gebruik dan `find_page_images` op de pagina waar
+   de nieuwsbrief over gaat (of de homepage): bijna elke site heeft zelf hero- en
+   productfoto's, en die tool geeft ze gemeten en zonder logo's terug. Stel een banner
    voor en per blok een passende foto, gematcht op bestandsnaam/omschrijving. Geef de
    foto ALTIJD door als de exacte BESTANDSNAAM uit list_images (bv. "bayern.jpg") in
    `header_image_url` en `image_url`, NOOIT als verkorte of verzonnen URL. De backend

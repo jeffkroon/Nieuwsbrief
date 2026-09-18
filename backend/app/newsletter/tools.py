@@ -54,6 +54,7 @@ from app.repositories import templates as templates_repo
 from app.newsletter.css_inlining import inline_css
 from app.newsletter.esp_tags import localize_esp_tags
 from app.newsletter.mail_checks import advisory_messages, blocking_messages, check_newsletter
+from app.newsletter.page_images import banner_candidates, best_product_image
 from app.newsletter.utm import add_utm, utm_params
 from app.services.activecampaign import ActiveCampaignClient, ActiveCampaignError
 from app.services.brevo import BrevoClient, BrevoError
@@ -118,14 +119,14 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "list_images",
-        "description": "Lijst de geüploade foto's van deze tenant per categorie (bv. 'banner', "
-        "'club', 'wedstrijd') met bestandsnaam, omschrijving en url. Gebruik dit om een bannerfoto "
+        "description": "Lijst de geüploade foto's van deze tenant, met bestandsnaam, omschrijving, "
+        "categorie en url. Roep eerst ZONDER categorie aan om alles te zien. Gebruik dit om een bannerfoto "
         "te kiezen en per wedstrijd de juiste clubfoto te matchen op bestandsnaam/omschrijving "
         "(bv. een Arsenal-wedstrijd -> een arsenal-foto).",
         "input_schema": {
             "type": "object",
-            "properties": {"category": {"type": "string", "description": "bv. banner, club, wedstrijd"}},
-            "required": ["category"],
+            "properties": {"category": {"type": "string", "description": "Optioneel; weglaten geeft alle foto's met hun categorie, zodat je niet hoeft te gokken welke categorieen er zijn."}},
+            "required": [],
         },
     },
     {
@@ -167,6 +168,20 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "url": {"type": "string", "description": "Collectie-/overzichtspagina om te scannen, bv. de source_url van de gekozen nieuwsbrief-soort"},
+            },
+        },
+    },
+    {
+        "name": "find_page_images",
+        "description": "Alle bruikbare foto's op een pagina van de klantensite, gemeten op "
+        "formaat en ontdaan van logo's, iconen en pixels. Gebruik dit als list_images leeg "
+        "is of niets passends heeft: bijna elke site heeft zelf hero- en productfoto's. "
+        "Toon de opties met naam en formaat en laat de gebruiker kiezen; verzin nooit "
+        "zelf een beeld-URL.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Pagina-URL om foto's van te halen; zonder URL de homepage van het bedrijf"},
             },
         },
     },
@@ -345,10 +360,13 @@ def _tool_get_brand_config(ctx: ToolContext, _: dict) -> dict:
 
 
 def _tool_list_images(ctx: ToolContext, tool_input: dict) -> dict:
-    category = tool_input["category"].strip().lower()
+    # Zonder categorie alles: dan hoeft de assistent niet te gokken welke
+    # categorienamen dit bedrijf toevallig gebruikt.
+    category = (tool_input.get("category") or "").strip().lower() or None
     images = images_repo.list_images(ctx.session, ctx.tenant_id, category)
     return {
-        "category": category,
+        "category": category or "alle",
+        "categories": sorted({im.category for im in images}),
         "images": [
             {"filename": im.filename, "description": im.description, "url": im.url} for im in images
         ],
@@ -470,6 +488,48 @@ def _collection_banner_candidates(
     return candidates
 
 
+def _page_banner_candidates(
+    ctx: ToolContext, url: str, html: str, *, exclude: tuple = (), limit: int = 6
+) -> list[dict]:
+    """Foto's van de pagina zelf die als banner kunnen, gemeten en gefilterd (code)."""
+    return [
+        {
+            "name": beeld.label(),
+            "page_url": url,
+            "banner_url": beeld.url,
+            "width": beeld.width,
+            "height": beeld.height,
+            "source": beeld.source,
+        }
+        for beeld in banner_candidates(html, url, client=ctx.http_client, limit=limit + len(exclude))
+        if beeld.url not in exclude
+    ][:limit]
+
+
+def _tool_find_page_images(ctx: ToolContext, tool_input: dict) -> dict:
+    """Welke foto's staan er op deze pagina van de klantensite? Gemeten, zonder ruis."""
+    brand = _load_tenant(ctx).config
+    url = tool_input.get("url") or brand.get("website_url")
+    if not url:
+        raise ValueError("geen URL om foto's te zoeken; geef een pagina-URL mee")
+    status, html = extraction.fetch_page(url, ctx.http_client)
+    if status != 200:
+        raise ValueError(extraction.fetch_probleem(url, status))
+    banners = _page_banner_candidates(ctx, url, html, limit=8)
+    return {
+        "source_url": url,
+        "count": len(banners),
+        "images": banners,
+        "message": (
+            "Echte foto's van deze pagina (logo's, iconen en pixels zijn er al uit; "
+            "formaat is gemeten). Toon ze met naam en formaat en laat de gebruiker "
+            "KIEZEN; een gekozen banner_url mag letterlijk als header_image_url."
+            if banners else
+            f"Op {url} staat geen foto die liggend en minimaal 600px breed is."
+        ),
+    }
+
+
 def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
     """Het eigen bannerbeeld (og:image) van een pagina van de klantensite ophalen.
 
@@ -490,20 +550,25 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
     og_image = extraction.extract_og_image(html)
     if not og_image:
         candidates = _collection_banner_candidates(ctx, url, html, crop)
+        # Geen og:image en geen collectiebanners: dan de foto's op de pagina zelf,
+        # gemeten op formaat zodat alleen liggend beeld van bannerbreedte overblijft.
+        candidates += _page_banner_candidates(ctx, url, html)
         if candidates:
             return {
                 "source_url": url,
                 "banner_url": None,
                 "candidates": candidates,
-                "message": "Deze pagina heeft geen eigen bannerbeeld, maar deze "
-                "collecties op de site wel. Toon de opties en laat de gebruiker "
-                "KIEZEN; gebruik daarna de gekozen banner_url letterlijk.",
+                "message": "Deze pagina heeft geen eigen og:image-banner, maar er staat "
+                "wel bruikbaar beeld op de site. Toon de opties met naam en formaat en "
+                "laat de gebruiker KIEZEN; gebruik daarna de gekozen banner_url letterlijk.",
             }
         return {
             "source_url": url,
             "banner_url": None,
-            "message": "Deze pagina heeft geen eigen bannerbeeld. Kies een foto uit "
-            "list_images('banner') of vraag de gebruiker om er een te uploaden.",
+            "message": f"Op {url} staat geen enkele foto die als banner kan dienen "
+            "(liggend, minimaal 600px breed). Probeer find_page_images op een andere "
+            "pagina van de site, kies een foto uit list_images of vraag de gebruiker "
+            "om er een te uploaden.",
         }
     banner = extraction.normalize_banner_url(og_image, crop=crop)
     try:
@@ -515,11 +580,14 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
         # dat moet dan wel zelf een bereikbare afbeelding zijn.
         _require_image(ctx, og_image)
         banner = og_image
+    alternatieven = _page_banner_candidates(ctx, url, html, exclude=(og_image, banner), limit=4)
     return {
         "source_url": url,
         "banner_url": banner,
+        "alternatives": alternatieven,
         "message": "Echte banner van de site (bereikbaarheid gecheckt). Geef deze "
-        "volledige URL door als header_image_url nadat de gebruiker akkoord is.",
+        "volledige URL door als header_image_url nadat de gebruiker akkoord is; "
+        "'alternatives' zijn andere foto's van dezelfde pagina om eventueel voor te leggen.",
     }
 
 
@@ -696,7 +764,12 @@ def _validated_items(ctx: ToolContext, raw_items: list[dict]) -> list[Item]:
             if hit:
                 image_url = cached
             else:
-                image_url = extraction.extract_og_image(_page())
+                # og:image is het betrouwbaarst; ontbreekt die, dan de grootste echte
+                # foto op de productpagina zelf (gemeten, geen logo). Nog steeds
+                # de eigen pagina van het product, dus niets verzonnen.
+                image_url = extraction.extract_og_image(_page()) or best_product_image(
+                    _page(), url, client=ctx.http_client
+                )
                 _validation_cache.set(("og", url), image_url)
 
         items.append(
@@ -1128,6 +1201,7 @@ _DISPATCH: dict[str, Callable[[ToolContext, dict], dict]] = {
     "find_ticket_links": _tool_find_ticket_links,
     "find_products": _tool_find_products,
     "find_banner": _tool_find_banner,
+    "find_page_images": _tool_find_page_images,
     "find_matches": _tool_find_matches,
     "preview_newsletter": _tool_preview_newsletter,
     "create_newsletter_draft": _tool_create_newsletter_draft,

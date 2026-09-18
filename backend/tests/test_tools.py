@@ -780,7 +780,7 @@ def test_find_banner_without_og_image(session, cipher) -> None:
     )
     result = execute_tool("find_banner", {"url": "https://shop.test/x"}, ctx)
     assert result["banner_url"] is None
-    assert "geen eigen bannerbeeld" in result["message"]
+    assert "geen enkele foto" in result["message"]  # geen og:image, geen bruikbaar beeld op de pagina
 
 
 def test_find_banner_rejects_non_image(session, cipher) -> None:
@@ -1025,3 +1025,131 @@ def test_club_price_is_lowest_on_page(session, cipher):
 
     clubs = _validated_clubs(ctx, [{"name": "AS Roma", "url": "https://x/roma"}])
     assert clubs[0].price == "€ 99"
+
+
+# --- list_images zonder categorie (B/C) -------------------------------------
+def test_list_images_without_category_returns_everything(session, cipher) -> None:
+    from app.repositories import images as images_repo
+
+    tenant = _tenant(session)
+    images_repo.create_image(
+        session, tenant_id=tenant.id, category="club", filename="arsenal.jpg",
+        description=None, storage_path="p/a.jpg", url="https://cdn/arsenal.jpg",
+    )
+    images_repo.create_image(
+        session, tenant_id=tenant.id, category="banner", filename="hero.jpg",
+        description=None, storage_path="p/h.jpg", url="https://cdn/hero.jpg",
+    )
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    result = execute_tool("list_images", {}, ctx)
+    assert result["category"] == "alle"
+    assert sorted(result["categories"]) == ["banner", "club"]
+    assert {im["filename"] for im in result["images"]} == {"arsenal.jpg", "hero.jpg"}
+
+
+def test_list_images_empty_bibliotheek_zonder_categorie(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    result = execute_tool("list_images", {}, ctx)
+    assert result["images"] == [] and result["categories"] == []
+
+
+# --- find_page_images: nieuwe tool voor banner/product zonder og:image ------
+_PAGE_MET_ECHT_BEELD = (
+    '<html><img src="/media/logo.svg" alt="Logo" width="200">'
+    '<img src="/media/hero-shop.jpg" alt="De winkel" width="1600" height="900">'
+    '<img src="/media/product.jpg" alt="Product" width="900" height="900">'
+    "</html>"
+)
+
+
+def _pagina_beeld_http():
+    def handler(r: httpx.Request) -> httpx.Response:
+        if r.url.path == "/media/hero-shop.jpg":
+            return httpx.Response(
+                200, headers={"content-type": "image/jpeg"},
+                content=_png_bytes(1600, 900),
+            )
+        if r.url.path == "/media/product.jpg":
+            return httpx.Response(
+                200, headers={"content-type": "image/jpeg"},
+                content=_png_bytes(900, 900),
+            )
+        return httpx.Response(200, text=_PAGE_MET_ECHT_BEELD)
+
+    return _http(handler)
+
+
+def _png_bytes(w: int, h: int) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (w, h), (255, 114, 0)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_find_page_images_tool_meet_en_filtert(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, http_client=_pagina_beeld_http()
+    )
+    result = execute_tool("find_page_images", {"url": "https://shop.test/"}, ctx)
+    assert result["count"] == 1  # alleen hero-shop.jpg is liggend en >=600px breed
+    namen = [im["name"] for im in result["images"]]
+    assert any("De winkel" in n for n in namen)
+    assert "logo" not in " ".join(namen).lower()
+    assert "KIEZEN" in result["message"]
+
+
+def test_find_page_images_zonder_bruikbaar_beeld(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>niks</html>")),
+    )
+    result = execute_tool("find_page_images", {"url": "https://shop.test/leeg"}, ctx)
+    assert result["images"] == []
+    assert "geen foto" in result["message"]
+
+
+def test_find_page_images_requires_url_or_website(session, cipher) -> None:
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug="zonder-url", name="Zonder URL", config={**CONFIG, "website_url": ""})
+    )
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    with pytest.raises(ValueError, match="geen URL"):
+        execute_tool("find_page_images", {}, ctx)
+
+
+def test_find_banner_gebruikt_paginafotos_zonder_og_image(session, cipher) -> None:
+    # Geen og:image, geen collectielinks, maar wel een echte liggende foto op de pagina.
+    tenant = _tenant(session)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, http_client=_pagina_beeld_http()
+    )
+    result = execute_tool("find_banner", {"url": "https://shop.test/"}, ctx)
+    assert result["banner_url"] is None
+    assert len(result["candidates"]) == 1
+    assert result["candidates"][0]["banner_url"].endswith("hero-shop.jpg")
+    assert result["candidates"][0]["width"] == 1600
+
+
+# --- productfoto valt terug op een echte paginafoto zonder og:image ---------
+def test_item_image_falls_back_to_page_photo_without_og_image(session, cipher) -> None:
+    tenant = _tenant(session)
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["items"] = [{
+        "title": "Nieuw product",
+        "url": "https://shop.test/product",
+    }]
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, http_client=_pagina_beeld_http(),
+        preview_holder=[],
+    )
+    result = execute_tool("preview_newsletter", payload, ctx)
+    # og:image ontbreekt; de tool valt terug op de grootste echte foto op de pagina,
+    # NOOIT op het logo.
+    assert ctx.preview_holder[0].count("hero-shop.jpg") + ctx.preview_holder[0].count("product.jpg") >= 1
+    assert "logo.svg" not in ctx.preview_holder[0]
