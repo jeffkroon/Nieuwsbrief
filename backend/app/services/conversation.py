@@ -7,12 +7,14 @@ draait één agent-beurt met de tools van deze tenant, en bewaart het antwoord.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
 from app.db.models import Conversation, Tenant
-from app.newsletter.orchestrator import run_agent_turn
+from app.newsletter.orchestrator import ToolEvent, run_agent_turn
+from app.newsletter.progress import describe
 from app.newsletter.prompts import build_system_prompt
 from app.newsletter.capabilities import template_capabilities
 from app.newsletter.renderer import SECTIONS_MARKER
@@ -86,6 +88,8 @@ def run_conversation_turn(
     conversation: Conversation,
     user_text: str,
     template_id: uuid.UUID | None = None,
+    on_step: Callable[[str], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> TurnReply:
     # Template-keuze onthouden: expliciet meegestuurd wint en wordt bewaard;
     # zonder keuze geldt de eerder gekozen template van dit gesprek.
@@ -136,6 +140,8 @@ def run_conversation_turn(
         messages=claude_messages,
         tools=TOOL_DEFINITIONS,
         dispatch=lambda name, tool_input: execute_tool(name, tool_input, ctx),
+        on_event=(lambda event: on_step(describe(event))) if on_step else None,
+        should_stop=should_stop,
     )
 
     repo.add_message(session, conversation.id, "assistant", result.final_text)
