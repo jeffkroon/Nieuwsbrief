@@ -7,10 +7,12 @@ import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.deps import get_session, get_storage, require_tenant_access
+from app.deps import get_anthropic_client, get_session, get_storage, require_tenant_access
+from app.newsletter.image_describe import describe_image
 from app.repositories import images as repo
 from app.repositories import tenants as tenants_repo
 from app.schemas import ImageCategoriesRead, ImageCategoriesSet, ImageRead
+from app.services.llm_usage import TrackingLLM
 from app.services.storage import ImageStorage, StorageError
 
 router = APIRouter(
@@ -74,6 +76,7 @@ def upload_images(
     descriptions: list[str] | None = Form(None),
     session: Session = Depends(get_session),
     storage: ImageStorage = Depends(get_storage),
+    client=Depends(get_anthropic_client),
 ) -> list[ImageRead]:
     tenant = _require_tenant(session, tenant_id)
     category = category.strip().lower()
@@ -99,6 +102,10 @@ def upload_images(
         except StorageError as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=f"upload mislukt: {exc}") from exc
         description = descriptions[i] if descriptions and i < len(descriptions) else None
+        if not (description or "").strip():
+            # Zonder beschrijving moet de assistent het op de bestandsnaam doen, en
+            # 'IMG_2831.jpg' zegt niets. Een eigen beschrijving wint altijd.
+            description = _beschrijf(client, session, tenant_id, content, upload, name)
         created.append(
             repo.create_image(
                 session,
@@ -135,3 +142,14 @@ def _config_update(new_config: dict):
     from app.schemas import TenantUpdate
 
     return TenantUpdate(config=new_config)
+
+
+def _beschrijf(client, session, tenant_id, content: bytes, upload: UploadFile, name: str) -> str | None:
+    """Laat de foto zichzelf beschrijven; mislukt dat, dan gewoon zonder."""
+    if client is None:
+        return None
+    tracked = TrackingLLM(client, session, purpose="fotobeschrijving", tenant_id=tenant_id)
+    beschrijving = describe_image(
+        tracked, content, (upload.content_type or "").lower(), filename=name
+    )
+    return beschrijving.as_text() if beschrijving else None
