@@ -124,7 +124,12 @@
   .versions .v small { color: var(--muted); }
   .style-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
   .style-split .preview-col { position: sticky; top: 12px; }
-  .style-split .preview-frame { margin-top: 6px; height: 560px; }
+  /* Het voorbeeld moet de mail op ECHTE breedte tonen (650px). Perst hij zich
+     in een smalle kolom, dan slaat de mobiele media query van de mail zelf aan
+     en puilt de tekst uit de hero-cel dwars door de tekst eronder. Daarom een
+     vaste breedte die als geheel wordt verkleind. */
+  .preview-scaler { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: #fff; margin-top: 6px; }
+  .preview-scaler iframe { width: 620px; height: 900px; border: 0; display: block; transform-origin: top left; background: #fff; }
   .style-lead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
   .style-grid label .hint { font-weight: 400; }
   .warn-box { margin-top: 12px; padding: 10px 12px; border: 1px solid #f0c9c4; background: #fdf3f2; border-radius: 8px; font-size: 13px; color: #8c2c20; }

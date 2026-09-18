@@ -108,3 +108,13 @@ def test_scripts_zoeken_alleen_elementen_op_die_bestaan(client) -> None:
         gevraagd = set(re.findall(r'getElementById\("([^"]+)"\)', js))
         ontbreekt = sorted(gevraagd - ids)
         assert not ontbreekt, f"{pad} zoekt niet-bestaande elementen: {ontbreekt}"
+
+
+def test_stijlvoorbeeld_toont_de_mail_op_ware_breedte(client) -> None:
+    """In een smalle kolom slaat de mobiele media query van de mail zelf aan en
+    puilt de tekst uit de hero-cel door de tekst eronder. Daarom een vaste
+    breedte die als geheel wordt geschaald, net als het chat-voorbeeld."""
+    html = _frontend(client)
+    assert "preview-scaler" in html
+    assert "VOORBEELD_BREEDTE = 620" in html
+    assert "transform-origin: top left" in html
