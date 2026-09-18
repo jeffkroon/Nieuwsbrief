@@ -201,3 +201,32 @@ def test_extract_min_price_falls_back_to_single_price() -> None:
     # Geen wedstrijden gevonden: terugval op de enkele-pagina-prijs.
     llm = FakeLLM({"matches": [], "price": "149,-"})
     assert extract_min_price(llm, "<html>x</html>", source_url="https://x") == "€ 149"
+
+
+def test_html_to_text_keeps_image_nested_inside_a_product_link() -> None:
+    """Bugfix: een productfoto zit vaak in dezelfde <a href="/products/..."> als de
+    naar-het-product-link (los van de titel-link), bv. <a href="..."><img ...></a>.
+    De link-verwerking stripte voorheen alle tags uit een <a>-inhoud, dus zo'n
+    geneste <img> werd vernietigd voordat het LLM hem ooit zag - elk product op zo'n
+    pagina kreeg dan altijd image_url: null. Zie het Ohcascas-gesprek."""
+    html = (
+        '<a href="/products/ring" class="product-card__media">'
+        '<img src="/cdn/ring.png" alt="Ring">'
+        "</a>"
+        '<a href="/products/ring">Gouden Ring</a>'
+    )
+    tekst = html_to_text(html, "https://shop.nl", keep_images=True)
+    assert "AFBEELDING(https://shop.nl/cdn/ring.png)" in tekst
+    assert "Gouden Ring (https://shop.nl/products/ring)" in tekst
+
+
+def test_html_to_text_meerdere_producten_met_geneste_fotos_blijven_gescheiden() -> None:
+    html = (
+        '<a href="/products/a"><img src="/a.png" alt="A"></a><a href="/products/a">Product A</a>'
+        '<a href="/products/b"><img src="/b.png" alt="B"></a><a href="/products/b">Product B</a>'
+    )
+    tekst = html_to_text(html, "https://shop.nl", keep_images=True)
+    assert "AFBEELDING(https://shop.nl/a.png)" in tekst
+    assert "AFBEELDING(https://shop.nl/b.png)" in tekst
+    # Volgorde blijft behouden, dus A's foto staat vóór B's tekst en niet erna.
+    assert tekst.index("a.png") < tekst.index("Product A") < tekst.index("b.png")
