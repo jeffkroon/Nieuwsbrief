@@ -17,3 +17,5 @@ pytest>=8
 pytest-cov>=5
 testcontainers[postgres]>=4.0
 css_inline>=0.14
+# Afmetingen van kandidaat-foto's lezen (eerste 128 KB); zie newsletter/page_images.py.
+pillow>=10

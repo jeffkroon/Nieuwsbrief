@@ -22,6 +22,7 @@ _BEZIG = {
     "find_ticket_links": "Links controleren op de site",
     "find_products": "Aanbod ophalen van de site",
     "find_banner": "Bannerfoto zoeken",
+    "find_page_images": "Foto's op de pagina bekijken",
     "preview_newsletter": "Voorbeeld samenstellen",
     "create_newsletter_draft": "Concept klaarzetten",
 }
@@ -78,12 +79,32 @@ def _producten(invoer: dict, resultaat: dict) -> str:
 
 def _afbeeldingen(invoer: dict, resultaat: dict) -> str:
     images = resultaat.get("images") or []
-    categorie = invoer.get("category") or ""
-    return f"{len(images)} afbeeldingen bekeken" + (f" in '{categorie}'" if categorie else "")
+    categorie = (invoer.get("category") or "").strip()
+    if categorie:
+        return f"{len(images)} foto's in de bibliotheek onder '{categorie}'"
+    categorieen = resultaat.get("categories") or []
+    if not images:
+        return "Bibliotheek is leeg voor dit bedrijf"
+    return f"{len(images)} foto's in de bibliotheek ({', '.join(categorieen)})"
 
 
 def _banner(invoer: dict, resultaat: dict) -> str:
-    return "Bannerfoto gekozen" if resultaat.get("banner_url") else "Geen bannerfoto gevonden"
+    bron = _pad(resultaat.get("source_url") or invoer.get("url") or "")
+    waar = f" op {bron}" if bron else ""
+    kandidaten = len(resultaat.get("candidates") or [])
+    if resultaat.get("banner_url"):
+        alternatieven = len(resultaat.get("alternatives") or [])
+        extra = f", plus {alternatieven} alternatieven" if alternatieven else ""
+        return f"Banner gevonden{waar}{extra}"
+    if kandidaten:
+        return f"Geen og:image-banner{waar}, wel {kandidaten} foto's om uit te kiezen"
+    return f"Geen bruikbare bannerfoto{waar}"
+
+
+def _pagina_fotos(invoer: dict, resultaat: dict) -> str:
+    bron = _pad(resultaat.get("source_url") or invoer.get("url") or "")
+    aantal = resultaat.get("count", len(resultaat.get("images") or []))
+    return f"{aantal} bruikbare foto's gevonden" + (f" op {bron}" if bron else "")
 
 
 def _voorbeeld(invoer: dict, resultaat: dict) -> str:
@@ -111,6 +132,7 @@ _MAKERS = {
     "find_products": _producten,
     "list_images": _afbeeldingen,
     "find_banner": _banner,
+    "find_page_images": _pagina_fotos,
     "preview_newsletter": _voorbeeld,
     "create_newsletter_draft": _concept,
     "analyze_website_tone": _tone,
