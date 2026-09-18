@@ -117,3 +117,71 @@ def test_upload_missing_tenant_404(client, fake_storage) -> None:
         files=[("files", ("x.jpg", b"a", "image/jpeg"))],
     )
     assert resp.status_code == 404
+
+
+# --- automatische beschrijving ---------------------------------------------
+def test_upload_zonder_beschrijving_laat_de_foto_zichzelf_beschrijven(
+    client, session, fake_storage
+) -> None:
+    from dataclasses import dataclass
+
+    from app.deps import get_anthropic_client
+    from app.main import app
+
+    @dataclass
+    class _Text:
+        text: str
+        type: str = "text"
+
+    @dataclass
+    class _Resp:
+        content: list
+
+    class _FakeLLM:
+        @property
+        def messages(self):
+            return self
+
+        def create(self, **kwargs):
+            return _Resp([_Text('{"description": "spelers in oranje shirts", "subject": "AS Roma"}')])
+
+    app.dependency_overrides[get_anthropic_client] = lambda: _FakeLLM()
+    try:
+        tenant = _tenant(session)
+        client.put(f"/tenants/{tenant.id}/image-categories", json={"categories": ["club"]})
+        resp = client.post(
+            f"/tenants/{tenant.id}/images",
+            data={"category": "club"},
+            files=[("files", ("IMG_2831.png", b"\x89PNG\r\n\x1a\n" + b"x" * 50, "image/png"))],
+        )
+        assert resp.status_code == 201
+        assert resp.json()[0]["description"] == "AS Roma: spelers in oranje shirts"
+    finally:
+        app.dependency_overrides.pop(get_anthropic_client, None)
+
+
+def test_eigen_beschrijving_wordt_nooit_overschreven(client, session, fake_storage) -> None:
+    from app.deps import get_anthropic_client
+    from app.main import app
+
+    class _Ontploft:
+        @property
+        def messages(self):
+            return self
+
+        def create(self, **kwargs):
+            raise AssertionError("er had geen beschrijving gegenereerd mogen worden")
+
+    app.dependency_overrides[get_anthropic_client] = lambda: _Ontploft()
+    try:
+        tenant = _tenant(session)
+        client.put(f"/tenants/{tenant.id}/image-categories", json={"categories": ["club"]})
+        resp = client.post(
+            f"/tenants/{tenant.id}/images",
+            data={"category": "club", "descriptions": "Zelf ingetypt"},
+            files=[("files", ("foto.png", b"\x89PNG\r\n\x1a\n", "image/png"))],
+        )
+        assert resp.status_code == 201
+        assert resp.json()[0]["description"] == "Zelf ingetypt"
+    finally:
+        app.dependency_overrides.pop(get_anthropic_client, None)
