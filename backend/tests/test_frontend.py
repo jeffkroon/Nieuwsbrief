@@ -39,3 +39,10 @@ def test_geen_externe_bronnen_in_de_frontend(client) -> None:
     html = _index(client)
     for bron in ("cdnjs.cloudflare.com", "cdn.jsdelivr.net", "unpkg.com", "code.jquery.com"):
         assert bron not in html
+
+
+def test_nieuwsbrieven_tab_bestaat(client) -> None:
+    html = _index(client)
+    for element in ('id="navNewsletters"', 'id="newslettersView"', 'id="nlList"'):
+        assert element in html
+    assert "/newsletters" in html
