@@ -1840,9 +1840,11 @@ async function loadCompanies() {
     const el = document.createElement("div");
     el.className = "company-item";
     el.innerHTML = `<strong>${t.name}</strong><span class="hint">${t.slug}</span>`
+      + `<span class="tmpl-health hint">template controleren...</span>`
       + `<span style="margin-left:auto;"></span>`
       + `<button class="edit">bewerken</button><button class="del">verwijderen</button>`;
     el.querySelector(".edit").onclick = () => fillCompanyForm(t);
+    toonTemplateGezondheid(t.id, el.querySelector(".tmpl-health"));
     el.querySelector(".del").onclick = async () => {
       if (!confirm(`Bedrijf "${t.name}" en alle bijbehorende data verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
       await fetch(`/tenants/${t.id}`, { method: "DELETE" });
@@ -1850,6 +1852,28 @@ async function loadCompanies() {
     };
     list.appendChild(el);
   }
+}
+
+// Heeft dit bedrijf een bruikbare eigen template? Zonder valt de nieuwsbrief
+// terug op de neutrale standaard, en dat zie je nu meteen in de lijst.
+async function toonTemplateGezondheid(tenantId, el) {
+  try {
+    const res = await fetch(`/tenants/${tenantId}/templates/health`);
+    if (!res.ok) { el.textContent = ""; return; }
+    const h = await res.json();
+    if (h.ok) {
+      el.textContent = "template in orde";
+      el.style.color = "#2e9e5b";
+    } else {
+      const redenen = [h.reden, ...(h.opslag_fouten || [])].filter(Boolean);
+      if ((h.ontbrekende_brand_velden || []).length) {
+        redenen.push(`bedrijfsgegevens ontbreken: ${h.ontbrekende_brand_velden.join(", ")}`);
+      }
+      el.textContent = redenen[0] || "template nakijken";
+      el.style.color = "var(--danger)";
+      el.title = redenen.join("; ") || "Controleer de template van dit bedrijf.";
+    }
+  } catch (e) { el.textContent = ""; }
 }
 
 document.getElementById("companySave").onclick = async () => {

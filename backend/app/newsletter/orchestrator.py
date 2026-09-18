@@ -4,8 +4,9 @@ Draait de gespreks-loop: stuurt berichten naar Claude, voert tool-calls uit via
 de meegegeven dispatch-functie, en gaat door tot Claude klaar is. De Anthropic-
 client wordt geinjecteerd zodat tests een fake kunnen meegeven.
 
-Model claude-sonnet-4-6 met adaptive thinking en effort 'medium': sterk genoeg voor
-deze tool-taak en ~40% goedkoper per token dan Opus. De harde garanties (link moet
+Model claude-sonnet-5 met adaptive thinking en effort 'medium': sterk genoeg voor
+deze tool-taak, en goedkoper per token dan zowel Opus als de sonnet-4-6 die hier
+eerder stond. De harde garanties (link moet
 200 zijn, prijs live gescrapet, concept pas na toestemming) zitten in code, niet in
 de effort.
 
@@ -25,7 +26,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-sonnet-5"
 # 1-uurs cache i.p.v. de standaard 5 minuten: gebruikers denken in deze chat-flow
 # vaak langer dan 5 minuten na, en dan werd het vaste prefix (~8k tokens) plus de
 # hele geschiedenis elke beurt opnieuw vol afgerekend. Schrijven kost eenmalig 2x,
