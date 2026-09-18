@@ -79,6 +79,15 @@ def client(session: Session, cipher) -> Iterator:
     from app.main import app
 
     app.dependency_overrides[get_session] = lambda: session
+
+    # De streamende beurt opent in productie een eigen sessie in zijn thread. In
+    # tests hergebruiken we de testcontainer-sessie (alles loopt daar sequentieel)
+    # en laten we hem niet sluiten.
+    from contextlib import nullcontext
+
+    from app.deps import get_session_factory_dep
+
+    app.dependency_overrides[get_session_factory_dep] = lambda: (lambda: nullcontext(session))
     app.dependency_overrides[get_cipher] = lambda: cipher
     with TestClient(app) as c:
         yield c

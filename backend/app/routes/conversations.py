@@ -19,6 +19,7 @@ from app.deps import (
     get_anthropic_client,
     get_cipher,
     get_session,
+    get_session_factory_dep,
 )
 from app.ratelimit import SlidingWindowRateLimiter, client_ip
 from app.repositories import conversations as repo
@@ -39,6 +40,11 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 # Max 10 chat-beurten per minuut per IP (een beurt is duur: meerdere LLM-calls + Brevo).
 _chat_limiter = SlidingWindowRateLimiter(max_hits=10, window_seconds=60)
+
+# Gelijktijdig lopende streamende beurten. Elke beurt bezet een thread en een
+# DB-connectie tot een minuut lang, ook als de gebruiker de tab al heeft gesloten.
+MAX_GELIJKTIJDIGE_BEURTEN = 8
+_beurt_plaatsen = threading.BoundedSemaphore(MAX_GELIJKTIJDIGE_BEURTEN)
 
 
 def chat_rate_limit(request: Request) -> None:
@@ -245,6 +251,7 @@ async def stream_turn(
     client=Depends(get_anthropic_client),
     _: None = Depends(chat_rate_limit),
     info: SessionInfo = Depends(current_session_info),
+    session_factory=Depends(get_session_factory_dep),
 ) -> StreamingResponse:
     """Zelfde beurt als POST /conversations, maar met tussenstanden onderweg.
 
@@ -253,37 +260,52 @@ async def stream_turn(
     de verbinding, dan stopt de beurt bij de eerstvolgende stap in plaats van nog
     dure rondes te draaien.
     """
-    conversation = _kies_gesprek(session, body, info)
+    conversation_id = _kies_gesprek(session, body, info).id
     afbreken = threading.Event()
     events: queue.Queue = queue.Queue()
 
+    if not _beurt_plaatsen.acquire(blocking=False):
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Er lopen op dit moment te veel gesprekken. Probeer het zo opnieuw.",
+        )
+
     def _werk() -> None:
+        # Eigen sessie: deze thread loopt door nadat de request-sessie kan zijn
+        # opgeruimd (bv. als de gebruiker de verbinding verbreekt), en een
+        # SQLAlchemy-sessie is niet thread-safe.
         try:
-            turn = run_conversation_turn(
-                session=session,
-                client=client,
-                cipher=cipher,
-                conversation=conversation,
-                user_text=body.message,
-                template_id=body.template_id,
-                on_step=lambda tekst: events.put({"type": "step", "text": tekst}),
-                should_stop=afbreken.is_set,
-            )
-            events.put(
-                {
-                    "type": "done",
-                    "conversation_id": str(conversation.id),
-                    "reply": turn.reply,
-                    "stop_reason": turn.stop_reason,
-                    "preview_html": turn.preview_html,
-                }
-            )
+            with session_factory() as eigen_sessie:
+                conversation = repo.get_conversation(eigen_sessie, conversation_id)
+                if conversation is None:
+                    events.put({"type": "error", "detail": "Het gesprek is niet meer beschikbaar."})
+                    return
+                turn = run_conversation_turn(
+                    session=eigen_sessie,
+                    client=client,
+                    cipher=cipher,
+                    conversation=conversation,
+                    user_text=body.message,
+                    template_id=body.template_id,
+                    on_step=lambda tekst: events.put({"type": "step", "text": tekst}),
+                    should_stop=afbreken.is_set,
+                )
+                events.put(
+                    {
+                        "type": "done",
+                        "conversation_id": str(conversation_id),
+                        "reply": turn.reply,
+                        "stop_reason": turn.stop_reason,
+                        "preview_html": turn.preview_html,
+                    }
+                )
         except TurnCancelled:
             events.put({"type": "cancelled"})
         except Exception as exc:  # noqa: BLE001 - alles wordt een nette melding
             events.put({"type": "error", "detail": foutmelding(exc)})
         finally:
             events.put(None)
+            _beurt_plaatsen.release()
 
     worker = threading.Thread(target=_werk, daemon=True, name="chat-beurt")
     worker.start()
@@ -292,7 +314,7 @@ async def stream_turn(
         lus = asyncio.get_running_loop()
         # Het gesprek-id meteen sturen: de frontend kan het bewaren, ook als de
         # beurt daarna misgaat of wordt afgebroken.
-        yield _sse({"type": "start", "conversation_id": str(conversation.id)})
+        yield _sse({"type": "start", "conversation_id": str(conversation_id)})
         try:
             while True:
                 item = await lus.run_in_executor(None, events.get)

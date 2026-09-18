@@ -276,3 +276,32 @@ def test_afbreken_stopt_voor_de_volgende_dure_stap() -> None:
         )
     # Er is geen enkele (dure) call naar Claude gedaan.
     assert client.messages.calls == []
+
+
+def test_afbreken_slaat_ook_de_tool_aanroep_over() -> None:
+    """Een pagina ophalen duurt seconden; dat werk hoeft niet meer als de
+    gebruiker al weg is."""
+    from app.newsletter.orchestrator import TurnCancelled, run_agent_turn
+
+    aangeroepen = []
+    client = FakeAnthropic(
+        [FakeResponse([FakeToolUse("t1", "find_matches", {})], "tool_use")]
+    )
+    stoppen = {"nu": False}
+
+    def _dispatch(naam, invoer):
+        aangeroepen.append(naam)
+        return {}
+
+    # Pas stoppen nadat de eerste Claude-call is gedaan, dus midden in de beurt.
+    def _should_stop():
+        if client.messages.calls:
+            stoppen["nu"] = True
+        return stoppen["nu"] and bool(client.messages.calls)
+
+    with pytest.raises(TurnCancelled):
+        run_agent_turn(
+            client, system="s", messages=[{"role": "user", "content": "hoi"}], tools=[],
+            dispatch=_dispatch, should_stop=_should_stop,
+        )
+    assert aangeroepen == [], "de tool had niet meer aangeroepen mogen worden"

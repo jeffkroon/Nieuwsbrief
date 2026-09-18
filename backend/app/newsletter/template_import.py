@@ -27,6 +27,9 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_UNCOMPRESSED_BYTES = 60 * 1024 * 1024
 MAX_ENTRIES = 300
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+# Blokgrootte waarin we uitpakken; zo weten we wanneer we moeten stoppen zonder
+# eerst alles in het geheugen te trekken.
+_LEES_BLOK = 256 * 1024
 
 HTML_SUFFIXES = (".html", ".htm")
 IMAGE_TYPES = {
@@ -111,7 +114,7 @@ def import_zip(raw: bytes, *, store: StoreImage) -> ImportedTemplate:
         entries = [item for item in archive.infolist() if not item.is_dir()]
         _check_archive_limits(entries)
         html_entry = _pick_html_entry(entries)
-        html = decode_html(archive.read(html_entry))
+        html = decode_html(_lees_begrensd(archive, html_entry, MAX_UNCOMPRESSED_BYTES))
         images, notes = _store_images(archive, entries, store=store)
 
     html, rewrite_notes = rewrite_references(html, images)
@@ -127,10 +130,14 @@ def _check_archive_limits(entries: list[zipfile.ZipInfo]) -> None:
         raise TemplateImportError(
             f"Te veel bestanden in de ZIP ({len(entries)}); maximaal {MAX_ENTRIES}."
         )
-    total = sum(item.file_size for item in entries)
-    if total > MAX_UNCOMPRESSED_BYTES:
+    # LET OP: `file_size` komt uit de ZIP-header en wordt door de maker van het
+    # bestand bepaald; een zip-bom liegt daarover. Dit is dus een eerste zeef, geen
+    # garantie. De echte begrenzing zit in `_lees_begrensd`, dat tijdens het
+    # uitpakken telt en stopt.
+    opgegeven = sum(item.file_size for item in entries)
+    if opgegeven > MAX_UNCOMPRESSED_BYTES:
         raise TemplateImportError(
-            f"Inhoud van de ZIP is te groot ({total // (1024 * 1024)} MB uitgepakt); maximaal "
+            f"Inhoud van de ZIP is te groot ({opgegeven // (1024 * 1024)} MB uitgepakt); maximaal "
             f"{MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB."
         )
     for item in entries:
@@ -138,6 +145,31 @@ def _check_archive_limits(entries: list[zipfile.ZipInfo]) -> None:
             raise TemplateImportError(
                 f"Onveilig pad in de ZIP: {item.filename!r}. Pak de export opnieuw in."
             )
+
+
+def _lees_begrensd(archive: zipfile.ZipFile, item: zipfile.ZipInfo, maximum: int) -> bytes:
+    """Pak een bestand uit tot hoogstens `maximum` bytes.
+
+    De opgegeven grootte in de ZIP-header is niet te vertrouwen: een zip-bom geeft
+    een klein getal op en levert bij het uitpakken gigabytes. Daarom lezen we in
+    blokken en stoppen we zodra de grens wordt overschreden, in plaats van eerst
+    alles in het geheugen te laten lopen.
+    """
+    stukken: list[bytes] = []
+    gelezen = 0
+    with archive.open(item) as stroom:
+        while True:
+            blok = stroom.read(_LEES_BLOK)
+            if not blok:
+                break
+            gelezen += len(blok)
+            if gelezen > maximum:
+                raise TemplateImportError(
+                    f"{posixpath.basename(item.filename)} is bij het uitpakken groter dan "
+                    f"{maximum // (1024 * 1024)} MB; de ZIP klopt niet."
+                )
+            stukken.append(blok)
+    return b"".join(stukken)
 
 
 def _is_unsafe_path(name: str) -> bool:
@@ -171,13 +203,15 @@ def _store_images(
         content_type = IMAGE_TYPES.get(suffix)
         if content_type is None:
             continue
-        if item.file_size > MAX_IMAGE_BYTES:
+        try:
+            inhoud = _lees_begrensd(archive, item, MAX_IMAGE_BYTES)
+        except TemplateImportError:
             notes.append(
-                f"{posixpath.basename(item.filename)} is te groot "
-                f"({item.file_size // (1024 * 1024)} MB) en is overgeslagen."
+                f"{posixpath.basename(item.filename)} is groter dan "
+                f"{MAX_IMAGE_BYTES // (1024 * 1024)} MB en is overgeslagen."
             )
             continue
-        url = store(posixpath.basename(item.filename), archive.read(item), content_type)
+        url = store(posixpath.basename(item.filename), inhoud, content_type)
         stored.append(ImportedImage(path=item.filename, url=url))
     return tuple(stored), tuple(notes)
 

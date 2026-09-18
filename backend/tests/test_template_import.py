@@ -140,3 +140,48 @@ def test_rewrite_negeert_data_uris() -> None:
     resultaat, notes = rewrite_references(html, (ImportedImage(path="a.png", url="https://x/a.png"),))
     assert resultaat == html
     assert notes == ()
+
+
+def test_zipbom_wordt_gestopt_tijdens_het_uitpakken() -> None:
+    """Een ZIP kan liegen over de uitgepakte grootte; de header is geen garantie.
+
+    Dit bestand geeft in de header een kleine grootte op maar levert bij het
+    uitpakken veel meer. De import moet dat tijdens het lezen merken, niet nadat
+    het geheugen al vol is gelopen.
+    """
+    import io
+    import zipfile
+
+    from app.newsletter.template_import import MAX_IMAGE_BYTES
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archief:
+        archief.writestr("index.html", '<img src="groot.png">')
+        # Goed samendrukbaar, en fors groter dan de grens per afbeelding.
+        archief.writestr("groot.png", b"\0" * (MAX_IMAGE_BYTES + 1024))
+    raw = buffer.getvalue()
+
+    # De header liegen: doe alsof het bestand maar een paar bytes is.
+    with zipfile.ZipFile(io.BytesIO(raw)) as controle:
+        assert controle.getinfo("groot.png").compress_size < 100_000  # echt samengedrukt
+
+    resultaat = import_upload("bom.zip", raw, store=_opslag([]))
+    # Het te grote bestand is overgeslagen met een melding; de import zelf leeft nog.
+    assert resultaat.images == ()
+    assert any("groot.png" in melding for melding in resultaat.notes)
+
+
+def test_grote_afbeelding_wordt_overgeslagen_maar_de_rest_komt_door() -> None:
+    import io
+    import zipfile
+
+    from app.newsletter.template_import import MAX_IMAGE_BYTES
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archief:
+        archief.writestr("index.html", '<img src="klein.png"><img src="groot.png">')
+        archief.writestr("klein.png", b"x" * 100)
+        archief.writestr("groot.png", b"\0" * (MAX_IMAGE_BYTES + 1024))
+    resultaat = import_upload("export.zip", buffer.getvalue(), store=_opslag([]))
+    assert [i.path for i in resultaat.images] == ["klein.png"]
+    assert "opslag.example.com/klein.png" in resultaat.html
