@@ -34,11 +34,13 @@ def describe(event: ToolEvent) -> str:
         return f"{_bezig(event.name)}: mislukt ({_kort(event.error)})"
     resultaat = event.result or {}
     maker = _MAKERS.get(event.name)
-    if maker is not None:
-        regel = maker(event.input or {}, resultaat)
-        if regel:
-            return regel
-    return f"{_bezig(event.name)}: klaar"
+    regel = maker(event.input or {}, resultaat) if maker is not None else None
+    regel = regel or f"{_bezig(event.name)}: klaar"
+    # Uit het werkgeheugen van dit gesprek (tool_memory.py): geen nieuwe pagina-fetch
+    # of LLM-extractie, zodat zichtbaar blijft waarom dit stapje meteen klaar was.
+    if resultaat.get("from_memory"):
+        regel += " (al eerder in dit gesprek opgehaald)"
+    return regel
 
 
 def _bezig(naam: str) -> str:

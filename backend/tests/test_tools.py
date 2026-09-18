@@ -1063,21 +1063,20 @@ _PAGE_MET_ECHT_BEELD = (
 )
 
 
-def _pagina_beeld_http():
-    def handler(r: httpx.Request) -> httpx.Response:
-        if r.url.path == "/media/hero-shop.jpg":
-            return httpx.Response(
-                200, headers={"content-type": "image/jpeg"},
-                content=_png_bytes(1600, 900),
-            )
-        if r.url.path == "/media/product.jpg":
-            return httpx.Response(
-                200, headers={"content-type": "image/jpeg"},
-                content=_png_bytes(900, 900),
-            )
-        return httpx.Response(200, text=_PAGE_MET_ECHT_BEELD)
+def _pagina_beeld_http_handler(r: httpx.Request) -> httpx.Response:
+    if r.url.path == "/media/hero-shop.jpg":
+        return httpx.Response(
+            200, headers={"content-type": "image/jpeg"}, content=_png_bytes(1600, 900),
+        )
+    if r.url.path == "/media/product.jpg":
+        return httpx.Response(
+            200, headers={"content-type": "image/jpeg"}, content=_png_bytes(900, 900),
+        )
+    return httpx.Response(200, text=_PAGE_MET_ECHT_BEELD)
 
-    return _http(handler)
+
+def _pagina_beeld_http():
+    return _http(_pagina_beeld_http_handler)
 
 
 def _png_bytes(w: int, h: int) -> bytes:
@@ -1153,3 +1152,171 @@ def test_item_image_falls_back_to_page_photo_without_og_image(session, cipher) -
     # NOOIT op het logo.
     assert ctx.preview_holder[0].count("hero-shop.jpg") + ctx.preview_holder[0].count("product.jpg") >= 1
     assert "logo.svg" not in ctx.preview_holder[0]
+
+
+# --- werkgeheugen per gesprek (tool_memory.py) ------------------------------
+def _tellende_http(handler):
+    """Wikkelt een handler in en telt hoeveel verzoeken er echt de deur uit gingen."""
+    teller = {"n": 0}
+
+    def geteld(r: httpx.Request) -> httpx.Response:
+        teller["n"] += 1
+        return handler(r)
+
+    return _http(geteld), teller
+
+
+def test_find_products_wordt_niet_twee_keer_opgehaald_binnen_een_gesprek(session, cipher) -> None:
+    from app.repositories import conversations as conv_repo
+
+    tenant = _tenant(session)
+    conversation = conv_repo.create_conversation(session, tenant_id=tenant.id, channel="web")
+    http, teller = _tellende_http(lambda r: httpx.Response(200, text="<html>shop</html>"))
+    llm = FakeLLM({"products": [{"name": "Bal", "url": "https://x/bal", "price": "€ 20", "image_url": None}]})
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        conversation_id=conversation.id, llm=llm, http_client=http,
+    )
+    eerste = execute_tool("find_products", {"url": CONFIG["website_url"]}, ctx)
+    tweede = execute_tool("find_products", {"url": CONFIG["website_url"]}, ctx)
+
+    assert teller["n"] == 1, "een tweede identieke find_products mag de pagina niet opnieuw ophalen"
+    assert len(llm.messages.calls) == 1, "en dus ook geen tweede LLM-extractie"
+    assert "from_memory" not in eerste
+    assert tweede["from_memory"] is True
+    assert tweede["products"] == eerste["products"]
+
+
+def test_find_products_met_andere_url_vraagt_wel_opnieuw_op(session, cipher) -> None:
+    from app.repositories import conversations as conv_repo
+
+    tenant = _tenant(session)
+    conversation = conv_repo.create_conversation(session, tenant_id=tenant.id, channel="web")
+    http, teller = _tellende_http(lambda r: httpx.Response(200, text="<html>shop</html>"))
+    llm = FakeLLM({"products": []})
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        conversation_id=conversation.id, llm=llm, http_client=http,
+    )
+    execute_tool("find_products", {"url": "https://shop.test/a"}, ctx)
+    execute_tool("find_products", {"url": "https://shop.test/b"}, ctx)
+    assert teller["n"] == 2
+
+
+def test_find_matches_wordt_onthouden_binnen_een_gesprek(session, cipher) -> None:
+    from app.repositories import conversations as conv_repo
+
+    tenant = _tenant(session)
+    conversation = conv_repo.create_conversation(session, tenant_id=tenant.id, channel="web")
+    http, teller = _tellende_http(lambda r: httpx.Response(200, text="<html>wedstrijden</html>"))
+    llm = FakeLLM({"matches": [{"home": "Ajax", "away": "PSV", "price": None}]})
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        conversation_id=conversation.id, llm=llm, http_client=http,
+    )
+    execute_tool("find_matches", {"url": CONFIG["matches_url"]}, ctx)
+    execute_tool("find_matches", {"url": CONFIG["matches_url"]}, ctx)
+    assert teller["n"] == 1
+    assert len(llm.messages.calls) == 1
+
+
+def test_find_ticket_links_andere_zoekopdracht_deelt_geen_cache(session, cipher) -> None:
+    from app.repositories import conversations as conv_repo
+
+    tenant = _tenant(session)
+    conversation = conv_repo.create_conversation(session, tenant_id=tenant.id, channel="web")
+    http, teller = _tellende_http(lambda r: httpx.Response(200, text="<html>links</html>"))
+    llm = FakeLLM({"links": []})
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        conversation_id=conversation.id, llm=llm, http_client=http,
+    )
+    execute_tool("find_ticket_links", {"url": "https://x.nl/", "query": "arsenal"}, ctx)
+    execute_tool("find_ticket_links", {"url": "https://x.nl/", "query": "chelsea"}, ctx)
+    assert teller["n"] == 2, "een andere zoekopdracht op dezelfde pagina is een ander verzoek"
+
+    # Dezelfde zoekopdracht nogmaals: nu WEL uit het geheugen.
+    execute_tool("find_ticket_links", {"url": "https://x.nl/", "query": "arsenal"}, ctx)
+    assert teller["n"] == 2
+
+
+def test_find_banner_wordt_onthouden_binnen_een_gesprek(session, cipher) -> None:
+    from app.repositories import conversations as conv_repo
+
+    tenant = _tenant(session)
+    conversation = conv_repo.create_conversation(session, tenant_id=tenant.id, channel="web")
+    http, teller = _tellende_http(
+        lambda r: httpx.Response(200, headers={"content-type": "image/png"}, content=b"x")
+        if "/cdn/shop/" in r.url.path
+        else httpx.Response(200, text=_COLLECTIE_HTML)
+    )
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        conversation_id=conversation.id, http_client=http,
+    )
+    eerste = execute_tool("find_banner", {"url": "https://shop.test/collections/ringen"}, ctx)
+    tweede = execute_tool("find_banner", {"url": "https://shop.test/collections/ringen"}, ctx)
+    assert tweede["from_memory"] is True
+    assert tweede["banner_url"] == eerste["banner_url"]
+    # De pagina + de bereikbaarheidscheck van de bannerfoto gebeurden maar één keer.
+    aantal_na_eerste = teller["n"]
+    execute_tool("find_banner", {"url": "https://shop.test/collections/ringen"}, ctx)
+    assert teller["n"] == aantal_na_eerste
+
+
+def test_find_page_images_wordt_onthouden_binnen_een_gesprek(session, cipher) -> None:
+    from app.repositories import conversations as conv_repo
+
+    tenant = _tenant(session)
+    conversation = conv_repo.create_conversation(session, tenant_id=tenant.id, channel="web")
+    http, teller = _tellende_http(_pagina_beeld_http_handler)
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        conversation_id=conversation.id, http_client=http,
+    )
+    execute_tool("find_page_images", {"url": "https://shop.test/"}, ctx)
+    aantal_na_eerste = teller["n"]  # pagina + de meet-verzoeken per foto
+    execute_tool("find_page_images", {"url": "https://shop.test/"}, ctx)
+    assert teller["n"] == aantal_na_eerste, "de tweede aanroep had niets opnieuw mogen ophalen"
+
+
+def test_zonder_gesprek_wordt_er_wel_gewoon_elke_keer_opgehaald(session, cipher) -> None:
+    # Geen conversation_id (bv. losse API-aanroep): geen werkgeheugen, altijd vers.
+    tenant = _tenant(session)
+    http, teller = _tellende_http(lambda r: httpx.Response(200, text="<html>shop</html>"))
+    llm = FakeLLM({"products": []})
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher, llm=llm, http_client=http)
+    execute_tool("find_products", {"url": CONFIG["website_url"]}, ctx)
+    execute_tool("find_products", {"url": CONFIG["website_url"]}, ctx)
+    assert teller["n"] == 2
+
+
+def test_geheugen_verzint_geen_prijs_de_draft_valideert_alsnog_live(session, cipher) -> None:
+    """De garantie blijft intact: al is een product 'onthouden', het concept
+    controleert prijs en bereikbaarheid van de gekozen link altijd opnieuw."""
+    from app.repositories import conversations as conv_repo
+
+    tenant = _tenant(session)
+    conversation = conv_repo.create_conversation(session, tenant_id=tenant.id, channel="web")
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+
+    bereikbaar = {"waarde": True}
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        if not bereikbaar["waarde"]:
+            return httpx.Response(404, text="weg")
+        return httpx.Response(200, text="<html>x</html>")
+
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, conversation_id=conversation.id,
+        llm=FakeLLM({"price": None}), brevo_factory=lambda key: FakeBrevo(key),
+        http_client=_http(handler), preview_holder=[],
+    )
+    payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
+    payload["items"] = [{"title": "Kaart", "url": "https://x.nl/kaart"}]
+    execute_tool("preview_newsletter", payload, ctx)  # bouwt geen tool_memory op voor items
+
+    # De link is inmiddels weg op de site; het concept moet dat nog steeds live merken.
+    bereikbaar["waarde"] = False
+    with pytest.raises(ValueError, match="404"):
+        execute_tool("create_newsletter_draft", {**payload, "confirmed": True}, ctx)

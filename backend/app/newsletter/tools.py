@@ -55,6 +55,7 @@ from app.newsletter.css_inlining import inline_css
 from app.newsletter.esp_tags import localize_esp_tags
 from app.newsletter.mail_checks import advisory_messages, blocking_messages, check_newsletter
 from app.newsletter.page_images import banner_candidates, best_product_image
+from app.newsletter.tool_memory import with_memory
 from app.newsletter.utm import add_utm, utm_params
 from app.services.activecampaign import ActiveCampaignClient, ActiveCampaignError
 from app.services.brevo import BrevoClient, BrevoError
@@ -389,13 +390,18 @@ def _tool_find_ticket_links(ctx: ToolContext, tool_input: dict) -> dict:
     url = tool_input.get("url") or brand.get("matches_url") or brand.get("website_url")
     if not url:
         raise ValueError("geen URL om ticket-links te zoeken")
-    status, html = extraction.fetch_page(url, ctx.http_client)
-    if status != 200:
-        raise ValueError(extraction.fetch_probleem(url, status))
-    links = extraction.extract_links(
-        _require_llm(ctx), html, source_url=url, query=tool_input["query"]
+    query = tool_input["query"]
+
+    def _haal_op() -> dict:
+        status, html = extraction.fetch_page(url, ctx.http_client)
+        if status != 200:
+            raise ValueError(extraction.fetch_probleem(url, status))
+        links = extraction.extract_links(_require_llm(ctx), html, source_url=url, query=query)
+        return {"source_url": url, "count": len(links), "links": links}
+
+    return with_memory(
+        ctx.session, ctx.conversation_id, "find_ticket_links", {"url": url, "query": query}, _haal_op
     )
-    return {"source_url": url, "count": len(links), "links": links}
 
 
 def _tool_find_products(ctx: ToolContext, tool_input: dict) -> dict:
@@ -404,17 +410,21 @@ def _tool_find_products(ctx: ToolContext, tool_input: dict) -> dict:
     url = tool_input.get("url") or brand.get("website_url")
     if not url:
         raise ValueError("geen URL om producten te zoeken; geef een collectie-URL mee")
-    status, html = extraction.fetch_page(url, ctx.http_client)
-    if status != 200:
-        raise ValueError(extraction.fetch_probleem(url, status))
-    products = extraction.extract_products(_require_llm(ctx), html, source_url=url)
-    return {
-        "source_url": url,
-        "count": len(products),
-        "products": products,
-        "message": "Toon de producten en laat de gebruiker KIEZEN. Gebruik url, prijs en "
-        "image_url exact zoals hier teruggegeven; verzin niets.",
-    }
+
+    def _haal_op() -> dict:
+        status, html = extraction.fetch_page(url, ctx.http_client)
+        if status != 200:
+            raise ValueError(extraction.fetch_probleem(url, status))
+        products = extraction.extract_products(_require_llm(ctx), html, source_url=url)
+        return {
+            "source_url": url,
+            "count": len(products),
+            "products": products,
+            "message": "Toon de producten en laat de gebruiker KIEZEN. Gebruik url, prijs en "
+            "image_url exact zoals hier teruggegeven; verzin niets.",
+        }
+
+    return with_memory(ctx.session, ctx.conversation_id, "find_products", {"url": url}, _haal_op)
 
 
 def _require_image(ctx: ToolContext, url: str) -> None:
@@ -512,22 +522,26 @@ def _tool_find_page_images(ctx: ToolContext, tool_input: dict) -> dict:
     url = tool_input.get("url") or brand.get("website_url")
     if not url:
         raise ValueError("geen URL om foto's te zoeken; geef een pagina-URL mee")
-    status, html = extraction.fetch_page(url, ctx.http_client)
-    if status != 200:
-        raise ValueError(extraction.fetch_probleem(url, status))
-    banners = _page_banner_candidates(ctx, url, html, limit=8)
-    return {
-        "source_url": url,
-        "count": len(banners),
-        "images": banners,
-        "message": (
-            "Echte foto's van deze pagina (logo's, iconen en pixels zijn er al uit; "
-            "formaat is gemeten). Toon ze met naam en formaat en laat de gebruiker "
-            "KIEZEN; een gekozen banner_url mag letterlijk als header_image_url."
-            if banners else
-            f"Op {url} staat geen foto die liggend en minimaal 600px breed is."
-        ),
-    }
+
+    def _haal_op() -> dict:
+        status, html = extraction.fetch_page(url, ctx.http_client)
+        if status != 200:
+            raise ValueError(extraction.fetch_probleem(url, status))
+        banners = _page_banner_candidates(ctx, url, html, limit=8)
+        return {
+            "source_url": url,
+            "count": len(banners),
+            "images": banners,
+            "message": (
+                "Echte foto's van deze pagina (logo's, iconen en pixels zijn er al uit; "
+                "formaat is gemeten). Toon ze met naam en formaat en laat de gebruiker "
+                "KIEZEN; een gekozen banner_url mag letterlijk als header_image_url."
+                if banners else
+                f"Op {url} staat geen foto die liggend en minimaal 600px breed is."
+            ),
+        }
+
+    return with_memory(ctx.session, ctx.conversation_id, "find_page_images", {"url": url}, _haal_op)
 
 
 def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
@@ -543,52 +557,58 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
     url = tool_input.get("url") or brand.get("website_url")
     if not url:
         raise ValueError("geen URL om een banner te zoeken; geef een pagina-URL mee")
-    status, html = extraction.fetch_page(url, ctx.http_client)
-    if status != 200:
-        raise ValueError(extraction.fetch_probleem(url, status))
     crop = brand.get("banner_crop") or "landscape"
-    og_image = extraction.extract_og_image(html)
-    if not og_image:
-        candidates = _collection_banner_candidates(ctx, url, html, crop)
-        # Geen og:image en geen collectiebanners: dan de foto's op de pagina zelf,
-        # gemeten op formaat zodat alleen liggend beeld van bannerbreedte overblijft.
-        candidates += _page_banner_candidates(ctx, url, html)
-        if candidates:
+
+    def _haal_op() -> dict:
+        status, html = extraction.fetch_page(url, ctx.http_client)
+        if status != 200:
+            raise ValueError(extraction.fetch_probleem(url, status))
+        og_image = extraction.extract_og_image(html)
+        if not og_image:
+            candidates = _collection_banner_candidates(ctx, url, html, crop)
+            # Geen og:image en geen collectiebanners: dan de foto's op de pagina zelf,
+            # gemeten op formaat zodat alleen liggend beeld van bannerbreedte overblijft.
+            candidates += _page_banner_candidates(ctx, url, html)
+            if candidates:
+                return {
+                    "source_url": url,
+                    "banner_url": None,
+                    "candidates": candidates,
+                    "message": "Deze pagina heeft geen eigen og:image-banner, maar er staat "
+                    "wel bruikbaar beeld op de site. Toon de opties met naam en formaat en "
+                    "laat de gebruiker KIEZEN; gebruik daarna de gekozen banner_url letterlijk.",
+                }
             return {
                 "source_url": url,
                 "banner_url": None,
-                "candidates": candidates,
-                "message": "Deze pagina heeft geen eigen og:image-banner, maar er staat "
-                "wel bruikbaar beeld op de site. Toon de opties met naam en formaat en "
-                "laat de gebruiker KIEZEN; gebruik daarna de gekozen banner_url letterlijk.",
+                "message": f"Op {url} staat geen enkele foto die als banner kan dienen "
+                "(liggend, minimaal 600px breed). Probeer find_page_images op een andere "
+                "pagina van de site, kies een foto uit list_images of vraag de gebruiker "
+                "om er een te uploaden.",
             }
+        banner = extraction.normalize_banner_url(og_image, crop=crop)
+        try:
+            _require_image(ctx, banner)
+        except ValueError:
+            if banner == og_image:
+                raise
+            # De bijgesneden variant werkt niet op deze CDN: val terug op het origineel,
+            # dat moet dan wel zelf een bereikbare afbeelding zijn.
+            _require_image(ctx, og_image)
+            banner = og_image
+        alternatieven = _page_banner_candidates(ctx, url, html, exclude=(og_image, banner), limit=4)
         return {
             "source_url": url,
-            "banner_url": None,
-            "message": f"Op {url} staat geen enkele foto die als banner kan dienen "
-            "(liggend, minimaal 600px breed). Probeer find_page_images op een andere "
-            "pagina van de site, kies een foto uit list_images of vraag de gebruiker "
-            "om er een te uploaden.",
+            "banner_url": banner,
+            "alternatives": alternatieven,
+            "message": "Echte banner van de site (bereikbaarheid gecheckt). Geef deze "
+            "volledige URL door als header_image_url nadat de gebruiker akkoord is; "
+            "'alternatives' zijn andere foto's van dezelfde pagina om eventueel voor te leggen.",
         }
-    banner = extraction.normalize_banner_url(og_image, crop=crop)
-    try:
-        _require_image(ctx, banner)
-    except ValueError:
-        if banner == og_image:
-            raise
-        # De bijgesneden variant werkt niet op deze CDN: val terug op het origineel,
-        # dat moet dan wel zelf een bereikbare afbeelding zijn.
-        _require_image(ctx, og_image)
-        banner = og_image
-    alternatieven = _page_banner_candidates(ctx, url, html, exclude=(og_image, banner), limit=4)
-    return {
-        "source_url": url,
-        "banner_url": banner,
-        "alternatives": alternatieven,
-        "message": "Echte banner van de site (bereikbaarheid gecheckt). Geef deze "
-        "volledige URL door als header_image_url nadat de gebruiker akkoord is; "
-        "'alternatives' zijn andere foto's van dezelfde pagina om eventueel voor te leggen.",
-    }
+
+    return with_memory(
+        ctx.session, ctx.conversation_id, "find_banner", {"url": url, "crop": crop}, _haal_op
+    )
 
 
 def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:
@@ -596,11 +616,15 @@ def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:
     url = tool_input.get("url") or brand.get("matches_url") or brand.get("website_url")
     if not url:
         raise ValueError("geen URL om wedstrijden te zoeken; zet 'matches_url' in de brand-config")
-    status, html = extraction.fetch_page(url, ctx.http_client)
-    if status != 200:
-        raise ValueError(extraction.fetch_probleem(url, status))
-    matches = extraction.extract_matches(_require_llm(ctx), html, source_url=url)
-    return {"source_url": url, "count": len(matches), "matches": matches}
+
+    def _haal_op() -> dict:
+        status, html = extraction.fetch_page(url, ctx.http_client)
+        if status != 200:
+            raise ValueError(extraction.fetch_probleem(url, status))
+        matches = extraction.extract_matches(_require_llm(ctx), html, source_url=url)
+        return {"source_url": url, "count": len(matches), "matches": matches}
+
+    return with_memory(ctx.session, ctx.conversation_id, "find_matches", {"url": url}, _haal_op)
 
 
 def _norm(s: str) -> str:
