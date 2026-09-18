@@ -3,6 +3,9 @@
 Eén template per tenant kan de standaard zijn. Het zetten van een standaard (of
 het aanmaken van de eerste template) maakt de overige automatisch niet-standaard,
 zodat er nooit twee standaarden tegelijk zijn.
+
+Elke layout-wijziging schrijft een versie weg (zie `template_versions`), zodat een
+verkeerde opslag of tool-proof-run terug te draaien is.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Template
 from app.newsletter.styles import sanitize_styles
+from app.repositories import template_versions as versions_repo
 
 
 def list_templates(session: Session, tenant_id: uuid.UUID) -> list[Template]:
@@ -56,6 +60,8 @@ def create_template(
     html: str,
     styles: dict | None = None,
     is_default: bool = False,
+    source: str = "handmatig",
+    actor: str | None = None,
 ) -> Template:
     # De allereerste template van een tenant wordt sowieso de standaard.
     has_any = session.scalars(
@@ -74,6 +80,7 @@ def create_template(
     session.add(template)
     session.commit()
     session.refresh(template)
+    versions_repo.record_version(session, template, source=source, actor=actor)
     return template
 
 
@@ -84,6 +91,8 @@ def update_template(
     name: str | None = None,
     html: str | None = None,
     styles: dict | None = None,
+    source: str = "handmatig",
+    actor: str | None = None,
 ) -> Template | None:
     template = session.get(Template, template_id)
     if template is None:
@@ -96,6 +105,8 @@ def update_template(
         template.styles = sanitize_styles(styles)
     session.commit()
     session.refresh(template)
+    if html is not None:
+        versions_repo.record_version(session, template, source=source, actor=actor)
     return template
 
 

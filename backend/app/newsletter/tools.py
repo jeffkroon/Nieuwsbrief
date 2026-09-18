@@ -185,7 +185,8 @@ TOOL_DEFINITIONS = [
     {
         "name": "create_newsletter_draft",
         "description": "Render de nieuwsbrief en maak hem aan als CONCEPT bij het "
-        "verzendplatform van dit bedrijf (Brevo of Klaviyo). Verstuurt niets. Gebruik "
+        "verzendplatform van dit bedrijf (Brevo, Klaviyo of ActiveCampaign). Verstuurt "
+        "niets. Gebruik "
         "alleen echte inhoud (find_matches/find_products/find_ticket_links); links en "
         "prijzen worden live gevalideerd.",
         "input_schema": {
