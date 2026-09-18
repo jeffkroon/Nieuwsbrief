@@ -111,3 +111,17 @@ def get_anthropic_client():
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY ontbreekt in .env")
     return anthropic.Anthropic(api_key=key)
+
+
+def get_session_factory_dep():
+    """De sessiefabriek zelf, voor werk dat buiten de request-levensduur doorloopt.
+
+    De streamende chat-beurt draait in een aparte thread. Die mag NIET de
+    request-sessie gebruiken: verbreekt de gebruiker de verbinding, dan ruimt
+    FastAPI die sessie op terwijl de thread er nog in schrijft, en een SQLAlchemy-
+    sessie is niet thread-safe. Met een eigen fabriek opent de thread zijn eigen
+    sessie en sluit die zelf. Tests vervangen deze dependency.
+    """
+    from app.db.session import get_session_factory
+
+    return get_session_factory()

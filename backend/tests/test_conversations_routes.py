@@ -369,3 +369,55 @@ def test_gesprekkenlijst_is_per_bedrijf_gescheiden(client, session, fake_anthrop
 
 def test_onbekend_gesprek_geeft_404(client, session) -> None:
     assert client.get(f"/conversations/{uuid.uuid4()}").status_code == 404
+
+
+def test_stream_gebruikt_een_eigen_sessie_voor_de_beurt(client, session, fake_anthropic) -> None:
+    """De beurt draait in een thread die doorloopt nadat de request-sessie al
+    opgeruimd kan zijn; hij moet daarom zijn eigen sessie openen."""
+    from app.deps import get_session_factory_dep
+    from app.main import app
+
+    gebruikt = []
+    origineel = app.dependency_overrides[get_session_factory_dep]
+
+    def _tellende_factory():
+        maker = origineel()
+
+        def _open():
+            gebruikt.append(1)
+            return maker()
+
+        return _open
+
+    app.dependency_overrides[get_session_factory_dep] = _tellende_factory
+    try:
+        tenant = _tenant(session)
+        fake_anthropic([FakeResponse([FakeText("klaar")], "end_turn")])
+        resp = client.post(
+            "/conversations/stream", json={"tenant_id": str(tenant.id), "message": "hoi"}
+        )
+        assert resp.status_code == 200
+        assert _sse_events(resp.text)[-1]["type"] == "done"
+        assert gebruikt, "de beurt heeft geen eigen sessie geopend"
+    finally:
+        app.dependency_overrides[get_session_factory_dep] = origineel
+
+
+def test_te_veel_gelijktijdige_beurten_geeft_een_nette_melding(client, session) -> None:
+    """Elke beurt bezet een thread en een DB-connectie; zonder grens trekt een
+    handvol verlaten chats de pool leeg."""
+    from app.routes import conversations as route
+
+    tenant = _tenant(session)
+    bezet = []
+    try:
+        while route._beurt_plaatsen.acquire(blocking=False):
+            bezet.append(1)
+        resp = client.post(
+            "/conversations/stream", json={"tenant_id": str(tenant.id), "message": "hoi"}
+        )
+        assert resp.status_code == 503
+        assert "te veel gesprekken" in resp.json()["detail"]
+    finally:
+        for _ in bezet:
+            route._beurt_plaatsen.release()

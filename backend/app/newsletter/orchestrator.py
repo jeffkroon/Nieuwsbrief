@@ -152,7 +152,10 @@ def run_agent_turn(
 
         if response.stop_reason == "tool_use":
             convo.append(
-                {"role": "user", "content": _run_tools(response.content, dispatch, on_event)}
+                {
+                    "role": "user",
+                    "content": _run_tools(response.content, dispatch, on_event, should_stop),
+                }
             )
             continue
         if response.stop_reason == "pause_turn":
@@ -170,13 +173,23 @@ def run_agent_turn(
 
 
 def _run_tools(
-    content: list, dispatch: ToolDispatch, on_event: EventSink | None = None
+    content: list,
+    dispatch: ToolDispatch,
+    on_event: EventSink | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> list[dict]:
-    """Voer alle tool_use-blokken uit en geef de tool_result-blokken terug."""
+    """Voer alle tool_use-blokken uit en geef de tool_result-blokken terug.
+
+    Voor elke tool wordt gekeken of de beurt is afgebroken: een pagina ophalen of
+    prijzen controleren duurt seconden, en dat werk hoeft niet meer gedaan te
+    worden als de gebruiker al weg is.
+    """
     results: list[dict] = []
     for block in content:
         if getattr(block, "type", None) != "tool_use":
             continue
+        if should_stop is not None and should_stop():
+            raise TurnCancelled("beurt afgebroken voor een tool-aanroep")
         tool_input = dict(block.input)
         try:
             output = dispatch(block.name, tool_input)
