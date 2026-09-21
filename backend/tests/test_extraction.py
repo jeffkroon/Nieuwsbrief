@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 
 import httpx
+import pytest
 
 from app.newsletter.extraction import (
     extract_links,
@@ -26,21 +27,23 @@ class FakeText:
 @dataclass
 class FakeResponse:
     content: list
+    stop_reason: str = "end_turn"
 
 
 @dataclass
 class FakeMessages:
     payload: dict
     calls: list = field(default_factory=list)
+    stop_reason: str = "end_turn"
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return FakeResponse([FakeText(json.dumps(self.payload))])
+        return FakeResponse([FakeText(json.dumps(self.payload))], stop_reason=self.stop_reason)
 
 
 class FakeLLM:
-    def __init__(self, payload: dict) -> None:
-        self.messages = FakeMessages(payload=payload)
+    def __init__(self, payload: dict, *, stop_reason: str = "end_turn") -> None:
+        self.messages = FakeMessages(payload=payload, stop_reason=stop_reason)
 
 
 def test_html_to_text_makes_links_absolute_and_strips_tags() -> None:
@@ -230,3 +233,35 @@ def test_html_to_text_meerdere_producten_met_geneste_fotos_blijven_gescheiden() 
     assert "AFBEELDING(https://shop.nl/b.png)" in tekst
     # Volgorde blijft behouden, dus A's foto staat vóór B's tekst en niet erna.
     assert tekst.index("a.png") < tekst.index("Product A") < tekst.index("b.png")
+
+
+def test_extract_products_afgekapt_antwoord_geeft_duidelijke_fout_geen_stille_nul() -> None:
+    """Bugfix: een pagina met veel producten en lange foto-URL's kan het JSON-antwoord
+    laten afknappen op max_tokens. _parse_json las dat voorheen stil als "0 producten",
+    een valse ontkenning terwijl er wel degelijk producten op de pagina staan. Dit moet
+    nu een duidelijke fout zijn i.p.v. een onwaar "geen producten gevonden"."""
+    from app.newsletter.extraction import extract_products
+
+    llm = FakeLLM({"products": [{"name": "x"}]}, stop_reason="max_tokens")
+    with pytest.raises(ValueError, match="niet alle producten"):
+        extract_products(llm, "<html>veel producten</html>", source_url="https://shop.nl/collections/all")
+
+
+def test_extract_matches_afgekapt_antwoord_geeft_duidelijke_fout() -> None:
+    from app.newsletter.extraction import extract_matches
+
+    llm = FakeLLM({"matches": [{"home": "x"}]}, stop_reason="max_tokens")
+    with pytest.raises(ValueError, match="niet alle wedstrijden"):
+        extract_matches(llm, "<html>veel wedstrijden</html>", source_url="https://club.nl/tickets/")
+
+
+def test_extract_products_normaal_antwoord_faalt_niet_op_de_check() -> None:
+    from app.newsletter.extraction import extract_products
+
+    payload = {"products": [{
+        "name": "Ring", "url": "https://shop.nl/products/ring",
+        "price": "€ 49,95", "image_url": "https://cdn.shop.nl/ring.png",
+    }]}
+    llm = FakeLLM(payload, stop_reason="end_turn")
+    products = extract_products(llm, "<html>x</html>", source_url="https://shop.nl/collections/all")
+    assert products == payload["products"]
