@@ -189,6 +189,21 @@ def _parse_json(response) -> dict:
         return {}
 
 
+def _require_not_truncated(response, *, wat: str) -> None:
+    """Bewaakt tegen het stille-'0 resultaten'-lek: als het antwoord is afgekapt op
+    max_tokens, is een ongeldige/onvolledige JSON-string het gevolg, en _parse_json
+    leest dat dan stil als "geen resultaten" - een valse ontkenning die net zo
+    onbetrouwbaar is als iets verzinnen (zie newsletter-agent-principles). Een
+    pagina met veel producten/wedstrijden en lange foto-URL's kan het antwoord
+    laten afknappen; dat moet een duidelijke fout zijn, geen "0 gevonden".
+    """
+    if getattr(response, "stop_reason", None) == "max_tokens":
+        raise ValueError(
+            f"kon niet alle {wat} in één keer inlezen (pagina te groot/te veel "
+            "resultaten). Probeer een specifiekere sub-pagina of collectie."
+        )
+
+
 def normalize_price(value: str | None) -> str:
     if not value:
         return PRICE_ON_REQUEST
@@ -249,11 +264,12 @@ def extract_matches(llm, raw_html: str, *, source_url: str, model: str = EXTRACT
     text = html_to_text(raw_html, source_url)
     response = llm.messages.create(
         model=model,
-        max_tokens=4000,
+        max_tokens=8000,
         system=_MATCHES_SYSTEM,
         output_config={"format": {"type": "json_schema", "schema": _MATCHES_SCHEMA}},
         messages=[{"role": "user", "content": f"Bron-URL: {source_url}\n\nPagina-inhoud:\n{text}"}],
     )
+    _require_not_truncated(response, wat="wedstrijden")
     matches = _parse_json(response).get("matches", [])
     for m in matches:
         m["price"] = normalize_price(m.get("price"))
@@ -349,11 +365,12 @@ def extract_products(llm, raw_html: str, *, source_url: str, model: str = EXTRAC
     text = html_to_text(raw_html, source_url, keep_images=True)
     response = llm.messages.create(
         model=model,
-        max_tokens=4000,
+        max_tokens=8000,
         system=_PRODUCTS_SYSTEM,
         output_config={"format": {"type": "json_schema", "schema": _PRODUCTS_SCHEMA}},
         messages=[{"role": "user", "content": f"Bron-URL: {source_url}\n\nPagina-inhoud:\n{text}"}],
     )
+    _require_not_truncated(response, wat="producten")
     return _parse_json(response).get("products", [])
 
 
