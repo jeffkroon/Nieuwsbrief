@@ -179,7 +179,20 @@ class KlaviyoClient:
         if status != DRAFT:
             raise KlaviyoError(f"campagne {campaign_id} is geen concept meer (status {status})")
         message_id = self._message_id(campaign_id)
+        # Eerst de HTML: dat is de stap die niet gedocumenteerd is. Mislukt die, dan
+        # is er nog niets aan de campagne veranderd (geen half bijgewerkt concept).
         old_template = self._template_of(message_id)
+        template_id = self._create_template(f"{subject} (bijgewerkt)", html)
+        try:
+            self._assign_template(message_id, template_id)
+        finally:
+            self._delete_silent(f"/api/templates/{template_id}")
+        new_template = self._template_of(message_id)
+        if not new_template or new_template == old_template:
+            raise KlaviyoError(
+                "Klaviyo heeft de nieuwe HTML niet aan het concept gekoppeld; "
+                "het concept is ongewijzigd gebleven"
+            )
         content: dict[str, Any] = {
             "subject": subject,
             "from_email": sender_email,
@@ -196,17 +209,6 @@ class KlaviyoClient:
             }}},
             expect=(200,),
         )
-        template_id = self._create_template(f"{subject} (bijgewerkt)", html)
-        try:
-            self._assign_template(message_id, template_id)
-        finally:
-            self._delete_silent(f"/api/templates/{template_id}")
-        new_template = self._template_of(message_id)
-        if not new_template or new_template == old_template:
-            raise KlaviyoError(
-                "Klaviyo heeft de nieuwe HTML niet aan het concept gekoppeld; "
-                "onderwerp en afzender zijn wel bijgewerkt"
-            )
 
     def get_results(self, campaign_id: str) -> CampaignResults:
         """Status en resultaten via het values-report (laatste 12 maanden)."""

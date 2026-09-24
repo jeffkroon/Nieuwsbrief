@@ -132,10 +132,13 @@ def test_klaviyo_werkt_onderwerp_en_html_bij() -> None:
 
 def test_klaviyo_meldt_het_als_de_html_niet_is_vervangen() -> None:
     """De re-assign is niet gedocumenteerd: blijft de oude template staan, dan hard falen."""
-    with pytest.raises(KlaviyoError, match="niet aan het concept gekoppeld"):
-        _klaviyo("Draft", ["T-OUD", "T-OUD"], []).update_draft(
+    log: list = []
+    with pytest.raises(KlaviyoError, match="ongewijzigd"):
+        _klaviyo("Draft", ["T-OUD", "T-OUD"], log).update_draft(
             "C1", subject="x", html=HTML, **SENDER
         )
+    # Onderwerp/afzender zijn dan NIET aangepast: geen half bijgewerkt concept.
+    assert not any(r.method == "PATCH" for r in log)
 
 
 def test_klaviyo_weigert_bijwerken_als_campagne_ingepland_is() -> None:
@@ -219,3 +222,16 @@ def test_activecampaign_resultaten_ten_opzichte_van_verzonden() -> None:
     assert res.status == SENT and res.sent == 200 and res.bounces == 5
     assert res.open_rate == 0.25 and res.click_rate == 0.05
     assert res.delivered is None  # AC geeft dit niet; niet verzinnen
+
+
+def test_platform_van_de_campagne_is_leidend_na_een_wissel() -> None:
+    """Klaviyo en ActiveCampaign delen esp_campaign_ref; het vastgelegde platform beslist."""
+    from app.db.models import Newsletter
+    from app.services.esp_connection import belongs_to
+
+    klaviyo_nb = Newsletter(esp_campaign_ref="01HX", esp="klaviyo")
+    assert belongs_to(klaviyo_nb, "klaviyo")
+    assert not belongs_to(klaviyo_nb, "activecampaign")
+    oud = Newsletter(esp_campaign_ref="12")  # van vóór mail_015, zonder platform
+    assert belongs_to(oud, "activecampaign") and not belongs_to(oud, "brevo")
+    assert not belongs_to(Newsletter(), "brevo")

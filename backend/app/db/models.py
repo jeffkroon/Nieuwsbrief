@@ -219,6 +219,8 @@ class Newsletter(Base):
     brevo_campaign_id: Mapped[int | None] = mapped_column(Integer)
     # Campagne-referentie voor niet-Brevo ESP's (Klaviyo-ids zijn strings).
     esp_campaign_ref: Mapped[str | None] = mapped_column(Text)
+    # Platform van de campagne (mail_015): Klaviyo en ActiveCampaign delen esp_campaign_ref.
+    esp: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="draft")
     error: Mapped[str | None] = mapped_column(Text)
     # Resultaten uit het verzendplatform (mail_014); NULL = nog niet opgehaald.

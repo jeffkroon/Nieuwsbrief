@@ -186,3 +186,20 @@ def test_resultaten_van_ander_bedrijf_niet_op_te_vragen(client, session, cipher,
     nb = repo.create_newsletter(session, tenant_id=ander.id, subject="S", html="", brevo_campaign_id=5)
     nep_brevo(_FakeResultsBrevo())
     assert client.post(f"/tenants/{eigen.id}/newsletters/{nb.id}/results").status_code == 404
+
+
+def test_resultaten_ophalen_is_per_bedrijf_begrensd(client, session, cipher, nep_brevo) -> None:
+    from app.routes.newsletters import RESULTS_PER_MINUTE
+    from app.services.esp import CampaignResults
+
+    tenant = _tenant(session, esp="brevo")
+    _met_key(session, cipher, tenant)
+    nep_brevo(_FakeResultsBrevo(CampaignResults(status="draft")))
+    codes = []
+    for i in range(RESULTS_PER_MINUTE + 1):
+        nb = repo.create_newsletter(
+            session, tenant_id=tenant.id, subject=f"S{i}", html="<p/>", brevo_campaign_id=i + 1,
+            status="ready",
+        )
+        codes.append(client.post(f"/tenants/{tenant.id}/newsletters/{nb.id}/results").status_code)
+    assert codes[:-1] == [200] * RESULTS_PER_MINUTE and codes[-1] == 429

@@ -20,12 +20,19 @@ from sqlalchemy.orm import Session
 
 from app.deps import get_cipher, get_esp_factories, get_session, require_tenant_access
 from app.newsletter.esp_links import campaign_link
+from app.ratelimit import SlidingWindowRateLimiter
 from app.repositories import newsletters as repo
 from app.repositories import tenants as tenants_repo
 from app.schemas import NewsletterResults, NewsletterSummary
 from app.services import campaign_results
 from app.services.crypto import SecretCipher
 from app.services.esp_connection import EspFactories
+
+# Per bedrijf, bovenop de afkoeltijd per nieuwsbrief: voorkomt dat iemand door
+# alle nieuwsbrieven heen klikt en zo het dagquotum van het platform opmaakt
+# (Klaviyo: 225 rapporten per dag).
+RESULTS_PER_MINUTE = 10
+_results_limiter = SlidingWindowRateLimiter(max_hits=RESULTS_PER_MINUTE, window_seconds=60)
 
 router = APIRouter(
     prefix="/tenants/{tenant_id}",
@@ -97,6 +104,11 @@ def refresh_newsletter_results(
     """Open- en klikcijfers uit het verzendplatform ophalen (alleen-lezen) en bewaren."""
     tenant = _require_tenant(session, tenant_id)
     nieuwsbrief = _require_newsletter(session, tenant_id, newsletter_id)
+    if not _results_limiter.allow(str(tenant_id)):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Even rustig aan: probeer het over een minuut opnieuw.",
+        )
     try:
         uitkomst = campaign_results.refresh_results(
             session, cipher, tenant, nieuwsbrief, factories=factories

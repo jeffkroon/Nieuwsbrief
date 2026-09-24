@@ -101,6 +101,9 @@ def _reset_chat_limiter():
     from app.routes import conversations as _conv
 
     _conv._chat_limiter.reset()
+    from app.routes import newsletters as _nl
+
+    _nl._results_limiter.reset()
     _auth._login_limiter.reset()
     from app.newsletter.tool_context import validation_cache
 

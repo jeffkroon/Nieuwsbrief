@@ -1495,6 +1495,7 @@ def test_tweede_concept_in_hetzelfde_gesprek_werkt_het_eerste_bij(session, ciphe
     assert "bijgewerkt" in tweede["message"]
     rij = session.get(Newsletter, uuid.UUID(eerste["newsletter_id"]))
     assert rij.subject == "Betere onderwerpregel"
+    assert rij.esp == "brevo"
     assert session.query(Newsletter).filter_by(tenant_id=tenant.id).count() == 1
 
 

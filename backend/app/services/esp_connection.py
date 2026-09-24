@@ -101,7 +101,13 @@ def campaign_ref(newsletter: Newsletter) -> Any:
 
 
 def belongs_to(newsletter: Newsletter, esp: str) -> bool:
-    """Hoort deze campagne bij het huidige platform? (bedrijf kan van ESP wisselen)"""
+    """Hoort deze campagne bij het huidige platform? (bedrijf kan van ESP wisselen)
+
+    Het vastgelegde platform (kolom esp) is leidend. Alleen voor rijen van vóór
+    mail_015 zonder waarde vallen we terug op welke id-kolom gevuld is.
+    """
     if campaign_ref(newsletter) is None:
         return False
+    if newsletter.esp:
+        return newsletter.esp == esp
     return (newsletter.brevo_campaign_id is not None) == (esp == "brevo")

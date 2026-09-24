@@ -144,6 +144,7 @@ def _create(ctx: ToolContext, conn: EspConnection, tenant, brand, content, html,
         input=tool_input,
         brevo_campaign_id=None if use_text_ref else draft.campaign_id,
         esp_campaign_ref=str(draft.campaign_id) if use_text_ref else None,
+        esp=conn.esp,
         status="ready",
     )
 
