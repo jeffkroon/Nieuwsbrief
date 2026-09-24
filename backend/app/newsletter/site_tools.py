@@ -13,7 +13,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from app.newsletter import extraction
+from app.newsletter import banner_check, extraction
 from app.newsletter.page_images import banner_candidates
 from app.newsletter.tool_context import ToolContext, load_tenant, require_llm
 from app.newsletter.tool_memory import with_memory
@@ -162,12 +162,21 @@ def _collection_banner_candidates(
     return candidates
 
 
+# Hoeveel kandidaten per aanroep een beschrijving krijgen (één Haiku-call per foto).
+_DESCRIBE_LIMIT = 6
+
+
 def _page_banner_candidates(
     ctx: ToolContext, url: str, html: str, *, exclude: tuple = (), limit: int = 6
 ) -> list[dict]:
-    """Foto's van de pagina zelf die als banner kunnen, gemeten en gefilterd (code)."""
-    return [
-        {
+    """Foto's van de pagina zelf die als banner kunnen: gemeten, egaal beeld eruit,
+    en met een beschrijving van wat erop staat (zodat 'zilver' geen gouden foto krijgt)."""
+    uitgesloten = set(exclude)
+    resultaat: list[dict] = []
+    for beeld in banner_candidates(html, url, client=ctx.http_client, limit=limit + len(exclude) + 2):
+        if beeld.url in uitgesloten or banner_check.looks_blank(beeld.url, ctx.http_client):
+            continue
+        kandidaat = {
             "name": beeld.label(),
             "page_url": url,
             "banner_url": beeld.url,
@@ -175,9 +184,20 @@ def _page_banner_candidates(
             "height": beeld.height,
             "source": beeld.source,
         }
-        for beeld in banner_candidates(html, url, client=ctx.http_client, limit=limit + len(exclude))
-        if beeld.url not in exclude
-    ][:limit]
+        if beeld.cropped:
+            kandidaat["bijgesneden"] = (
+                "vierkante/staande foto, door de webshop liggend bijgesneden uit het midden; "
+                "vallen er hoofden of het onderwerp weg, gebruik dan banner_url_bovenkant"
+            )
+            kandidaat["banner_url_bovenkant"] = beeld.url.replace("crop=center", "crop=top")
+        if len(resultaat) < _DESCRIBE_LIMIT:
+            beschrijving = banner_check.describe(ctx.llm, beeld.url, ctx.http_client)
+            if beschrijving:
+                kandidaat["beschrijving"] = beschrijving
+        resultaat.append(kandidaat)
+        if len(resultaat) >= limit:
+            break
+    return resultaat
 
 
 def _tool_find_page_images(ctx: ToolContext, tool_input: dict) -> dict:
@@ -194,9 +214,11 @@ def _tool_find_page_images(ctx: ToolContext, tool_input: dict) -> dict:
         banners = _page_banner_candidates(ctx, url, html, limit=8)
         if banners:
             bericht = (
-                "Echte foto's van deze pagina (logo's, iconen en pixels zijn er al uit; "
-                "formaat is gemeten). Toon ze met naam en formaat en laat de gebruiker "
-                "KIEZEN; een gekozen banner_url mag letterlijk als header_image_url."
+                "Echte foto's van deze pagina (logo's, iconen, videoframes en egale beelden "
+                "zijn er al uit; formaat is gemeten). 'beschrijving' zegt wat er echt op "
+                "staat: kies alleen een foto die past bij het thema (zilver is geen goud). "
+                "Toon de beste opties met die beschrijving en laat de gebruiker KIEZEN; een "
+                "gekozen banner_url mag letterlijk als header_image_url."
             )
         else:
             # Geen LIGGEND beeld gevonden; dat is normaal bij een productpagina (die foto's
@@ -276,13 +298,24 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
             _require_image(ctx, og_image)
             banner = og_image
         alternatieven = _page_banner_candidates(ctx, url, html, exclude=(og_image, banner), limit=4)
+        if banner_check.looks_blank(banner, ctx.http_client):
+            return {
+                "source_url": url,
+                "banner_url": None,
+                "candidates": alternatieven,
+                "message": "De eigen banner van deze pagina is (bijna) egaal, bv. een zwart "
+                "videoframe, en valt daarom af. Kies uit 'candidates' of zoek met "
+                "find_page_images op een andere pagina (homepage, collectie- of productpagina).",
+            }
         return {
             "source_url": url,
             "banner_url": banner,
+            "beschrijving": banner_check.describe(ctx.llm, banner, ctx.http_client),
             "alternatives": alternatieven,
-            "message": "Echte banner van de site (bereikbaarheid gecheckt). Geef deze "
-            "volledige URL door als header_image_url nadat de gebruiker akkoord is; "
-            "'alternatives' zijn andere foto's van dezelfde pagina om eventueel voor te leggen.",
+            "message": "Echte banner van de site (bereikbaarheid gecheckt). 'beschrijving' "
+            "zegt wat erop staat: past die niet bij het thema, kies dan een alternatief of "
+            "zoek verder. Geef de gekozen volledige URL door als header_image_url nadat de "
+            "gebruiker akkoord is; 'alternatives' zijn andere foto's van dezelfde pagina.",
         }
 
     return with_memory(
