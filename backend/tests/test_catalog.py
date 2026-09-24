@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 
 from app.newsletter import catalog
@@ -59,9 +61,9 @@ def test_geen_shopify_geeft_none() -> None:
 
 
 def test_andere_sites_volgen_de_paginering_en_zijn_eerlijk_over_de_grens() -> None:
-    eerste = '<a href="/shop?page=2">2</a><a href="/shop?page=3">3</a><a href="/shop?page=9">9</a>'
+    eerste = '<a href="/shop?page=2">2</a><a href="/shop?page=3">3</a><a href="/shop?page=30">30</a>'
     urls = catalog.page_urls(eerste, f"{SHOP}/shop")
-    assert urls[0] == f"{SHOP}/shop?page=2" and urls[-1] == f"{SHOP}/shop?page=9" and len(urls) == 8
+    assert urls[0] == f"{SHOP}/shop?page=2" and urls[-1] == f"{SHOP}/shop?page=30" and len(urls) == 29
 
     opgehaald: list[str] = []
 
@@ -74,7 +76,7 @@ def test_andere_sites_volgen_de_paginering_en_zijn_eerlijk_over_de_grens() -> No
 
     cat = catalog.paged_catalog(f"{SHOP}/shop", eerste, fetch, extract)
     assert cat.pages_read == catalog.MAX_HTML_PAGES
-    assert cat.complete is False  # 9 pagina's, maar maximaal 5 gelezen: nooit "alles gezien"
+    assert cat.complete is False  # 30 pagina's, maar maximaal MAX_HTML_PAGES gelezen: nooit "alles gezien"
     assert len(opgehaald) == catalog.MAX_HTML_PAGES - 1
 
     klein = catalog.paged_catalog(f"{SHOP}/shop", '<a href="?page=2">2</a>', fetch, extract)
@@ -90,3 +92,44 @@ def test_varianten_met_gelijke_prijs_crashen_niet() -> None:
     uit = catalog._shopify_product(SHOP, product)
     assert uit["price"] == "€ 59,95"  # goedkoopste BESCHIKBARE variant
     assert uit["available"] is True and uit["image_url"] is None
+
+
+def _woo(aantal: int, *, rommel: bytes = b"") -> httpx.Client:
+    producten = [
+        {"name": f"Gateway &amp; Sensor {i}", "permalink": f"{SHOP}/en/product/p{i}/",
+         "prices": {"price": "12950", "regular_price": "14950", "currency_minor_unit": 2},
+         "images": [{"src": f"https://cdn/w{i}.png"}], "is_in_stock": i % 2 == 0,
+         "categories": [{"name": "LoRaWAN"}]}
+        for i in range(aantal)
+    ]
+    verzoeken: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        verzoeken.append(request)
+        if not request.url.path.endswith("/wp-json/wc/store/v1/products"):
+            return httpx.Response(404)
+        pagina, grootte = int(request.url.params["page"]), int(request.url.params["per_page"])
+        stuk = producten[(pagina - 1) * grootte: pagina * grootte]
+        paginas = -(-aantal // grootte)
+        return httpx.Response(200, content=rommel + json.dumps(stuk).encode(),
+                              headers={"content-type": "application/json", "x-wp-totalpages": str(paginas)})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client.verzoeken = verzoeken  # type: ignore[attr-defined]
+    return client
+
+
+def test_woocommerce_leest_alle_paginas_in_de_juiste_taal() -> None:
+    client = _woo(250, rommel=b"BestellenBestellen")  # plugin-tekst voor de JSON (Thingsdata)
+    cat = catalog.woocommerce_catalog(f"{SHOP}/en/", client)
+    assert cat is not None and cat.complete and cat.total == 250 and cat.pages_read == 3
+    lijst = [r for r in client.verzoeken if r.url.params["per_page"] != "1"]  # zonder de probe
+    assert len(lijst) == 3 and all(r.url.params["lang"] == "en" for r in lijst)
+    p = cat.products[0]
+    assert p["name"] == "Gateway & Sensor 0" and p["price"] == "€ 129,50" and p["was_price"] == "€ 149,50"
+    assert p["type"] == "LoRaWAN" and cat.products[1]["available"] is False
+
+
+def test_geen_woocommerce_geeft_none() -> None:
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, text="<html lang='nl'>")))
+    assert catalog.woocommerce_catalog(f"{SHOP}/", client) is None

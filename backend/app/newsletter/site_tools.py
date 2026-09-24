@@ -70,7 +70,9 @@ def _tool_find_ticket_links(ctx: ToolContext, tool_input: dict) -> dict:
 
 def _catalog_of(ctx: ToolContext, url: str) -> dict:
     """De hele catalogus achter deze URL (Shopify exact, anders alle pagina's)."""
-    shop = catalog.shopify_catalog(url, ctx.http_client)
+    shop = catalog.shopify_catalog(url, ctx.http_client) or catalog.woocommerce_catalog(
+        url, ctx.http_client
+    )
     if shop is None:
         status, html = extraction.fetch_page(url, ctx.http_client)
         if status != 200:
