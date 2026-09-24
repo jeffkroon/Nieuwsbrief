@@ -141,3 +141,16 @@ def test_antwoorden_van_de_assistent_krijgen_veilige_opmaak() -> None:
     renderer = chat[start:einde]
     assert "renderMarkdown" in renderer and "innerHTML" not in renderer
     assert "https?:" in renderer  # alleen http(s)-links, geen javascript:
+
+
+def test_chatberichten_worden_nooit_samengeperst() -> None:
+    """Regressie: met een min-height en zonder flex-shrink:0 perste de scrollende
+    lijst lange berichten samen; ze liepen over elkaar en scrollen werkte niet."""
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.css").read_text()
+    msg = re.search(r"\n\.msg \{([^}]*)\}", css).group(1)
+    assert "flex-shrink: 0" in msg
+    assistant = re.search(r"\n\.assistant \{([^}]*)\}", css).group(1)
+    assert "min-height" not in assistant
