@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import httpx
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
@@ -42,6 +44,22 @@ def uitgaand(url: str | None = None) -> dict:
             "status": status,
             "tekens": len(html),
             "geblokkeerd": status == 403,
+            # Welke blokkade? Cloudflare-pagina's zeggen het in titel en tekst
+            # ("Sorry, you have been blocked", "Just a moment...", Ray ID).
+            "pagina_titel": _titel(html),
+            "blokkade_hint": _blokkade_hint(html) if status in (403, 429, 503) else None,
         }
     antwoord["headers"] = dict(SITE_HEADERS)
     return antwoord
+
+
+def _titel(html: str) -> str | None:
+    m = re.search(r"(?is)<title[^>]*>(.*?)</title>", html or "")
+    return " ".join(m.group(1).split())[:160] if m else None
+
+
+def _blokkade_hint(html: str) -> str:
+    """Leesbare tekst van een blokkeerpagina (kort), zodat je ziet wat er blokkeert."""
+    tekst = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html or "")
+    tekst = re.sub(r"(?s)<[^>]+>", " ", tekst)
+    return " ".join(tekst.split())[:600]
