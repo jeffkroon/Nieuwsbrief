@@ -16,7 +16,7 @@ function avatar(optie, variant) {
   const el = document.createElement("span");
   el.className = "pk-avatar" + (variant ? " " + variant : "");
   if (variant === "icon") {
-    el.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>';
+    el.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>';
     return el;
   }
   const kleur = optie && optie.dataset.color;
@@ -83,7 +83,7 @@ function enhanceSelect(select, { label, variant, placeholder, searchFrom = 6 }) 
     }
     const pijl = document.createElement("span");
     pijl.className = "pk-chevron";
-    pijl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+    pijl.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
     knop.appendChild(pijl);
     knop.disabled = select.options.length === 0 || (select.options.length === 1 && !select.options[0].value);
   }
@@ -132,7 +132,7 @@ function enhanceSelect(select, { label, variant, placeholder, searchFrom = 6 }) 
       if (o.value === select.value) {
         const vink = document.createElement("span");
         vink.className = "pk-check";
-        vink.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+        vink.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
         regel.appendChild(vink);
       }
       regel.onmousedown = (e) => e.preventDefault();  // focus in het zoekveld houden
