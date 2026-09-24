@@ -85,18 +85,40 @@ onaangeraakt (die gaat over de template, dit over de gerenderde uitvoer).
 
 ---
 
-## Nog open (eerlijk)
+## Stand 24 september 2026
 
-1. **Preheader bij ActiveCampaign.** De v1-`message_add` kent geen preheader-veld; in
-   het datamodel bestaat `message_preheader_text`. Of dat via v1 of v3 te zetten is,
-   is niet uit de documentatie te bevestigen. Nu: de gebruiker krijgt netjes te horen
-   dat de preheader niet in het AC-concept staat. Te testen op een echt account.
-2. **Unieke campagnenaam.** Wij noemen een campagne `{merk} - {thema}`. Of Brevo en
-   ActiveCampaign een dubbele naam weigeren, staat niet in de documentatie. Twee
-   nieuwsbrieven over hetzelfde thema kunnen dus botsen. Te testen op een echt account.
-3. **Geverifieerde afzender.** Alle drie eisen een geverifieerd afzendadres of domein.
-   Staat er in de brand-config een onbevestigd adres, dan komt de fout van het platform
-   zelf; die geven we ongefilterd door.
-4. **Niets van dit alles is tegen een echt account getest**: dit is documentatie- en
-   codeverificatie. Een testrun per platform blijft nodig, en hoort bij blok 3 samen
-   met de testmail-knop.
+Bewust **geen testconcepten** aangemaakt in klantaccounts (keuze Jeff). Wat zonder
+concepten kon, is gedaan:
+
+**Afmeldlink: geverifieerd op de echte templates in productie** (alleen lezen). Alle
+vijf templates hebben een afmeldlink, en na de platform-omzetting én het CSS-inlinen
+staat de juiste tag erin:
+
+| Template | Platform | Resultaat |
+|---|---|---|
+| Ohcascas / base template (standaard) | Klaviyo | `{% unsubscribe %}` |
+| Ohcascas / Magazine | Klaviyo | `{% unsubscribe %}` |
+| Thingsdata / nieuw test template (standaard) | Brevo | `{{ unsubscribe }}` |
+| VoetbalreizenXL / Standaard layout (standaard) | Brevo | `{{ unsubscribe }}` |
+| VoetbalreizenXL / Card Template | Brevo | `{{ unsubscribe }}` |
+
+**Dubbele campagnenaam: opgelost in plaats van getest.** De naam is nu
+`{merk} - {thema} (dd-mm-jjjj uu:mm)` en kan dus niet meer dubbel zijn, ongeacht wat
+een platform ermee doet.
+
+## Nog open
+
+1. **Preheader in de inbox.** De velden (`previewText` bij Brevo, `preview_text` bij
+   Klaviyo) zijn tegen de documentatie geverifieerd, maar of ze in de inbox verschijnen
+   zie je pas bij een echte verzending.
+2. **Klikken op de afmeldlink in een echte mail.** De tag klopt, maar het werkend
+   afmelden zelf is nooit uitgeprobeerd.
+3. **ActiveCampaign:** geen enkele klant zit erop; blijft ongetest tot er een AC-klant is.
+4. **Geverifieerde afzender:** een onbevestigd afzendadres geeft een fout van het
+   platform zelf; die geven we ongefilterd door.
+
+**Controlelijst voor het eerstvolgende échte concept** (per platform één keer):
+- Stuur vanuit het dashboard een testmail naar jezelf.
+- Staat de preheader naast het onderwerp in de inbox?
+- Klik op de afmeldlink: kom je op de afmeldpagina van het platform uit?
+- Staan de productfoto's erin en kloppen de prijzen?
