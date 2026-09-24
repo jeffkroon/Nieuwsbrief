@@ -55,7 +55,8 @@ def test_accept_headers_gaan_mee() -> None:
 
 def test_banner_controle_gebruikt_dezelfde_headers() -> None:
     """Een bannerfoto van een beschermde site moet net zo goed bereikbaar zijn."""
-    from app.newsletter.tools import ToolContext, _require_image
+    from app.newsletter.site_tools import _require_image
+    from app.newsletter.tools import ToolContext
 
     class _Afbeelding(_VangHeaders):
         def get(self, url, headers=None, **kwargs):

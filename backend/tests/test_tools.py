@@ -1021,7 +1021,7 @@ def test_club_price_is_lowest_on_page(session, cipher):
         session=session, tenant_id=tenant.id, cipher=cipher, llm=llm,
         http_client=_http(lambda r: httpx.Response(200, text="<html>club</html>")),
     )
-    from app.newsletter.tools import _validated_clubs
+    from app.newsletter.block_validation import validated_clubs as _validated_clubs
 
     clubs = _validated_clubs(ctx, [{"name": "AS Roma", "url": "https://x/roma"}])
     assert clubs[0].price == "€ 99"
@@ -1397,7 +1397,7 @@ def test_find_page_images_meldt_echt_niets_zonder_og_image(session, cipher) -> N
 def test_campagnenaam_bevat_datum_en_tijd() -> None:
     from datetime import datetime
 
-    from app.newsletter.tools import _campaign_name
+    from app.newsletter.draft_tool import _campaign_name
 
     naam = _campaign_name("Ohcascas", "Herfstcollectie", now=datetime(2026, 9, 24, 14, 5))
     assert naam == "Ohcascas - Herfstcollectie (24-09-2026 14:05)"
@@ -1408,7 +1408,7 @@ def test_twee_concepten_met_hetzelfde_thema_krijgen_een_andere_naam(session, cip
     naam mag dus nooit dubbel zijn."""
     from datetime import datetime
 
-    from app.newsletter.tools import _campaign_name
+    from app.newsletter.draft_tool import _campaign_name
 
     een = _campaign_name("Merk", "Zomer", now=datetime(2026, 9, 24, 14, 5))
     twee = _campaign_name("Merk", "Zomer", now=datetime(2026, 9, 24, 14, 6))
@@ -1434,3 +1434,10 @@ def test_concept_krijgt_de_unieke_naam_mee(session, cipher) -> None:
     naam = aangemaakt["client"].calls[0]["name"]
     assert naam.startswith("VoetbalreizenXL - Premier League topperweek (")
     assert naam.endswith(")")
+
+
+def test_elke_tool_heeft_schema_en_uitvoerder() -> None:
+    """Na het opsplitsen van tools.py: schema's en handlers mogen niet uit elkaar lopen."""
+    from app.newsletter.tools import TOOL_DEFINITIONS, _DISPATCH
+
+    assert {t["name"] for t in TOOL_DEFINITIONS} == set(_DISPATCH)

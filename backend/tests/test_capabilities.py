@@ -66,7 +66,7 @@ def test_builtin_fallback_supports_everything() -> None:
 
 
 def test_override_without_effect_is_rejected() -> None:
-    from app.newsletter.tools import _apply_style_overrides
+    from app.newsletter.newsletter_build import _apply_style_overrides
 
     brand = {"styles": {}}
     with pytest.raises(ValueError, match="nergens"):
@@ -140,7 +140,8 @@ def test_fallback_render_keeps_original_paddings(session, cipher) -> None:
     """De tokens in de fallback + de geïnjecteerde basis-styles = zelfde render."""
     import uuid
 
-    from app.newsletter.tools import ToolContext, _resolve_template_html
+    from app.newsletter.newsletter_build import _resolve_template_html
+    from app.newsletter.tools import ToolContext
 
     class _Tenant:
         id = uuid.uuid4()

@@ -118,7 +118,7 @@ def test_render_newsletter_fills_custom_fields_and_drops_empty_sections() -> Non
 
 
 def test_tool_validation_rejects_bad_custom_fields() -> None:
-    from app.newsletter.tools import _validated_custom_fields
+    from app.newsletter.block_validation import validated_custom_fields as _validated_custom_fields
 
     assert _validated_custom_fields(None) == {}
     assert _validated_custom_fields({"vak_x": "tekst"}) == {"X": "tekst"}

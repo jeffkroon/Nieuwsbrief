@@ -92,7 +92,8 @@ def _ctx(http):
 
 
 def test_resolve_price_uses_cache_on_second_render() -> None:
-    from app.newsletter.tools import _resolve_price, _validation_cache
+    from app.newsletter.block_validation import _resolve_price
+    from app.newsletter.tool_context import validation_cache as _validation_cache
 
     _validation_cache.clear()
     http, llm = _CountingHttp(), _CountingLLM()
@@ -107,7 +108,8 @@ def test_resolve_price_uses_cache_on_second_render() -> None:
 
 
 def test_require_reachable_cached_after_price_check() -> None:
-    from app.newsletter.tools import _require_reachable, _resolve_price, _validation_cache
+    from app.newsletter.block_validation import _require_reachable, _resolve_price
+    from app.newsletter.tool_context import validation_cache as _validation_cache
 
     _validation_cache.clear()
     http, llm = _CountingHttp(), _CountingLLM()
@@ -118,7 +120,8 @@ def test_require_reachable_cached_after_price_check() -> None:
 
 
 def test_price_override_only_checks_reachability_once() -> None:
-    from app.newsletter.tools import _resolve_price, _validation_cache
+    from app.newsletter.block_validation import _resolve_price
+    from app.newsletter.tool_context import validation_cache as _validation_cache
 
     _validation_cache.clear()
     http, llm = _CountingHttp(), _CountingLLM()
@@ -239,7 +242,9 @@ def test_draft_clears_validation_cache_for_live_validation() -> None:
     """Het definitieve concept mag nooit op gecachte validaties leunen."""
     import pytest
 
-    from app.newsletter.tools import ToolContext, _tool_create_newsletter_draft, _validation_cache
+    from app.newsletter.draft_tool import _tool_create_newsletter_draft
+    from app.newsletter.tool_context import validation_cache as _validation_cache
+    from app.newsletter.tools import ToolContext
 
     _validation_cache.clear()
     _validation_cache.set(("price", "https://x.test/p"), "€ 99")
