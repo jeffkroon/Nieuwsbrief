@@ -59,11 +59,7 @@ async function loadTenants() {
     const tenants = await (await fetch("/tenants")).json();
     tenantsCache = tenants;
     if (!tenants.length) { addMsg("system", "Geen klanten gevonden."); return; }
-    for (const t of tenants) {
-      const opt = document.createElement("option");
-      opt.value = t.id; opt.textContent = t.name;
-      tenantSel.appendChild(opt);
-    }
+    for (const t of tenants) tenantSel.appendChild(tenantOptie(t));
     // Het laatste gesprek van deze klant hervatten; anders schoon beginnen.
     let bewaard = null;
     try { bewaard = localStorage.getItem(chatKey()); } catch (e) { /* prive-modus */ }

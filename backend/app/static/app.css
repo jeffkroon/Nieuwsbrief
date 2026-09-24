@@ -44,9 +44,39 @@
 
   /* App-gebied */
   #app { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100vh; }
-  #topbar { background: var(--panel); border-bottom: 1px solid var(--border); padding: 10px 22px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-  .topfield { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
-  #topbar select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; font-size: 13.5px; color: var(--text); min-width: 170px; font-family: inherit; }
+  #topbar { background: var(--panel); border-bottom: 1px solid var(--border); padding: 9px 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  /* Keuzelijsten (picker.js): kaartje met avatar, zoekbare lijst eronder */
+  .pk-native { position: absolute !important; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .pk { position: relative; }
+  .pk-btn { display: flex; align-items: center; gap: 10px; min-width: 210px; max-width: 320px; padding: 6px 10px 6px 6px; background: #fff; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; font-family: inherit; text-align: left; color: var(--text); transition: border-color .15s, box-shadow .15s, background .15s; }
+  .pk-btn:hover { border-color: #cfd4dc; background: #fcfcfd; }
+  .pk.open .pk-btn, .pk-btn:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+  .pk-btn:disabled { cursor: default; opacity: .7; }
+  .pk-avatar { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; letter-spacing: .02em; overflow: hidden; }
+  .pk-avatar.has-logo { background: #fff; border: 1px solid var(--border); }
+  .pk-avatar img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+  .pk-avatar.icon { background: var(--accent-soft); color: var(--accent-hover); }
+  .pk-avatar.icon svg { width: 16px; height: 16px; }
+  .pk-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+  .pk-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .pk-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pk-sub { font-size: 11.5px; color: var(--muted); }
+  .pk-badge { flex: 0 0 auto; font-size: 10.5px; font-weight: 700; color: var(--accent-hover); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; }
+  .pk-chevron { flex: 0 0 auto; color: var(--muted); display: flex; transition: transform .15s; }
+  .pk-chevron svg { width: 16px; height: 16px; }
+  .pk.open .pk-chevron { transform: rotate(180deg); }
+  .pk-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: max(100%, 300px); background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 12px 32px rgba(16,24,40,.14), 0 2px 6px rgba(16,24,40,.06); padding: 6px; animation: pk-in .12s ease-out; }
+  @keyframes pk-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .pk-search { width: 100%; margin: 2px 0 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; font-size: 13.5px; font-family: inherit; }
+  .pk-list { max-height: 340px; overflow-y: auto; outline: none; display: flex; flex-direction: column; gap: 2px; }
+  .pk-opt { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 9px; cursor: pointer; }
+  .pk-opt:hover, .pk-opt.kb { background: #f3f4f6; }
+  .pk-opt[aria-selected="true"] { background: var(--accent-soft); }
+  .pk-opt .pk-avatar { flex-basis: 30px; width: 30px; height: 30px; }
+  .pk-check { color: var(--accent); display: flex; }
+  .pk-check svg { width: 16px; height: 16px; }
+  .pk-empty { padding: 12px; font-size: 13px; color: var(--muted); text-align: center; }
   main { flex: 1; overflow-y: auto; }
   .view { display: none; height: 100%; }
   .view.active { display: block; }

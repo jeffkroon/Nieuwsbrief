@@ -16,7 +16,8 @@ async function loadChatTemplates() {
   }
   for (const t of list) {
     const o = document.createElement("option");
-    o.value = t.id; o.textContent = "Template: " + t.name + (t.is_default ? " (standaard)" : "");
+    o.value = t.id; o.textContent = t.name;
+    if (t.is_default) o.dataset.badge = "standaard";
     chatTemplate.appendChild(o);
   }
   const def = list.find(t => t.is_default) || list[0];
