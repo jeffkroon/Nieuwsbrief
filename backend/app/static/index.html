@@ -47,7 +47,7 @@
           <div id="chat"></div>
           <footer id="chatFooter">
             <div id="composer">
-              <textarea id="input" rows="2" placeholder="Beschrijf de nieuwsbrief die je wilt maken..."></textarea>
+              <textarea id="input" rows="1" placeholder="Beschrijf de nieuwsbrief die je wilt maken..."></textarea>
               <button id="send">Stuur</button>
               <button id="stop" style="display:none;">Stop</button>
             </div>
@@ -60,12 +60,13 @@
               <button class="dev-btn" id="devMobile" title="Zoals op een telefoon (375px breed)">Mobiel</button>
             </span>
           </div>
-          <div id="chatPreviewEmpty" class="hint">Zodra je samen met de assistent een nieuwsbrief opbouwt, verschijnt hier een live voorbeeld, voordat er een Brevo-concept wordt gemaakt.</div>
+          <div id="chatPreviewEmpty" class="hint"><strong style="color:var(--text);font-size:14.5px;">Hier verschijnt je nieuwsbrief</strong>Zodra de assistent een voorbeeld maakt, zie je hem hier live, nog voordat er een concept in het verzendplatform staat.</div>
           <div id="chatPreviewWrap"><iframe id="chatPreviewFrame" title="Voorbeeld nieuwsbrief"></iframe></div>
         </div>
       </div>
     </div>
     <div id="imagesView" class="view">
+      <header class="page-head"><h1>Foto's</h1><p>Beeldbank van deze klant. De assistent kiest hier automatisch passende foto's uit.</p></header>
       <div class="card">
         <h2>Foto's uploaden</h2>
         <div class="row">
@@ -88,9 +89,10 @@
     </div>
 
     <div id="newslettersView" class="view">
+      <header class="page-head"><h1>Nieuwsbrieven</h1><p>Alle concepten die zijn klaargezet, met resultaten uit het verzendplatform.</p></header>
       <div class="card">
         <h2>Gemaakte nieuwsbrieven</h2>
-        <p class="hint" style="margin:0 0 12px;">Alles wat als concept is klaargezet. Verzenden doe je in het verzendplatform zelf.</p>
+        <p class="hint" style="margin:0 0 12px;">Verzenden doe je in het verzendplatform zelf; hier maak je alleen concepten.</p>
         <div id="nlList"></div>
       </div>
       <div class="card">
@@ -101,6 +103,7 @@
     </div>
 
     <div id="templatesView" class="view">
+      <header class="page-head"><h1>Templates</h1><p>Schrijfstijl, huisstijl en layouts van de nieuwsbrieven.</p></header>
       <div class="card">
         <h2>Tone of voice</h2>
         <p class="hint">De assistent schrijft altijd in deze stijl van de bedrijfswebsite. Vernieuw 'm als de site is aangepast.</p>
@@ -229,9 +232,10 @@
     </div>
 
     <div id="companiesView" class="view">
+      <header class="page-head"><h1>Bedrijven</h1><p>Klanten, hun verzendplatform en wat de AI kost.</p></header>
       <div class="card">
-        <h2>Bedrijven</h2>
-        <p class="hint">Alle klanten in de tool. Voeg een nieuw bedrijf toe of bewerk de gegevens.</p>
+        <h2>Alle klanten</h2>
+        <p class="hint">Voeg een nieuw bedrijf toe of bewerk de gegevens.</p>
         <div id="companyList" style="margin-top:10px;"></div>
       </div>
       <div class="card">
