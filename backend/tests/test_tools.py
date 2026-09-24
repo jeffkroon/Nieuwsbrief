@@ -1391,3 +1391,46 @@ def test_find_page_images_meldt_echt_niets_zonder_og_image(session, cipher) -> N
     result = execute_tool("find_page_images", {"url": "https://shop.test/leeg"}, ctx)
     assert "wel een og:image" not in result["message"]
     assert "geen enkele bruikbare foto, ook geen og:image" in result["message"]
+
+
+# --- unieke campagnenaam ------------------------------------------------------
+def test_campagnenaam_bevat_datum_en_tijd() -> None:
+    from datetime import datetime
+
+    from app.newsletter.tools import _campaign_name
+
+    naam = _campaign_name("Ohcascas", "Herfstcollectie", now=datetime(2026, 9, 24, 14, 5))
+    assert naam == "Ohcascas - Herfstcollectie (24-09-2026 14:05)"
+
+
+def test_twee_concepten_met_hetzelfde_thema_krijgen_een_andere_naam(session, cipher) -> None:
+    """Of een platform een dubbele campagnenaam weigert is niet gedocumenteerd; de
+    naam mag dus nooit dubbel zijn."""
+    from datetime import datetime
+
+    from app.newsletter.tools import _campaign_name
+
+    een = _campaign_name("Merk", "Zomer", now=datetime(2026, 9, 24, 14, 5))
+    twee = _campaign_name("Merk", "Zomer", now=datetime(2026, 9, 24, 14, 6))
+    assert een != twee
+
+
+def test_concept_krijgt_de_unieke_naam_mee(session, cipher) -> None:
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "xkeysib-geheim")
+    aangemaakt: dict = {}
+
+    def factory(key):
+        client = FakeBrevo(key)
+        aangemaakt["client"] = client
+        return client
+
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, llm=FakeLLM({"price": None}),
+        brevo_factory=factory,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>x</html>")),
+    )
+    execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
+    naam = aangemaakt["client"].calls[0]["name"]
+    assert naam.startswith("VoetbalreizenXL - Premier League topperweek (")
+    assert naam.endswith(")")

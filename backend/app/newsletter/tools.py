@@ -12,6 +12,9 @@ echt zijn, ongeacht hoe de site is opgebouwd.
 
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import copy
 import html as html_lib
 import re
@@ -1106,6 +1109,19 @@ def _tool_preview_newsletter(ctx: ToolContext, tool_input: dict) -> dict:
     }
 
 
+def _campaign_name(brand_name: str, theme: str, now: datetime | None = None) -> str:
+    """Campagnenaam die nooit dubbel is.
+
+    Voorheen "{merk} - {thema}": twee nieuwsbrieven over hetzelfde thema kregen dan
+    exact dezelfde naam, en of Brevo/Klaviyo/ActiveCampaign dat weigeren staat nergens
+    gedocumenteerd. In plaats van dat op een klantaccount uit te testen, maken we de
+    naam uniek met datum en tijd (Europe/Amsterdam), zodat de vraag niet meer bestaat.
+    Leesbaar in het dashboard van het platform: "Merk - Thema (24-09-2026 14:05)".
+    """
+    moment = (now or datetime.now(ZoneInfo("Europe/Amsterdam"))).strftime("%d-%m-%Y %H:%M")
+    return f"{brand_name} - {theme} ({moment})"
+
+
 def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
     if not tool_input.get("confirmed"):
         raise ValueError(
@@ -1191,7 +1207,7 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
 
     try:
         draft = client.create_draft(
-            name=f"{brand['brand_name']} - {content.theme}",
+            name=_campaign_name(brand["brand_name"], content.theme),
             subject=content.subject,
             sender_name=brand["brand_name"],
             sender_email=brand["brand_email"],
