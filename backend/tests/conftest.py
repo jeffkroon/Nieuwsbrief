@@ -102,7 +102,7 @@ def _reset_chat_limiter():
 
     _conv._chat_limiter.reset()
     _auth._login_limiter.reset()
-    from app.newsletter import tools as _tools
+    from app.newsletter.tool_context import validation_cache
 
-    _tools._validation_cache.clear()
+    validation_cache.clear()
     yield
