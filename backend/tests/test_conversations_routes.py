@@ -421,3 +421,36 @@ def test_te_veel_gelijktijdige_beurten_geeft_een_nette_melding(client, session) 
     finally:
         for _ in bezet:
             route._beurt_plaatsen.release()
+
+
+def test_volgende_beurt_krijgt_de_huidige_nieuwsbrief_mee(client, session, fake_anthropic) -> None:
+    """Bug: bij 'maak de teksten beter' wist de assistent niet wat er in het voorbeeld
+    stond (alleen tekst werd teruggespeeld) en begon hij opnieuw over banners."""
+    from app.db.models import Conversation
+
+    tenant = _tenant(session)
+    fake = fake_anthropic(
+        [
+            FakeResponse([FakeText("Voorbeeld staat klaar.")], "end_turn"),
+            FakeResponse([FakeText("Teksten aangepast.")], "end_turn"),
+        ]
+    )
+    start = client.post(
+        "/conversations", json={"tenant_id": str(tenant.id), "message": "herfstnieuwsbrief"}
+    ).json()
+    conversation = session.get(Conversation, uuid.UUID(start["conversation_id"]))
+    conversation.last_preview = {"intro_1": "Jouw herfst, jouw glow", "header_image_url": "https://cdn/b.jpg"}
+    session.commit()
+
+    client.post(
+        f"/conversations/{start['conversation_id']}/messages",
+        json={"message": "de teksten zijn cringy, verbeter dat"},
+    )
+    laatste = fake.messages.calls[1]["messages"][-1]["content"]
+    assert laatste[0]["text"] == "de teksten zijn cringy, verbeter dat"
+    stand = laatste[-1]["text"]
+    assert "HUIDIGE STAND" in stand
+    assert "Jouw herfst, jouw glow" in stand and "https://cdn/b.jpg" in stand
+    # De stand wordt niet als bericht opgeslagen (anders stapelen verouderde kopieën op).
+    detail = client.get(f"/conversations/{start['conversation_id']}").json()
+    assert not any("HUIDIGE STAND" in (m.get("content") or "") for m in detail["messages"])

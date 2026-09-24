@@ -17,6 +17,7 @@ from app.newsletter.orchestrator import ToolEvent, run_agent_turn
 from app.newsletter.progress import describe
 from app.newsletter.prompts import build_system_prompt
 from app.newsletter.capabilities import template_capabilities
+from app.newsletter.current_state import with_current_state
 from app.newsletter.renderer import SECTIONS_MARKER
 from app.newsletter.templates import load_template
 from app.newsletter.tools import (
@@ -107,11 +108,14 @@ def run_conversation_turn(
     )
 
     history = repo.list_messages(session, conversation.id)
-    claude_messages = [
-        {"role": m.role, "content": m.content}
-        for m in history
-        if m.role in _REPLAYABLE_ROLES and m.content
-    ]
+    claude_messages = with_current_state(
+        [
+            {"role": m.role, "content": m.content}
+            for m in history
+            if m.role in _REPLAYABLE_ROLES and m.content
+        ],
+        conversation.last_preview,
+    )
 
     ctx = ToolContext(
         session=session,

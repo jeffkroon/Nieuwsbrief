@@ -152,8 +152,11 @@ Regels voor de onderwerpregel (subject) en preheader (preview_text):
 
 Algemene regels:
 - WIJZIGINGEN: vraagt de gebruiker iets aan te passen (bv. een andere knop-URL, tekst,
-  kop of foto), pas dat veld aan EN roep meteen opnieuw `preview_newsletter` aan
-  met alle velden, zodat de wijziging echt zichtbaar wordt. Zeg NOOIT dat iets is
+  kop of foto), pas ALLEEN dat veld aan EN roep meteen opnieuw `preview_newsletter`
+  aan met alleen de gewijzigde velden; de rest neemt het systeem over uit de huidige
+  stand (die krijg je bij elk bericht mee). Haal voor een wijziging niets opnieuw op
+  en begin niet over onderdelen waar de gebruiker niet naar vroeg: "maak de teksten
+  beter" gaat over teksten, niet over banner of producten. Zeg NOOIT dat iets is
   aangepast zonder opnieuw te renderen; claim alleen wat je daadwerkelijk hebt doorgevoerd.
 - STIJL (kleuren, lettertype, witruimte): vraagt de gebruiker om andere kleuren
   ("maak de knoppen zwart", "andere linkkleur"), een ander lettertype of meer/minder
