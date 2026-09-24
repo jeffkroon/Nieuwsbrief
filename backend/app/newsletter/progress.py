@@ -77,7 +77,19 @@ def _links(invoer: dict, resultaat: dict) -> str:
 def _producten(invoer: dict, resultaat: dict) -> str:
     producten = resultaat.get("products") or []
     bron = _pad(invoer.get("url") or resultaat.get("source_url") or "")
-    return f"{len(producten)} items opgehaald" + (f" van {bron}" if bron else "")
+    totaal = resultaat.get("total_in_catalog")
+    zoek = resultaat.get("query")
+    aantal = resultaat.get("count", len(producten))
+    if totaal is not None and zoek:
+        regel = f"{aantal} producten voor '{zoek}' gevonden in {totaal}"
+    elif totaal is not None:
+        regel = f"{totaal} producten opgehaald"
+    else:
+        regel = f"{len(producten)} items opgehaald"
+    regel += f" van {bron}" if bron else ""
+    if totaal is not None and not resultaat.get("complete", True):
+        regel += " (niet volledig)"
+    return regel
 
 
 def _afbeeldingen(invoer: dict, resultaat: dict) -> str:

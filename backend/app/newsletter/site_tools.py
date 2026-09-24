@@ -13,7 +13,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from app.newsletter import banner_check, extraction
+from app.newsletter import banner_check, catalog, extraction
 from app.newsletter.page_images import banner_candidates
 from app.newsletter.tool_context import ToolContext, load_tenant, require_llm
 from app.newsletter.tool_memory import with_memory
@@ -68,27 +68,77 @@ def _tool_find_ticket_links(ctx: ToolContext, tool_input: dict) -> dict:
     )
 
 
+def _catalog_of(ctx: ToolContext, url: str) -> dict:
+    """De hele catalogus achter deze URL (Shopify exact, anders alle pagina's)."""
+    shop = catalog.shopify_catalog(url, ctx.http_client)
+    if shop is None:
+        status, html = extraction.fetch_page(url, ctx.http_client)
+        if status != 200:
+            raise ValueError(extraction.fetch_probleem(url, status))
+        shop = catalog.paged_catalog(
+            url, html,
+            fetch=lambda u: extraction.fetch_page(u, ctx.http_client),
+            extract=lambda h, u: extraction.extract_products(require_llm(ctx), h, source_url=u),
+        )
+    return {
+        "source_url": url,
+        "products": list(shop.products),
+        "total": shop.total,
+        "complete": shop.complete,
+        "catalog_source": shop.source,
+        "pages_read": shop.pages_read,
+    }
+
+
+def _products_message(result: dict, query: str | None, count: int, shown: int) -> str:
+    totaal = result["total"]
+    if result["complete"]:
+        dekking = f"Dit is de VOLLEDIGE catalogus van deze pagina ({totaal} producten)."
+    else:
+        dekking = (
+            f"LET OP: niet volledig gelezen ({result['pages_read']} pagina's, {totaal} "
+            "producten gezien). Zeg dus NOOIT dat er niet meer producten zijn; zoek gerichter "
+            "met query of op een specifiekere collectiepagina."
+        )
+    if query and count == 0:
+        return (
+            f"{dekking} Geen producten gevonden voor {query!r}. Probeer een ruimere zoekterm "
+            "(bv. één woord) voordat je concludeert dat het er niet is."
+        )
+    extra = f" Getoond: de eerste {shown} van {count}; gebruik query om te filteren." if shown < count else ""
+    return (
+        f"{dekking}{extra} Toon de producten en laat de gebruiker KIEZEN. Gebruik url, prijs en "
+        "image_url exact zoals hier teruggegeven; verzin niets."
+    )
+
+
 def _tool_find_products(ctx: ToolContext, tool_input: dict) -> dict:
-    """Producten (naam, prijs, foto, URL) van een collectie-/overzichtspagina halen."""
+    """Producten (naam, prijs, foto, URL) van een collectie-/overzichtspagina: ALLE pagina's."""
     brand = load_tenant(ctx).config
     url = tool_input.get("url") or brand.get("website_url")
     if not url:
         raise ValueError("geen URL om producten te zoeken; geef een collectie-URL mee")
+    query = (tool_input.get("query") or "").strip() or None
 
-    def _haal_op() -> dict:
-        status, html = extraction.fetch_page(url, ctx.http_client)
-        if status != 200:
-            raise ValueError(extraction.fetch_probleem(url, status))
-        products = extraction.extract_products(require_llm(ctx), html, source_url=url)
-        return {
-            "source_url": url,
-            "count": len(products),
-            "products": products,
-            "message": "Toon de producten en laat de gebruiker KIEZEN. Gebruik url, prijs en "
-            "image_url exact zoals hier teruggegeven; verzin niets.",
-        }
-
-    return with_memory(ctx.session, ctx.conversation_id, "find_products", {"url": url}, _haal_op)
+    # De catalogus wordt per URL onthouden; zoeken daarbinnen kost dan niets extra.
+    volledig = with_memory(
+        ctx.session, ctx.conversation_id, "find_products", {"url": url},
+        lambda: _catalog_of(ctx, url),
+    )
+    gevonden = catalog.filter_products(volledig["products"], query)
+    getoond = gevonden[: catalog.MAX_RETURNED]
+    result = {
+        "source_url": url,
+        "query": query,
+        "total_in_catalog": volledig["total"],
+        "complete": volledig["complete"],
+        "count": len(gevonden),
+        "products": getoond,
+        "message": _products_message(volledig, query, len(gevonden), len(getoond)),
+    }
+    if volledig.get("from_memory"):
+        result["from_memory"] = True
+    return result
 
 
 def _require_image(ctx: ToolContext, url: str) -> None:
