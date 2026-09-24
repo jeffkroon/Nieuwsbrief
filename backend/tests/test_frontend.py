@@ -36,8 +36,11 @@ def test_chat_gebruikt_de_streamende_route(client) -> None:
 
 def test_chat_heeft_stopknop_en_gespreksgeschiedenis(client) -> None:
     html = _frontend(client)
-    for element in ('id="stop"', 'id="chatHistory"', 'id="newChat"', 'id="quickStarts"'):
+    for element in ('id="stop"', 'id="convList"', 'id="newChat"', 'id="quickStarts"'):
         assert element in html
+    # Gesprekken staan in de sidebar (zoals ChatGPT) en zijn te verwijderen.
+    assert html.index('id="convList"') < html.index('id="app"')
+    assert 'method: "DELETE"' in html
 
 
 def test_templatebeheer_heeft_upload_bewerken_en_versies(client) -> None:

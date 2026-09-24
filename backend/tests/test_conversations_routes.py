@@ -454,3 +454,44 @@ def test_volgende_beurt_krijgt_de_huidige_nieuwsbrief_mee(client, session, fake_
     # De stand wordt niet als bericht opgeslagen (anders stapelen verouderde kopieën op).
     detail = client.get(f"/conversations/{start['conversation_id']}").json()
     assert not any("HUIDIGE STAND" in (m.get("content") or "") for m in detail["messages"])
+
+
+def test_gesprek_verwijderen_houdt_de_nieuwsbrief(client, session, fake_anthropic) -> None:
+    from app.db.models import Conversation, Message, Newsletter
+    from app.repositories import newsletters as newsletters_repo
+
+    tenant = _tenant(session)
+    fake_anthropic([FakeResponse([FakeText("ok")], "end_turn")])
+    gid = client.post(
+        "/conversations", json={"tenant_id": str(tenant.id), "message": "weg ermee"}
+    ).json()["conversation_id"]
+    nb = newsletters_repo.create_newsletter(
+        session, tenant_id=tenant.id, subject="Blijft", html="<p/>",
+        conversation_id=uuid.UUID(gid), status="ready", brevo_campaign_id=1,
+    )
+
+    assert client.delete(f"/conversations/{gid}").status_code == 204
+    session.expire_all()
+    assert session.get(Conversation, uuid.UUID(gid)) is None
+    assert session.query(Message).filter_by(conversation_id=uuid.UUID(gid)).count() == 0
+    blijft = session.get(Newsletter, nb.id)
+    assert blijft is not None and blijft.conversation_id is None
+    assert client.get(f"/conversations?tenant_id={tenant.id}").json() == []
+    assert client.delete(f"/conversations/{gid}").status_code == 404
+
+
+def test_klant_kan_geen_gesprek_van_ander_bedrijf_verwijderen(client, session, fake_anthropic) -> None:
+    from app.deps import SessionInfo, current_session_info
+
+    een = _tenant(session)
+    ander = tenants_repo.create_tenant(session, TenantCreate(slug="ander2", name="Ander", config=CONFIG))
+    fake_anthropic([FakeResponse([FakeText("ok")], "end_turn")])
+    gid = client.post(
+        "/conversations", json={"tenant_id": str(een.id), "message": "van een"}
+    ).json()["conversation_id"]
+    app.dependency_overrides[current_session_info] = lambda: SessionInfo(role="company", tenant_id=ander.id)
+    try:
+        assert client.delete(f"/conversations/{gid}").status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_session_info, None)
+    assert client.get(f"/conversations/{gid}").status_code == 200

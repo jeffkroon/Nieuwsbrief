@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Conversation, Message
@@ -62,8 +62,18 @@ def list_messages(session: Session, conversation_id: uuid.UUID) -> list[Message]
     )
 
 
+def delete_conversation(session: Session, conversation_id: uuid.UUID) -> None:
+    """Gesprek weg, inclusief berichten (ON DELETE CASCADE in de database).
+
+    Gemaakte nieuwsbrieven blijven bestaan: hun conversation_id wordt NULL
+    (ON DELETE SET NULL). Een concept in het verzendplatform wordt nooit geraakt.
+    """
+    session.execute(delete(Conversation).where(Conversation.id == conversation_id))
+    session.commit()
+
+
 def list_conversations(
-    session: Session, tenant_id: uuid.UUID, *, limit: int = 30
+    session: Session, tenant_id: uuid.UUID, *, limit: int = 50
 ) -> list[Conversation]:
     """Gesprekken van dit bedrijf, laatst gebruikt eerst."""
     query = (
