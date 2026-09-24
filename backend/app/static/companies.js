@@ -395,10 +395,7 @@ async function refreshTenantSelect() {
   try {
     const tenants = await (await fetch("/tenants")).json();
     tenantSel.innerHTML = "";
-    for (const t of tenants) {
-      const o = document.createElement("option");
-      o.value = t.id; o.textContent = t.name; tenantSel.appendChild(o);
-    }
+    for (const t of tenants) tenantSel.appendChild(tenantOptie(t));
     if ([...tenantSel.options].some(o => o.value === cur)) tenantSel.value = cur;
   } catch (e) { /* dropdown blijft zoals hij was */ }
 }

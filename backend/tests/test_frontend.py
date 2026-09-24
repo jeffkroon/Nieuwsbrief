@@ -121,3 +121,11 @@ def test_stijlvoorbeeld_toont_de_mail_op_ware_breedte(client) -> None:
     assert "preview-scaler" in html
     assert "VOORBEELD_BREEDTE = 620" in html
     assert "transform-origin: top left" in html
+
+
+def test_klant_en_template_kiezer_zijn_modern_maar_houden_de_select(client) -> None:
+    """De <select>s blijven de bron van waarheid; picker.js tekent er een kiezer overheen."""
+    html = _frontend(client)
+    assert 'id="tenant"' in html and 'id="chatTemplate"' in html
+    assert "/static/picker.js" in html
+    assert html.index("/static/picker.js") < html.index("/static/chat.js")
