@@ -77,12 +77,16 @@ TOOL_DEFINITIONS = [
         "description": "Haal de producten van een collectie- of overzichtspagina van de "
         "klantensite: naam, prijs, productfoto en product-URL, alles exact zoals op de "
         "pagina. Gebruik dit voor product-nieuwsbrieven zodat de gebruiker uit ECHTE "
-        "producten kiest; foto en prijs komen zo altijd van de site. Zonder url wordt de "
-        "bron-URL van de nieuwsbrief-soort of de website gebruikt.",
+        "producten kiest; foto en prijs komen zo altijd van de site. Leest ALLE pagina's van "
+        "de collectie (niet alleen de eerste) en meldt het totaal en of de catalogus volledig "
+        "is. Zoek je iets specifieks (bv. 'zilveren ringen'), geef dan query mee: die filtert "
+        "de hele catalogus. Zonder url wordt de bron-URL van de nieuwsbrief-soort of de "
+        "website gebruikt.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "url": {"type": "string", "description": "Collectie-/overzichtspagina om te scannen, bv. de source_url van de gekozen nieuwsbrief-soort"},
+                "query": {"type": "string", "description": "Optioneel: zoekwoorden om de catalogus te filteren, bv. 'zilveren ringen' of 'armband goud'"},
             },
         },
     },
