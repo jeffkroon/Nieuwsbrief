@@ -131,3 +131,42 @@ def test_find_page_images_geeft_beschrijving_en_bovenkant_variant(session, ciphe
     assert foto["beschrijving"] == "Zilveren ketting op zwart shirt"
     assert "bijgesneden" in foto and "crop=top" in foto["banner_url_bovenkant"]
     assert "zilver is geen goud" in result["message"]
+
+
+def test_find_banner_voegt_passende_catalogusfotos_toe(session, cipher) -> None:
+    """Met query komen productfoto's uit de hele catalogus erbij, gefilterd op thema."""
+    from app.newsletter.tools import ToolContext, execute_tool
+    from app.repositories import tenants as tenants_repo
+    from app.schemas import TenantCreate
+
+    tenant = tenants_repo.create_tenant(
+        session, TenantCreate(slug="shop-cat-banner", name="Shop", config={"website_url": SHOP})
+    )
+    producten = [
+        {"handle": "zk", "title": "Cuban Ketting (Zilver)", "variants": [{"price": "49.95"}],
+         "images": [{"src": f"{CDN}/zilver.png?v=1"}]},
+        {"handle": "gk", "title": "Cuban Ketting (Goud)", "variants": [{"price": "49.95"}],
+         "images": [{"src": f"{CDN}/goud.png?v=1"}]},
+    ]
+    cdn = _shop_client({"zilver.png": (2000, 2000, False), "goud.png": (2000, 2000, False)})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/products.json"):
+            pagina = int(request.url.params.get("page", 1))
+            return httpx.Response(200, json={"products": producten if pagina == 1 else []})
+        if request.url.path == "/collections/zilver":
+            return httpx.Response(200, text="<html><body>geen foto's</body></html>")
+        return cdn._transport.handle_request(request)
+
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=_FakeVisie("Zilveren schakelketting"),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    result = execute_tool(
+        "find_banner", {"url": f"{SHOP}/collections/zilver", "query": "zilver ketting"}, ctx
+    )
+    uit_cat = [k for k in result["candidates"] if k["source"] == "catalogus"]
+    assert [k["name"] for k in uit_cat] == ["Cuban Ketting (Zilver)"]
+    assert "crop=center" in uit_cat[0]["banner_url"] and uit_cat[0]["beschrijving"] == "Zilveren schakelketting"
+    assert result["catalogus_query"] == "zilver ketting"

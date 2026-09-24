@@ -102,7 +102,9 @@ _PROMPT_TAIL = """2b. OPZET (alleen voor templates met een secties-marker): besp
       aan om te zien wat er is. Past er niets, zoek dan ZELF grondig op de site voordat
       je zegt dat er niets is; de gebruiker hoort daar niet om te hoeven vragen. Loop in
       deze volgorde, tot je een foto hebt die bij het THEMA past:
-      1. `find_banner` op de pagina waar de nieuwsbrief over gaat (collectie/categorie);
+      1. `find_banner` op de pagina waar de nieuwsbrief over gaat (collectie/categorie),
+         ALTIJD met `query` = het thema in zoekwoorden (bv. "zilver ketting"): dan komen
+         er passende productfoto's uit de hele catalogus bij;
       2. `find_page_images` op de homepage (daar staan vaak campagnefoto's);
       3. `find_page_images` op de productpagina's van de gekozen producten/items.
       Elke kandidaat heeft een `beschrijving` van wat er ECHT op staat: kies alleen een
