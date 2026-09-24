@@ -8,10 +8,69 @@ const send = document.getElementById("send");
 function addMsg(role, text) {
   const el = document.createElement("div");
   el.className = "msg " + role;
-  el.textContent = text;
+  if (role === "assistant") {
+    el.classList.add("md");
+    el.appendChild(renderMarkdown(text));
+  } else {
+    el.textContent = text;
+  }
   chat.appendChild(el);
   chat.scrollTop = chat.scrollHeight;
   return el;
+}
+
+// Kleine, veilige markdown-weergave voor antwoorden van de assistent: vet, code,
+// links, koppen en lijstjes. Alles wordt als DOM-nodes met textContent gebouwd,
+// nooit via innerHTML, dus tekst uit het model kan geen HTML injecteren.
+function inlineMd(tekst) {
+  const frag = document.createDocumentFragment();
+  const patroon = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let vanaf = 0, m;
+  while ((m = patroon.exec(tekst))) {
+    if (m.index > vanaf) frag.appendChild(document.createTextNode(tekst.slice(vanaf, m.index)));
+    let el;
+    if (m[1] !== undefined) { el = document.createElement("strong"); el.textContent = m[1]; }
+    else if (m[2] !== undefined) { el = document.createElement("code"); el.textContent = m[2]; }
+    else { el = document.createElement("a"); el.textContent = m[3]; el.href = m[4]; el.target = "_blank"; el.rel = "noopener"; }
+    frag.appendChild(el);
+    vanaf = patroon.lastIndex;
+  }
+  if (vanaf < tekst.length) frag.appendChild(document.createTextNode(tekst.slice(vanaf)));
+  return frag;
+}
+
+function renderMarkdown(tekst) {
+  const frag = document.createDocumentFragment();
+  let alinea = [], lijst = null;
+  const sluitAlinea = () => {
+    if (!alinea.length) return;
+    const p = document.createElement("p");
+    alinea.forEach((regel, i) => { if (i) p.appendChild(document.createElement("br")); p.appendChild(inlineMd(regel)); });
+    frag.appendChild(p);
+    alinea = [];
+  };
+  const sluitLijst = () => { if (lijst) { frag.appendChild(lijst); lijst = null; } };
+  for (const ruw of String(tekst || "").split("\n")) {
+    const regel = ruw.trimEnd();
+    const kop = regel.match(/^#{1,4}\s+(.*)$/);
+    const punt = regel.match(/^\s*[-*•]\s+(.*)$/);
+    const nummer = regel.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (!regel.trim()) { sluitAlinea(); sluitLijst(); continue; }
+    if (kop) {
+      sluitAlinea(); sluitLijst();
+      const h = document.createElement("h4"); h.appendChild(inlineMd(kop[1])); frag.appendChild(h);
+    } else if (punt || nummer) {
+      sluitAlinea();
+      const soort = punt ? "UL" : "OL";
+      if (!lijst || lijst.tagName !== soort) { sluitLijst(); lijst = document.createElement(soort.toLowerCase()); }
+      const li = document.createElement("li"); li.appendChild(inlineMd((punt || nummer)[1])); lijst.appendChild(li);
+    } else {
+      sluitLijst();
+      alinea.push(regel);
+    }
+  }
+  sluitAlinea(); sluitLijst();
+  return frag;
 }
 
 const chatPreview = document.getElementById("chatPreview");
@@ -333,8 +392,13 @@ function toonSnelstarts(contentTypes) {
     balk.appendChild(knop);
   }
 }
-send.addEventListener("click", sendMessage);
-input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+function pasHoogteAan() {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 220) + "px";
+}
+input.addEventListener("input", pasHoogteAan);
+send.addEventListener("click", () => { sendMessage(); pasHoogteAan(); });
+input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); pasHoogteAan(); } });
 tenantSel.addEventListener("change", () => {
   chat.innerHTML = "";
   let bewaard = null;

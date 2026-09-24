@@ -129,3 +129,15 @@ def test_klant_en_template_kiezer_zijn_modern_maar_houden_de_select(client) -> N
     assert 'id="tenant"' in html and 'id="chatTemplate"' in html
     assert "/static/picker.js" in html
     assert html.index("/static/picker.js") < html.index("/static/chat.js")
+
+
+def test_antwoorden_van_de_assistent_krijgen_veilige_opmaak() -> None:
+    """Markdown (vet, lijstjes) wordt als DOM gebouwd, nooit via innerHTML."""
+    from pathlib import Path
+
+    chat = (Path(__file__).resolve().parents[1] / "app" / "static" / "chat.js").read_text()
+    start = chat.index("function inlineMd")
+    einde = chat.index("async function sendMessage")
+    renderer = chat[start:einde]
+    assert "renderMarkdown" in renderer and "innerHTML" not in renderer
+    assert "https?:" in renderer  # alleen http(s)-links, geen javascript:
