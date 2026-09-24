@@ -1441,3 +1441,166 @@ def test_elke_tool_heeft_schema_en_uitvoerder() -> None:
     from app.newsletter.tools import TOOL_DEFINITIONS, _DISPATCH
 
     assert {t["name"] for t in TOOL_DEFINITIONS} == set(_DISPATCH)
+
+
+# ---- concept bijwerken in plaats van telkens een nieuw -----------------------
+
+class FakeBrevoMetUpdate(FakeBrevo):
+    """Nep-Brevo die ook bijwerken kent; `update_error` simuleert een platformfout."""
+
+    def __init__(self, api_key: str, *, update_error: Exception | None = None) -> None:
+        super().__init__(api_key)
+        self.update_error = update_error
+        self.updates: list[tuple] = []
+
+    def update_draft(self, campaign_id, **kwargs) -> None:
+        if self.update_error is not None:
+            raise self.update_error
+        self.updates.append((campaign_id, kwargs))
+
+
+def _draft_ctx(session, cipher, tenant, brevo, conversation_id):
+    return ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher,
+        llm=FakeLLM({"price": "€ 299"}),
+        brevo_factory=lambda key: brevo,
+        conversation_id=conversation_id,
+        http_client=_http(lambda r: httpx.Response(200, text="<html>match page 299,-</html>")),
+    )
+
+
+def _gesprek(session, tenant):
+    from app.repositories import conversations as conversations_repo
+
+    return conversations_repo.create_conversation(session, tenant_id=tenant.id)
+
+
+def test_tweede_concept_in_hetzelfde_gesprek_werkt_het_eerste_bij(session, cipher) -> None:
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "k")
+    gesprek = _gesprek(session, tenant)
+    brevo = FakeBrevoMetUpdate("k")
+    ctx = _draft_ctx(session, cipher, tenant, brevo, gesprek.id)
+
+    eerste = execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
+    tweede = execute_tool(
+        "create_newsletter_draft", {**DRAFT_INPUT, "subject": "Betere onderwerpregel"}, ctx
+    )
+
+    assert len(brevo.calls) == 1  # maar één keer aangemaakt
+    assert brevo.updates[0][0] == 999
+    assert brevo.updates[0][1]["subject"] == "Betere onderwerpregel"
+    assert tweede["updated_existing_draft"] is True
+    assert tweede["newsletter_id"] == eerste["newsletter_id"]
+    assert "bijgewerkt" in tweede["message"]
+    rij = session.get(Newsletter, uuid.UUID(eerste["newsletter_id"]))
+    assert rij.subject == "Betere onderwerpregel"
+    assert rij.esp == "brevo"
+    assert session.query(Newsletter).filter_by(tenant_id=tenant.id).count() == 1
+
+
+def test_new_draft_maakt_bewust_een_apart_concept(session, cipher) -> None:
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "k")
+    gesprek = _gesprek(session, tenant)
+    brevo = FakeBrevoMetUpdate("k")
+    ctx = _draft_ctx(session, cipher, tenant, brevo, gesprek.id)
+
+    execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
+    result = execute_tool("create_newsletter_draft", {**DRAFT_INPUT, "new_draft": True}, ctx)
+
+    assert len(brevo.calls) == 2 and not brevo.updates
+    assert result["updated_existing_draft"] is False
+    # new_draft mag niet meeliften naar een volgende aanroep.
+    execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
+    assert len(brevo.updates) == 1
+
+
+def test_verstuurd_of_verwijderd_concept_geeft_een_nieuw_concept(session, cipher) -> None:
+    from app.services.esp import CampaignNotFound
+
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "k")
+    for fout, verwacht in (
+        (BrevoError("campagne 999 is geen concept meer (status sent)"), "kon niet worden bijgewerkt"),
+        (CampaignNotFound("weg"), "bestaat niet meer"),
+    ):
+        gesprek = _gesprek(session, tenant)
+        brevo = FakeBrevoMetUpdate("k")
+        ctx = _draft_ctx(session, cipher, tenant, brevo, gesprek.id)
+        execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
+        brevo.update_error = fout
+        result = execute_tool("create_newsletter_draft", DRAFT_INPUT, ctx)
+        assert result["updated_existing_draft"] is False
+        assert len(brevo.calls) == 2
+        assert verwacht in result["message"] and "nieuw concept" in result["message"]
+
+
+def test_ander_gesprek_maakt_altijd_een_nieuw_concept(session, cipher) -> None:
+    tenant = _tenant(session)
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "k")
+    brevo = FakeBrevoMetUpdate("k")
+    execute_tool("create_newsletter_draft", DRAFT_INPUT,
+                 _draft_ctx(session, cipher, tenant, brevo, _gesprek(session, tenant).id))
+    execute_tool("create_newsletter_draft", DRAFT_INPUT,
+                 _draft_ctx(session, cipher, tenant, brevo, _gesprek(session, tenant).id))
+    assert len(brevo.calls) == 2 and not brevo.updates
+
+
+# ---- geheugen over eerdere nieuwsbrieven ------------------------------------
+
+def test_eerdere_nieuwsbrieven_tonen_inhoud_en_resultaten(session, cipher) -> None:
+    from app.repositories import newsletters as newsletters_repo
+
+    tenant = _tenant(session)
+    huidig = _gesprek(session, tenant)
+    oud = newsletters_repo.create_newsletter(
+        session, tenant_id=tenant.id, subject="Zomer in Londen", theme="Zomer", html="<p/>",
+        status="sent", input={
+            "header_title": "Londen roept", "intro_1": "Eerste intro", "preview_text": "Pre",
+            "matches": [{"home": "Chelsea", "away": "Arsenal", "url": "u"}],
+            "items": [{"title": "Ketting goud", "url": "u"}],
+        },
+    )
+    newsletters_repo.update_newsletter(session, oud, stats={"open_rate": 0.31, "click_rate": 0.04, "sent": 900})
+    newsletters_repo.create_newsletter(
+        session, tenant_id=tenant.id, subject="Mislukt", html="", status="failed"
+    )
+    newsletters_repo.create_newsletter(  # uit het huidige gesprek: hoort niet bij 'eerdere'
+        session, tenant_id=tenant.id, subject="Nu bezig", html="", status="ready",
+        conversation_id=huidig.id,
+    )
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher, conversation_id=huidig.id)
+
+    result = execute_tool("get_recent_newsletters", {}, ctx)
+
+    assert result["count"] == 1
+    nb = result["newsletters"][0]
+    assert nb["onderwerp"] == "Zomer in Londen" and nb["status"] == "verstuurd"
+    assert nb["blokken"] == ["Chelsea - Arsenal", "Ketting goud"]
+    assert nb["kop"] == "Londen roept" and nb["preheader"] == "Pre"
+    assert nb["resultaten"] == {"sent": 900, "open_rate": 0.31, "click_rate": 0.04}
+
+
+def test_eerdere_nieuwsbrieven_zijn_per_bedrijf_en_begrensd(session, cipher) -> None:
+    from app.repositories import newsletters as newsletters_repo
+
+    tenant = _tenant(session)
+    ander = tenants_repo.create_tenant(
+        session, TenantCreate(slug=f"ander-{uuid.uuid4().hex[:6]}", name="Ander", config=CONFIG)
+    )
+    newsletters_repo.create_newsletter(session, tenant_id=ander.id, subject="Van een ander", html="", status="ready")
+    for i in range(12):
+        newsletters_repo.create_newsletter(session, tenant_id=tenant.id, subject=f"nb {i}", html="", status="ready")
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+
+    assert execute_tool("get_recent_newsletters", {"limit": 50}, ctx)["count"] == 10
+    onderwerpen = [n["onderwerp"] for n in execute_tool("get_recent_newsletters", {}, ctx)["newsletters"]]
+    assert len(onderwerpen) == 5 and "Van een ander" not in onderwerpen
+
+
+def test_geen_eerdere_nieuwsbrieven(session, cipher) -> None:
+    tenant = _tenant(session)
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    result = execute_tool("get_recent_newsletters", {"limit": "x"}, ctx)
+    assert result["count"] == 0 and "nog geen" in result["message"]

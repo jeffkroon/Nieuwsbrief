@@ -72,22 +72,29 @@ def _resolve_template_html(
     )
 
 
+# Keuzes die per aanroep gelden en nooit mogen meeliften naar een volgende render:
+# de toestemming voor het concept, en de keuze voor een apart nieuw concept.
+_NOT_INHERITED = frozenset({"confirmed", "new_draft"})
+
+
 def _inherit_last_preview(ctx: ToolContext, tool_input: dict) -> dict:
     """Erf ontbrekende velden uit de vorige preview van dit gesprek.
 
     Garantie in code: "wijzig één ding en render opnieuw" kan nooit meer velden
     kwijtraken (bv. de bannerfoto) doordat de agent ze vergeet te herhalen.
     Expliciet meegegeven waarden winnen altijd (ook een lege lijst = leegmaken);
-    `confirmed` (de toestemming voor het echte concept) wordt nooit geërfd.
+    `confirmed` en `new_draft` (zie _NOT_INHERITED) worden nooit geërfd.
     """
     if ctx.conversation_id is None:
         return tool_input
     conversation = ctx.session.get(Conversation, ctx.conversation_id)
     if conversation is None:
         return tool_input
-    previous = {k: v for k, v in (conversation.last_preview or {}).items() if k != "confirmed"}
+    previous = {
+        k: v for k, v in (conversation.last_preview or {}).items() if k not in _NOT_INHERITED
+    }
     merged = {**previous, **tool_input}
-    conversation.last_preview = {k: v for k, v in merged.items() if k != "confirmed"}
+    conversation.last_preview = {k: v for k, v in merged.items() if k not in _NOT_INHERITED}
     ctx.session.commit()
     return merged
 

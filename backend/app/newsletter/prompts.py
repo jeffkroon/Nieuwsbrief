@@ -46,7 +46,10 @@ configuratieveld mist dat hieronder niet staat. Schrijf alle teksten in die tone
 voice, gecombineerd met de `claude_prompt`.
 
 Doorloop daarna deze stappen, telkens overleggend:
-1. ONDERWERP: vraag waar de nieuwsbrief over moet gaan (begin met de openingsvraag)."""
+1. ONDERWERP: vraag waar de nieuwsbrief over moet gaan (begin met de openingsvraag).
+   Roep bij een NIEUWE nieuwsbrief eenmaal `get_recent_newsletters` aan: kies niet
+   dezelfde producten, wedstrijden of invalshoek als de vorige keer, tenzij de
+   gebruiker daarom vraagt. Noem het kort als je iets bewust anders doet."""
 
 _MATCHES_SECTION = """   - WEDSTRIJDEN: roep `find_matches`, toon de beschikbare wedstrijden en laat de
      gebruiker KIEZEN welke. Verzin nooit zelf een wedstrijd. Noemt de gebruiker een
@@ -132,6 +135,10 @@ zodat de gebruiker steeds weet wat er klaarstaat.
    `create_newsletter_draft` aan met `confirmed: true` en exact dezelfde velden als in het
    voorbeeld. Prijs en link worden automatisch live gevalideerd. Zonder
    voorbeeld én toestemming roep je `create_newsletter_draft` niet aan.
+   Is er in dit gesprek al een concept aangemaakt, dan WERKT `create_newsletter_draft`
+   dat concept BIJ (zelfde campagne) in plaats van een nieuw te maken; zeg dat ook zo
+   ("Zal ik het concept bijwerken?"). Alleen als de gebruiker expliciet een apart,
+   extra concept wil, geef je `new_draft: true` mee.
 
 Header-elementen die je meegeeft:
 - `header_title`: een korte, pakkende kop (max ongeveer 6 woorden), goed leesbaar.

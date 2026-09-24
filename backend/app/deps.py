@@ -12,6 +12,7 @@ from app.config import Settings, get_settings
 from app.db.session import get_session  # noqa: F401  (re-export als dependency)
 from app.middleware import COOKIE_NAME, session_claims
 from app.services.crypto import SecretCipher
+from app.services.esp_connection import EspFactories
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,11 @@ def require_admin(role: str = Depends(current_role)) -> None:
             status.HTTP_403_FORBIDDEN,
             detail="Alleen Dunion-beheerders mogen template-layouts beheren.",
         )
+
+
+def get_esp_factories() -> EspFactories:
+    """Verzendplatform-clients; tests vervangen dit door nep-clients."""
+    return EspFactories()
 
 
 @lru_cache

@@ -25,6 +25,7 @@ _BEZIG = {
     "find_page_images": "Foto's op de pagina bekijken",
     "preview_newsletter": "Voorbeeld samenstellen",
     "create_newsletter_draft": "Concept klaarzetten",
+    "get_recent_newsletters": "Eerdere nieuwsbrieven bekijken",
 }
 
 
@@ -121,7 +122,14 @@ def _concept(invoer: dict, resultaat: dict) -> str:
         len(resultaat.get(sleutel) or [])
         for sleutel in ("matches_used", "clubs_used", "items_used")
     )
+    if resultaat.get("updated_existing_draft"):
+        return f"Bestaand concept bijgewerkt in {esp} met {blokken} blokken; niets verstuurd"
     return f"Concept aangemaakt in {esp} met {blokken} blokken; niets verstuurd"
+
+
+def _eerdere(invoer: dict, resultaat: dict) -> str:
+    aantal = resultaat.get("count") or 0
+    return f"{aantal} eerdere nieuwsbrieven bekeken" if aantal else "Nog geen eerdere nieuwsbrieven"
 
 
 def _tone(invoer: dict, resultaat: dict) -> str:
@@ -138,4 +146,5 @@ _MAKERS = {
     "preview_newsletter": _voorbeeld,
     "create_newsletter_draft": _concept,
     "analyze_website_tone": _tone,
+    "get_recent_newsletters": _eerdere,
 }
