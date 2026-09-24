@@ -106,7 +106,8 @@ TOOL_DEFINITIONS = [
     {
         "name": "get_brand_config",
         "description": "Haal de merk-configuratie (kleuren, afzender, socials, claude_prompt, "
-        "matches_url) van de huidige tenant op. Roep dit altijd eerst aan.",
+        "matches_url) van de huidige tenant op. De huisstijl staat al in je instructies: "
+        "alleen aanroepen als je een configuratieveld mist, niet elke beurt.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
