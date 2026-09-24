@@ -46,7 +46,7 @@ function showView(name) {
   if (name === "images") loadCategories();
   if (name === "newsletters") laadNieuwsbrieven();
   if (name === "templates") { loadTemplates(); loadTone(); }
-  if (name === "companies") loadCompanies();
+  if (name === "companies") { loadCompanies(); loadUsage(); }
 }
 for (const k in navButtons) navButtons[k].onclick = () => showView(k);
 

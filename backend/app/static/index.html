@@ -345,6 +345,21 @@
           <span id="companyStatus" class="hint"></span>
         </div>
       </div>
+      <div class="card" id="usageCard">
+        <h2>AI-kosten</h2>
+        <p class="hint">Wat Claude per bedrijf kost <span>(schatting op basis van tokens)</span>. Klik op een bedrijf voor de verdeling per model en functie.</p>
+        <div class="row" style="margin-top:10px;">
+          <label class="hint">Periode
+            <select id="usageDays" class="field">
+              <option value="7">Laatste 7 dagen</option>
+              <option value="30" selected>Laatste 30 dagen</option>
+              <option value="90">Laatste 90 dagen</option>
+            </select>
+          </label>
+          <span id="usageStatus" class="hint"></span>
+        </div>
+        <div id="usageTable" class="usage-wrap"></div>
+      </div>
     </div>
   </main>
   </div>
@@ -355,6 +370,7 @@
 <script src="/static/images.js"></script>
 <script src="/static/templates.js"></script>
 <script src="/static/companies.js"></script>
+<script src="/static/usage.js"></script>
 <script src="/static/boot.js"></script>
 </body>
 </html>

@@ -181,6 +181,19 @@
 .btn.gevaarlijk { background: var(--danger); }
 .btn.gevaarlijk:hover { background: #a5311f; }
 
+/* AI-kosten (bedrijvenscherm) */
+.usage-wrap { margin-top: 12px; overflow-x: auto; }
+.usage-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.usage-table th, .usage-table td { padding: 7px 8px; border-top: 1px solid var(--border); text-align: left; }
+.usage-table th { color: var(--muted); font-weight: 600; font-size: 12.5px; border-top: none; }
+.usage-table .num { text-align: right; white-space: nowrap; }
+.usage-tenant { cursor: pointer; }
+.usage-tenant td:first-child::before { content: "\25B8"; display: inline-block; width: 14px; color: var(--muted); }
+.usage-tenant.open td:first-child::before { content: "\25BE"; }
+.usage-detail td { background: #fafbfc; font-size: 12.5px; }
+.usage-detail td:first-child { padding-left: 24px; }
+.usage-total td { font-weight: 700; border-top: 2px solid var(--border); }
+
 /* Smalle schermen: de nieuwe onderdelen mogen niet omvallen. */
 @media (max-width: 720px) {
   #chatBar { gap: 6px; padding: 8px 12px; }
