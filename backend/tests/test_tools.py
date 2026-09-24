@@ -1160,8 +1160,8 @@ def _tellende_http(handler):
     teller = {"n": 0}
 
     def geteld(r: httpx.Request) -> httpx.Response:
-        # De Shopify-check (products.json) is een lichte probe, geen pagina-ophaalactie.
-        if not r.url.path.endswith("/products.json"):
+        # De Shopify-/WooCommerce-checks zijn lichte probes, geen pagina-ophaalacties.
+        if not (r.url.path.endswith("/products.json") or "/wp-json/" in r.url.path):
             teller["n"] += 1
         return handler(r)
 

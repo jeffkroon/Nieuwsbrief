@@ -8,7 +8,9 @@ Twee routes, allebei eerlijk over wat ze gezien hebben (`total`, `complete`):
 1. Shopify: de openbare productlijst (/collections/<handle>/products.json of
    /products.json), alle pagina's. Exact: titel, prijs, foto en URL komen zo van
    de shop zelf, zonder LLM en dus ook zonder kosten of afkap-risico.
-2. Andere sites: de paginering van de overzichtspagina volgen (?page=2, ...) en
+2. WooCommerce: de openbare Store API (/wp-json/wc/store/v1/products), alle
+   pagina's, per taal (WPML: ?lang=en). Ook exact en zonder LLM.
+3. Andere sites: de paginering van de overzichtspagina volgen (?page=2, ...) en
    per pagina de LLM-extractie draaien, tot een vaste grens.
 Een zoekterm (`query`, bv. "zilveren ringen") filtert daarna in code.
 """
@@ -16,6 +18,7 @@ Een zoekterm (`query`, bv. "zilveren ringen") filtert daarna in code.
 from __future__ import annotations
 
 import html as html_lib
+import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -27,7 +30,9 @@ from app.newsletter.extraction import SITE_HEADERS, normalize_price
 
 SHOPIFY_PAGE_SIZE = 250
 MAX_SHOPIFY_PAGES = 8  # 2.000 producten; ruim genoeg voor een nieuwsbrief-keuze
-MAX_HTML_PAGES = 5  # per pagina een LLM-extractie: begrensd houden
+MAX_HTML_PAGES = 15  # per pagina een Haiku-extractie (~1-2 cent): begrensd houden
+WOO_PAGE_SIZE = 100
+MAX_WOO_PAGES = 30  # 3.000 producten
 MAX_RETURNED = 40  # zonder zoekterm: maximaal zoveel naar de assistent (~3k tokens); met query gericht
 
 # Nederlands/Engels door elkaar in productnamen ("Ring Silver", "Ketting (Zilver)").
@@ -39,7 +44,7 @@ class Catalog:
     products: tuple[dict, ...]
     total: int
     complete: bool
-    source: str  # "shopify" of "pagina's"
+    source: str  # "shopify", "woocommerce" of "pagina's"
     pages_read: int
 
 
@@ -131,6 +136,98 @@ def shopify_catalog(url: str, client: httpx.Client | None = None) -> Catalog | N
         if len(body["products"]) < SHOPIFY_PAGE_SIZE:
             return Catalog(tuple(producten), len(producten), True, "shopify", pagina)
     return Catalog(tuple(producten), len(producten), False, "shopify", MAX_SHOPIFY_PAGES)
+
+
+# ---------------------------------------------------------------- WooCommerce
+_TAAL_PREFIX = re.compile(r"^/([a-z]{2})(?:/|$)")
+_HTML_LANG = re.compile(r"""<html[^>]*\blang=["']([a-z]{2})""", re.I)
+
+
+def _woo_lang(url: str, client: httpx.Client | None) -> str | None:
+    """Taal van de shop-URL: /en/... -> en; anders het lang-attribuut van de pagina."""
+    m = _TAAL_PREFIX.match(urlsplit(url).path)
+    if m:
+        return m.group(1)
+    try:
+        resp = client.get(url, headers=SITE_HEADERS) if client else httpx.get(url, headers=SITE_HEADERS, timeout=20, follow_redirects=True)
+    except httpx.HTTPError:
+        return None
+    m = _HTML_LANG.search(resp.text[:5000])
+    return m.group(1).lower() if m else None
+
+
+def _woo_page(client: httpx.Client | None, endpoint: str, params: dict) -> tuple[list, int | None] | None:
+    try:
+        if client is not None:
+            resp = client.get(endpoint, params=params, headers=SITE_HEADERS)
+        else:
+            with httpx.Client(timeout=30.0, follow_redirects=True) as c:
+                resp = c.get(endpoint, params=params, headers=SITE_HEADERS)
+    except httpx.HTTPError:
+        return None
+    if resp.status_code != 200 or "json" not in resp.headers.get("content-type", ""):
+        return None
+    # Sommige plugins zetten tekst vóór de JSON; begin bij het eerste '['.
+    start = resp.content.find(b"[")
+    if start < 0:
+        return None
+    try:
+        rijen = json.loads(resp.content[start:])
+    except ValueError:
+        return None
+    if not isinstance(rijen, list):
+        return None
+    totaal = resp.headers.get("x-wp-totalpages")
+    return rijen, int(totaal) if totaal and totaal.isdigit() else None
+
+
+def _woo_product(p: dict) -> dict | None:
+    naam = html_lib.unescape((p.get("name") or "").strip())
+    link = p.get("permalink")
+    if not naam or not link:
+        return None
+    prijzen = p.get("prices") or {}
+    decimalen = int(prijzen.get("currency_minor_unit") or 2)
+
+    def bedrag(waarde):
+        return _euro(int(waarde) / (10 ** decimalen)) if str(waarde or "").isdigit() else None
+
+    product = {
+        "name": naam,
+        "url": link,
+        "price": bedrag(prijzen.get("price")),
+        "image_url": next((i.get("src") for i in p.get("images") or [] if i.get("src")), None),
+        "available": bool(p.get("is_in_stock", True)),
+    }
+    was = bedrag(prijzen.get("regular_price"))
+    if was and prijzen.get("regular_price") != prijzen.get("price"):
+        product["was_price"] = was
+    categorieen = [html_lib.unescape(c.get("name", "")) for c in p.get("categories") or [] if c.get("name")]
+    if categorieen:
+        product["type"] = ", ".join(categorieen)
+    return product
+
+
+def woocommerce_catalog(url: str, client: httpx.Client | None = None) -> Catalog | None:
+    """Alle producten via de WooCommerce Store API; None als die er niet is."""
+    endpoint = f"{_origin(url)}/wp-json/wc/store/v1/products"
+    # Eerst goedkoop kijken of de API er is; pas dan de taal bepalen (kan een
+    # pagina-ophaalactie kosten) en de hele lijst lezen.
+    if _woo_page(client, endpoint, {"per_page": 1, "page": 1}) is None:
+        return None
+    taal = _woo_lang(url, client)
+    basis = {"per_page": WOO_PAGE_SIZE, **({"lang": taal} if taal else {})}
+    producten: list[dict] = []
+    for pagina in range(1, MAX_WOO_PAGES + 1):
+        uitkomst = _woo_page(client, endpoint, {**basis, "page": pagina})
+        if uitkomst is None:
+            return None if pagina == 1 else Catalog(tuple(producten), len(producten), False, "woocommerce", pagina - 1)
+        rijen, totaal_paginas = uitkomst
+        producten.extend(q for q in (_woo_product(r) for r in rijen if isinstance(r, dict)) if q)
+        laatste = totaal_paginas is not None and pagina >= totaal_paginas
+        if laatste or len(rijen) < WOO_PAGE_SIZE:
+            return Catalog(tuple(producten), len(producten), True, "woocommerce", pagina)
+    return Catalog(tuple(producten), len(producten), False, "woocommerce", MAX_WOO_PAGES)
 
 
 # ---------------------------------------------------------------- andere sites
