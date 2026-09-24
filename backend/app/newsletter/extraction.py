@@ -162,6 +162,12 @@ BANNER_WIDTH = 1200
 BANNER_HEIGHT = 600
 
 
+def is_croppable(url: str) -> bool:
+    """Kan de CDN deze foto zelf bijsnijden? (Shopify: /cdn/shop/ of cdn.shopify.com)"""
+    parsed = urlsplit(url)
+    return _SHOPIFY_CDN_PATH in parsed.path or parsed.netloc.lower() == "cdn.shopify.com"
+
+
 def normalize_banner_url(url: str, crop: str = "landscape") -> str:
     """Maak van een og:image een mail-vriendelijke banner-URL (deterministisch).
 
@@ -170,7 +176,7 @@ def normalize_banner_url(url: str, crop: str = "landscape") -> str:
     want daar weten we niet of resize-parameters veilig zijn.
     """
     parsed = urlsplit(url)
-    if _SHOPIFY_CDN_PATH not in parsed.path:
+    if not is_croppable(url):
         return url
     params = [
         (k, v) for k, v in parse_qsl(parsed.query) if k not in ("width", "height", "crop")

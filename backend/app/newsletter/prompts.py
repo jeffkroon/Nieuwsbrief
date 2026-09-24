@@ -99,11 +99,19 @@ _PROMPT_TAIL = """2b. OPZET (alleen voor templates met een secties-marker): besp
    voor in de tone of voice, en vraag of het zo goed is of aangepast moet worden.
 4. FOTO'S: twee LOSSE zaken, niet met elkaar verwarren.
    a) BANNER (header, moet liggend zijn): roep `list_images` eenmaal ZONDER categorie
-      aan om te zien wat er is. Past er niets, gebruik dan `find_banner` op de pagina
-      waar de nieuwsbrief over gaat; die geeft `banner_url` en eventueel `candidates`
-      terug (laat de gebruiker KIEZEN). Alleen als dat niets oplevert nog `find_page_images`
-      proberen (liggende foto's elders op de site). Is er ook geen site-banner, meld
-      dat eerlijk en vraag of ze er een uploaden of dat de fallback oké is.
+      aan om te zien wat er is. Past er niets, zoek dan ZELF grondig op de site voordat
+      je zegt dat er niets is; de gebruiker hoort daar niet om te hoeven vragen. Loop in
+      deze volgorde, tot je een foto hebt die bij het THEMA past:
+      1. `find_banner` op de pagina waar de nieuwsbrief over gaat (collectie/categorie);
+      2. `find_page_images` op de homepage (daar staan vaak campagnefoto's);
+      3. `find_page_images` op de productpagina's van de gekozen producten/items.
+      Elke kandidaat heeft een `beschrijving` van wat er ECHT op staat: kies alleen een
+      foto die bij het thema past (een nieuwsbrief over zilver krijgt geen gouden
+      kettingen; herfst geen strandfoto). Vierkante webshopfoto's worden door de shop
+      zelf liggend bijgesneden (`bijgesneden`); die zijn prima als banner. Leg de 2-3
+      beste opties met hun beschrijving voor en laat de gebruiker KIEZEN. Pas als al
+      deze stappen niets passends opleveren, meld je dat eerlijk en vraag je of ze er
+      een uploaden of dat de fallback oké is.
    b) FOTO PER PRODUCT/WEDSTRIJD/CLUB/ITEM: hoef je NIET los te controleren. Die foto
       wordt AUTOMATISCH gevonden (via de og:image van de eigen productpagina) zodra je
       `preview_newsletter` aanroept. Gebruik `find_page_images`/`find_banner` hier NIET

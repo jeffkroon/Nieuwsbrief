@@ -28,7 +28,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from app.newsletter.extraction import SITE_HEADERS
+from app.newsletter.extraction import SITE_HEADERS, is_croppable, normalize_banner_url
 
 # Grenzen voor bruikbaar beeld in een mail.
 MIN_BANNER_WIDTH = 600
@@ -45,6 +45,9 @@ _RUIS = re.compile(
     re.I,
 )
 _OVERGESLAGEN_EXT = (".svg", ".ico", ".gif")
+# Posterframes van productvideo's (Shopify: /preview_images/...thumbnail): vaak een
+# zwart eerste frame. Liggend en groot, dus zonder dit filter de "beste" banner.
+_VIDEO_POSTER = re.compile(r"/preview_images/|\.thumbnail\.", re.I)
 
 _IMG = re.compile(r"(?is)<img\b[^>]*>")
 _SOURCE = re.compile(r"(?is)<source\b[^>]*>")
@@ -82,6 +85,7 @@ class MeasuredImage:
     source: str
     alt: str = ""
     total_bytes: int | None = None
+    cropped: bool = False  # door de CDN liggend bijgesneden uit een vierkante/staande foto
 
     @property
     def landscape(self) -> bool:
@@ -202,7 +206,7 @@ def _normaliseer(ruwe_url: str, base_url: str) -> str | None:
 
 def _is_ruis(url: str, alt: str, w: int | None, h: int | None) -> bool:
     pad = urlsplit(url).path.lower()
-    if pad.endswith(_OVERGESLAGEN_EXT):
+    if pad.endswith(_OVERGESLAGEN_EXT) or _VIDEO_POSTER.search(pad):
         return True
     if (w is not None and w < MIN_ATTR_SIZE) or (h is not None and h < MIN_ATTR_SIZE):
         return True
@@ -313,15 +317,35 @@ def banner_candidates(
     html: str, base_url: str, *, client: httpx.Client | None = None,
     limit: int = 6, min_width: int = MIN_BANNER_WIDTH,
 ) -> list[MeasuredImage]:
-    """Liggende foto's van voldoende breedte, gemeten, om aan de gebruiker voor te leggen."""
-    resultaat: list[MeasuredImage] = []
+    """Foto's die als banner kunnen, gemeten, om aan de gebruiker voor te leggen.
+
+    Eerst echt liggend beeld. Daarna vierkante of staande foto's die de CDN zelf
+    liggend kan bijsnijden (Shopify): op webshops is dat vaak het mooiste beeld
+    (campagnefoto, product om de hals), maar het viel eerder af als "niet liggend".
+    """
+    liggend: list[MeasuredImage] = []
+    bij_te_snijden: list[MeasuredImage] = []
     for kandidaat in find_page_images(html, base_url)[:MAX_MEASURE]:
         gemeten = measure_image(kandidaat.url, client, source=kandidaat.source, alt=kandidaat.alt)
-        if gemeten and gemeten.landscape and gemeten.width >= min_width:
-            resultaat.append(gemeten)
-            if len(resultaat) >= limit:
-                break
-    return resultaat
+        if gemeten is None:
+            continue
+        if gemeten.landscape and gemeten.width >= min_width:
+            liggend.append(gemeten)
+        elif is_croppable(gemeten.url) and min(gemeten.width, gemeten.height) >= min_width:
+            bij_te_snijden.append(_als_banner_uitsnede(gemeten))
+        if len(liggend) >= limit:
+            break
+    return (liggend + bij_te_snijden)[:limit]
+
+
+def _als_banner_uitsnede(beeld: MeasuredImage) -> MeasuredImage:
+    from app.newsletter.extraction import BANNER_HEIGHT, BANNER_WIDTH
+
+    return MeasuredImage(
+        url=normalize_banner_url(beeld.url, crop="landscape"), width=BANNER_WIDTH,
+        height=BANNER_HEIGHT, content_type=beeld.content_type, source=beeld.source,
+        alt=beeld.alt, total_bytes=None, cropped=True,
+    )
 
 
 def best_product_image(

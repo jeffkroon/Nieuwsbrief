@@ -88,8 +88,10 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "find_page_images",
-        "description": "LIGGENDE foto's (minimaal 600px breed) op een pagina van de klantensite, "
-        "gemeten op formaat en ontdaan van logo's, iconen en pixels; bedoeld voor de BANNER/header, "
+        "description": "Foto's op een pagina van de klantensite die als BANNER/header kunnen: "
+        "liggend beeld (minimaal 600px breed) en vierkante webshopfoto's die de shop zelf liggend "
+        "bijsnijdt. Gemeten, ontdaan van logo's, iconen, pixels, videoframes en egale beelden, en "
+        "elk met een 'beschrijving' van wat er echt op staat (kies op thema). Bedoeld voor de BANNER, "
         "niet voor productfoto's. Gebruik dit als list_images geen bannerfoto heeft: bijna elke "
         "site heeft zelf een liggende hero-foto. GEBRUIK DIT NOOIT om te checken of een los "
         "product/wedstrijd/club een foto heeft: die foto's zijn vaak vierkant of staand (tellen "
