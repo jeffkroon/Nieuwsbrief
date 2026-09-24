@@ -30,10 +30,6 @@ FALLBACK_TEMPLATE_STYLES = {
     "spacing_intro_products": 4,
     "spacing_products_text": 0,
 }
-BREVO_SECRET_KIND = "brevo_api_key"
-KLAVIYO_SECRET_KIND = "klaviyo_api_key"
-ACTIVECAMPAIGN_SECRET_KIND = "activecampaign_api_key"
-ESP_LABELS = {"brevo": "Brevo", "klaviyo": "Klaviyo", "activecampaign": "ActiveCampaign"}
 
 
 @dataclass(frozen=True)

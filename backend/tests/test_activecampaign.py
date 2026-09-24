@@ -23,8 +23,10 @@ class _FakeHttp:
 
     post_responses: list = field(default_factory=list)
     get_responses: list = field(default_factory=list)
+    put_responses: list = field(default_factory=list)
     posts: list = field(default_factory=list)
     gets: list = field(default_factory=list)
+    puts: list = field(default_factory=list)
 
     def post(self, url, *, params=None, data=None):
         self.posts.append({"url": url, "params": params, "data": data})
@@ -33,6 +35,12 @@ class _FakeHttp:
     def get(self, url, *, params=None, headers=None):
         self.gets.append({"url": url, "params": params, "headers": headers})
         return self.get_responses.pop(0)
+
+    def request(self, method, url, *, params=None, json=None, headers=None):
+        if method == "GET":
+            return self.get(url, params=params, headers=headers)
+        self.puts.append({"method": method, "url": url, "json": json, "headers": headers})
+        return self.put_responses.pop(0)
 
 
 def _client(http) -> ActiveCampaignClient:

@@ -97,3 +97,92 @@ def test_klaviyo_nieuwsbrief_gebruikt_de_tekst_referentie(client, session) -> No
     regel = client.get(f"/tenants/{tenant.id}/newsletters").json()[0]
     assert regel["campaign_ref"] == "01HXABC"
     assert regel["esp"] == "klaviyo"
+
+
+# --- resultaten uit het verzendplatform ---------------------------------------
+class _FakeResultsBrevo:
+    def __init__(self, results=None, error=None) -> None:
+        self.results, self.error, self.calls = results, error, 0
+
+    def get_results(self, campaign_id):
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.results
+
+
+@pytest.fixture
+def nep_brevo():
+    from app.deps import get_esp_factories
+    from app.main import app
+    from app.services.esp_connection import EspFactories
+
+    holder = {}
+
+    def install(fake):
+        holder["fake"] = fake
+        app.dependency_overrides[get_esp_factories] = lambda: EspFactories(brevo=lambda key: fake)
+        return fake
+
+    yield install
+    app.dependency_overrides.pop(get_esp_factories, None)
+
+
+def _met_key(session, cipher, tenant):
+    from app.repositories import secrets as secrets_repo
+
+    secrets_repo.set_tenant_secret(session, cipher, tenant.id, "brevo_api_key", "k")
+
+
+def test_resultaten_ophalen_bewaart_ze_en_markeert_verstuurd(client, session, cipher, nep_brevo) -> None:
+    from app.services.esp import CampaignResults
+
+    tenant = _tenant(session, esp="brevo")
+    _met_key(session, cipher, tenant)
+    nb = repo.create_newsletter(
+        session, tenant_id=tenant.id, subject="S", html="<p/>", brevo_campaign_id=5, status="ready"
+    )
+    fake = nep_brevo(_FakeResultsBrevo(CampaignResults(status="sent", sent=100, open_rate=0.3)))
+
+    antwoord = client.post(f"/tenants/{tenant.id}/newsletters/{nb.id}/results")
+    assert antwoord.status_code == 200
+    body = antwoord.json()
+    assert body["from_cache"] is False and body["stats"]["open_rate"] == 0.3
+    session.refresh(nb)
+    assert nb.status == "sent" and nb.stats["sent"] == 100
+
+    # Binnen de afkoeltijd: bewaarde cijfers, geen nieuwe vraag aan het platform.
+    tweede = client.post(f"/tenants/{tenant.id}/newsletters/{nb.id}/results").json()
+    assert tweede["from_cache"] is True and fake.calls == 1
+    lijst = client.get(f"/tenants/{tenant.id}/newsletters").json()
+    assert lijst[0]["stats"]["open_rate"] == 0.3
+
+
+def test_resultaten_van_mislukt_concept_geeft_nette_fout(client, session, cipher, nep_brevo) -> None:
+    tenant = _tenant(session, esp="brevo")
+    nb = repo.create_newsletter(session, tenant_id=tenant.id, subject="S", html="", status="failed")
+    nep_brevo(_FakeResultsBrevo())
+    antwoord = client.post(f"/tenants/{tenant.id}/newsletters/{nb.id}/results")
+    assert antwoord.status_code == 400
+    assert "geen campagne" in antwoord.json()["detail"]
+
+
+def test_resultaten_platformfout_wordt_vertaald(client, session, cipher, nep_brevo) -> None:
+    from app.services.brevo import BrevoError
+
+    tenant = _tenant(session, esp="brevo")
+    _met_key(session, cipher, tenant)
+    nb = repo.create_newsletter(
+        session, tenant_id=tenant.id, subject="S", html="<p/>", brevo_campaign_id=5, status="ready"
+    )
+    nep_brevo(_FakeResultsBrevo(error=BrevoError("Brevo gaf HTTP 401: key")))
+    antwoord = client.post(f"/tenants/{tenant.id}/newsletters/{nb.id}/results")
+    assert antwoord.status_code == 400 and "leesrechten" in antwoord.json()["detail"]
+
+
+def test_resultaten_van_ander_bedrijf_niet_op_te_vragen(client, session, cipher, nep_brevo) -> None:
+    eigen = _tenant(session, esp="brevo")
+    ander = _tenant(session, esp="brevo", x=1)
+    nb = repo.create_newsletter(session, tenant_id=ander.id, subject="S", html="", brevo_campaign_id=5)
+    nep_brevo(_FakeResultsBrevo())
+    assert client.post(f"/tenants/{eigen.id}/newsletters/{nb.id}/results").status_code == 404

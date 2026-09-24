@@ -10,6 +10,10 @@ Flow (v1-API voor het schrijven; de v3-API kan campagne-inhoud niet zetten):
    lijst + message gekoppeld)
 Lijsten ophalen gaat wel via de nette v3-API (GET /api/3/lists).
 
+Bijwerken en resultaten via v3: GET /api/3/campaigns/{id} geeft status ("0" =
+concept, "5" = verstuurd), message_id en de tellers; PUT /api/3/messages/{id}
+werkt de inhoud van het bericht bij. Alleen bij status concept.
+
 ActiveCampaign heeft een account-specifieke API-URL (https://<account>.api-us1.com);
 die is niet geheim en staat in de tenant-config. De API-key is wel geheim en staat
 in de versleutelde opslag. Dezelfde key werkt voor v1 en v3.
@@ -23,12 +27,29 @@ from datetime import datetime, timedelta
 
 import httpx
 
+from app.services.esp import (
+    DRAFT,
+    OTHER,
+    SCHEDULED,
+    SENDING,
+    SENT,
+    CampaignNotFound,
+    CampaignResults,
+    as_int,
+    rate,
+    sum_known,
+)
+
 HTML_MIN_BYTES = 10
 # Geen gedocumenteerde API-limiet; boven ~102 KB knipt Gmail de mail af.
 HTML_WARN_BYTES = 102_400
 
 # Alleen echte ActiveCampaign-hosts: voorkomt dat een (per ongeluk of kwaadwillend)
 # ingevulde interne URL server-side wordt aangeroepen met de API-key eraan (SSRF).
+# v1-statuscodes (de v3-docs geven geen lijst): 0 concept, 1 gepland, 2 bezig,
+# 3 gepauzeerd, 4 gestopt, 5 voltooid.
+_STATUS = {"0": DRAFT, "1": SCHEDULED, "2": SENDING, "5": SENT}
+
 _ALLOWED_HOST = re.compile(r"^[a-z0-9-]+\.(api-us[0-9]+\.com|activehosted\.com)$")
 
 
@@ -116,16 +137,23 @@ class ActiveCampaignClient:
         return body
 
     def _get_v3(self, path: str, params: dict | None = None) -> dict:
+        return self._request_v3("GET", path, params=params)
+
+    def _request_v3(
+        self, method: str, path: str, *, params: dict | None = None, json: dict | None = None
+    ) -> dict:
         url = f"{self._base}/api/3/{path.lstrip('/')}"
         headers = {"Api-Token": self._api_key}
         try:
             if self._client is not None:
-                resp = self._client.get(url, params=params, headers=headers)
+                resp = self._client.request(method, url, params=params, json=json, headers=headers)
             else:
                 with httpx.Client(timeout=self._timeout) as client:
-                    resp = client.get(url, params=params, headers=headers)
+                    resp = client.request(method, url, params=params, json=json, headers=headers)
         except httpx.HTTPError as exc:
             raise ActiveCampaignError(f"ActiveCampaign niet bereikbaar: {exc}") from exc
+        if resp.status_code == 404:
+            raise CampaignNotFound(f"ActiveCampaign kent {path} niet (meer)")
         if resp.status_code != 200:
             raise ActiveCampaignError(
                 f"ActiveCampaign gaf status {resp.status_code} op {path} "
@@ -218,3 +246,67 @@ class ActiveCampaignClient:
                 break
             offset += 100
         return lists
+
+    def _campaign(self, campaign_id: str) -> dict:
+        body = self._get_v3(f"campaigns/{campaign_id}")
+        campaign = body.get("campaign")
+        if not isinstance(campaign, dict):
+            raise ActiveCampaignError(f"ActiveCampaign gaf geen campagne {campaign_id} terug")
+        return campaign
+
+    def get_campaign_status(self, campaign_id: str) -> str:
+        """Genormaliseerde status van de campagne. Alleen-lezen."""
+        return _STATUS.get(str(self._campaign(campaign_id).get("status")), OTHER)
+
+    def update_draft(
+        self,
+        campaign_id: str,
+        *,
+        subject: str,
+        sender_name: str,
+        sender_email: str,
+        html: str,
+        preview_text: str | None = None,
+    ) -> None:
+        """Werk het bericht van een CONCEPT-campagne bij; weigert alles wat geen concept is."""
+        if not html or len(html.encode()) < HTML_MIN_BYTES:
+            raise ActiveCampaignError("lege of veel te korte HTML; concept niet bijgewerkt")
+        campaign = self._campaign(campaign_id)
+        status = _STATUS.get(str(campaign.get("status")), OTHER)
+        if status != DRAFT:
+            raise ActiveCampaignError(
+                f"campagne {campaign_id} is geen concept meer (status {status})"
+            )
+        message_id = as_int(campaign.get("message_id"))
+        if not message_id:
+            raise ActiveCampaignError(f"campagne {campaign_id} heeft geen bericht om bij te werken")
+        message = {
+            "subject": subject,
+            "fromname": sender_name,
+            "fromemail": sender_email,
+            "reply2": sender_email,
+            "html": html,
+            "text": _text_fallback(html),
+        }
+        if preview_text:
+            message["preheader_text"] = preview_text
+        self._request_v3("PUT", f"messages/{message_id}", json={"message": message})
+
+    def get_results(self, campaign_id: str) -> CampaignResults:
+        """Tellers van de campagne. AC geeft geen 'afgeleverd': percentages t.o.v. verzonden."""
+        campaign = self._campaign(campaign_id)
+        sent = as_int(campaign.get("send_amt"))
+        opens = as_int(campaign.get("uniqueopens"))
+        clicks = as_int(campaign.get("uniquelinkclicks"))
+        return CampaignResults(
+            status=_STATUS.get(str(campaign.get("status")), OTHER),
+            sent=sent,
+            opens_unique=opens,
+            clicks_unique=clicks,
+            unsubscribes=as_int(campaign.get("unsubscribes")),
+            bounces=sum_known(
+                as_int(campaign.get("hardbounces")), as_int(campaign.get("softbounces"))
+            ),
+            open_rate=rate(opens, sent),
+            click_rate=rate(clicks, sent),
+        )

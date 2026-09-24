@@ -15,6 +15,7 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Integer,
     MetaData,
@@ -220,6 +221,9 @@ class Newsletter(Base):
     esp_campaign_ref: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="draft")
     error: Mapped[str | None] = mapped_column(Text)
+    # Resultaten uit het verzendplatform (mail_014); NULL = nog niet opgehaald.
+    stats: Mapped[dict | None] = mapped_column(JSONB)
+    stats_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 

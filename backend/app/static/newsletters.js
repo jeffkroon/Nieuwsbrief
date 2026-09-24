@@ -23,9 +23,17 @@ async function laadNieuwsbrieven() {
     const el = document.createElement("div");
     el.className = "nl-item";
     const datum = new Date(n.created_at).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" });
+    // textContent, geen innerHTML: onderwerp en thema komen uit de chat.
     const kop = document.createElement("div");
-    kop.innerHTML = `<div>${n.subject || "(zonder onderwerp)"}</div>`
-      + `<div class="meta">${datum}${n.theme ? " - " + n.theme : ""}</div>`;
+    const onderwerp = document.createElement("div");
+    onderwerp.textContent = n.subject || "(zonder onderwerp)";
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = datum + (n.theme ? " - " + n.theme : "");
+    const cijfers = document.createElement("div");
+    cijfers.className = "meta nl-stats";
+    cijfers.textContent = resultaatTekst(n.stats);
+    kop.append(onderwerp, meta, cijfers);
     el.appendChild(kop);
 
     const rechts = document.createElement("span");
@@ -37,6 +45,21 @@ async function laadNieuwsbrieven() {
       mislukt.className = "status-failed";
       mislukt.textContent = "mislukt";
       el.appendChild(mislukt);
+    }
+
+    if (n.status === "sent") {
+      const verstuurd = document.createElement("span");
+      verstuurd.className = "status-sent";
+      verstuurd.textContent = "verstuurd";
+      el.appendChild(verstuurd);
+    }
+
+    if (n.campaign_ref && n.status !== "failed") {
+      const resultaten = document.createElement("button");
+      resultaten.textContent = "resultaten";
+      resultaten.title = "Open- en klikcijfers ophalen uit het verzendplatform (alleen lezen)";
+      resultaten.onclick = () => haalResultaten(n.id, resultaten, cijfers);
+      el.appendChild(resultaten);
     }
 
     const bekijk = document.createElement("button");
@@ -66,6 +89,40 @@ async function laadNieuwsbrieven() {
       el.appendChild(link);
     }
     lijst.appendChild(el);
+  }
+}
+
+function procent(fractie) {
+  return (fractie * 100).toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + "%";
+}
+
+// Korte regel met de cijfers; leeg als ze nog nooit zijn opgehaald.
+function resultaatTekst(stats) {
+  if (!stats) return "";
+  if (stats.status === "draft") return "Nog niet verstuurd (concept)";
+  const delen = [];
+  if (stats.sent != null) delen.push(`${stats.sent.toLocaleString("nl-NL")} verzonden`);
+  if (stats.open_rate != null) delen.push(`open ${procent(stats.open_rate)}`);
+  if (stats.click_rate != null) delen.push(`klik ${procent(stats.click_rate)}`);
+  if (stats.unsubscribes != null) delen.push(`${stats.unsubscribes} afmeldingen`);
+  return delen.length ? delen.join(" · ") : "Nog geen cijfers beschikbaar";
+}
+
+async function haalResultaten(id, knop, doel) {
+  knop.disabled = true;
+  const oud = knop.textContent;
+  knop.textContent = "ophalen...";
+  try {
+    const res = await fetch(`/tenants/${tenantSel.value}/newsletters/${id}/results`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || "status " + res.status);
+    doel.textContent = resultaatTekst(body.stats)
+      + (body.from_cache ? " (net opgehaald; over een paar minuten opnieuw)" : "");
+  } catch (e) {
+    doel.textContent = "Kon geen resultaten ophalen: " + e.message;
+  } finally {
+    knop.disabled = false;
+    knop.textContent = oud;
   }
 }
 

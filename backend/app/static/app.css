@@ -119,6 +119,8 @@
   .nl-item .meta { color: var(--muted); font-size: 12px; }
   .nl-item a, .nl-item button { font-size: 12px; background: none; border: none; cursor: pointer; font-family: inherit; color: #0b62c4; text-decoration: none; }
   .nl-item .status-failed { color: var(--danger); font-weight: 600; font-size: 11.5px; }
+  .nl-item .status-sent { color: var(--ok, #1a7f37); font-weight: 600; font-size: 11.5px; }
+  .nl-item .nl-stats:empty { display: none; }
   .versions { border-top: 1px solid var(--border); padding: 8px 0 10px; font-size: 13px; }
   .versions .v { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .versions .v small { color: var(--muted); }

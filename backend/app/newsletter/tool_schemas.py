@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 
+from app.newsletter.history_tool import SCHEMA as _HISTORY_SCHEMA
 from app.newsletter.styles import COLOR_KEYS, EMAIL_SAFE_FONTS, FONT_KEY, SPACING_KEYS
 
 TOOL_DEFINITIONS = [
@@ -122,9 +123,10 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "create_newsletter_draft",
-        "description": "Render de nieuwsbrief en maak hem aan als CONCEPT bij het "
+        "description": "Render de nieuwsbrief en zet hem als CONCEPT klaar bij het "
         "verzendplatform van dit bedrijf (Brevo, Klaviyo of ActiveCampaign). Verstuurt "
-        "niets. Gebruik "
+        "niets. Is er in dit gesprek al een concept gemaakt, dan wordt dat bijgewerkt "
+        "(zelfde campagne) zolang het daar nog een concept is. Gebruik "
         "alleen echte inhoud (find_matches/find_products/find_ticket_links); links en "
         "prijzen worden live gevalideerd.",
         "input_schema": {
@@ -143,6 +145,7 @@ TOOL_DEFINITIONS = [
                 "slot_cta_url": {"type": "string"},
                 "preview_text": {"type": "string"},
                 "confirmed": {"type": "boolean", "description": "Zet alleen op true NADAT de gebruiker expliciet toestemming heeft gegeven om het concept in Brevo aan te maken"},
+                "new_draft": {"type": "boolean", "description": "Standaard wordt een concept dat in DIT gesprek al is aangemaakt BIJGEWERKT (zelfde campagne) in plaats van een nieuw concept te maken. Zet alleen op true als de gebruiker expliciet een APART, extra concept wil (bv. een tweede variant)."},
                 "header_image_url": {"type": "string", "description": "De bannerfoto: een BESTANDSNAAM uit list_images('banner') (bv. 'allianz-arena.jpg'), of de volledige banner_url die find_banner teruggaf. Nooit een zelf verzonnen URL."},
                 "header_text_color": {"type": "string", "description": "Optioneel: hex-kleur voor de kop en ondertitel op de bannerfoto, bv. '#ffffff'. Alleen meegeven als de gebruiker om een andere kleur vraagt; standaard geldt de kopkleur uit de stijl-builder."},
                 "matches": {
@@ -261,6 +264,7 @@ TOOL_DEFINITIONS = [
 _draft_def = next(t for t in TOOL_DEFINITIONS if t["name"] == "create_newsletter_draft")
 _preview_schema = copy.deepcopy(_draft_def["input_schema"])
 _preview_schema["properties"].pop("confirmed", None)
+_preview_schema["properties"].pop("new_draft", None)
 TOOL_DEFINITIONS.append(
     {
         "name": "preview_newsletter",
@@ -320,3 +324,5 @@ _STYLE_OVERRIDES_SCHEMA = {
 }
 _draft_def["input_schema"]["properties"]["style_overrides"] = _STYLE_OVERRIDES_SCHEMA
 _preview_schema["properties"]["style_overrides"] = _STYLE_OVERRIDES_SCHEMA
+
+TOOL_DEFINITIONS.append(_HISTORY_SCHEMA)

@@ -307,6 +307,16 @@ class NewsletterSummary(BaseModel):
     link_is_deeplink: bool = False
     conversation_id: uuid.UUID | None = None
     created_at: datetime
+    stats: dict | None = None
+    stats_fetched_at: datetime | None = None
+
+
+class NewsletterResults(BaseModel):
+    """Resultaten uit het verzendplatform; from_cache = binnen de afkoeltijd bewaard."""
+
+    stats: dict | None
+    fetched_at: datetime | None
+    from_cache: bool
 
 
 class ConversationSummary(BaseModel):
