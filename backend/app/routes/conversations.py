@@ -9,7 +9,7 @@ import threading
 import uuid
 
 import anthropic
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -201,6 +201,21 @@ def get_conversation(
         messages=berichten,
         preview_html=_hervat_preview(session, conversation),
     )
+
+
+@router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conversation(
+    conversation_id: uuid.UUID,
+    session: Session = Depends(get_session),
+    info: SessionInfo = Depends(current_session_info),
+) -> Response:
+    """Gesprek verwijderen. Nieuwsbrieven eruit blijven staan, zonder koppeling."""
+    conversation = repo.get_conversation(session, conversation_id)
+    if conversation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="gesprek niet gevonden")
+    _require_conversation_access(info, conversation.tenant_id)
+    repo.delete_conversation(session, conversation_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _titel(eerste_bericht: str | None, grens: int = 70) -> str:

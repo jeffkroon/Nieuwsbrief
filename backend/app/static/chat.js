@@ -186,8 +186,44 @@ document.getElementById("stop").onclick = () => {
   if (lopendeBeurt) lopendeBeurt.abort();
 };
 
-// ---- gesprekken: lijst, hervatten, nieuw ----
-const chatHistory = document.getElementById("chatHistory");
+// ---- gesprekken: lijst in de sidebar (zoals ChatGPT), hervatten, nieuw, verwijderen ----
+const convList = document.getElementById("convList");
+const OPENING = "Waar wil je dat ik de nieuwsbrief over schrijf?";
+
+// Groepen zoals ChatGPT: Vandaag, Gisteren, Vorige 7 dagen, Vorige 30 dagen, Ouder.
+function periodeVan(datum) {
+  const vandaag = new Date(); vandaag.setHours(0, 0, 0, 0);
+  const dag = new Date(datum); dag.setHours(0, 0, 0, 0);
+  const dagen = Math.round((vandaag - dag) / 86400000);
+  if (dagen <= 0) return "Vandaag";
+  if (dagen === 1) return "Gisteren";
+  if (dagen <= 7) return "Vorige 7 dagen";
+  if (dagen <= 30) return "Vorige 30 dagen";
+  return "Ouder";
+}
+
+const PRULLENBAK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>';
+
+function gesprekRegel(g) {
+  const regel = document.createElement("div");
+  regel.className = "conv-item" + (g.id === conversationId ? " active" : "");
+  regel.dataset.id = g.id;
+  regel.title = g.title;
+  const titel = document.createElement("span");
+  titel.className = "conv-title";
+  titel.textContent = g.title;  // textContent: de titel is het eerste chatbericht
+  const weg = document.createElement("button");
+  weg.className = "conv-del";
+  weg.title = "Gesprek verwijderen";
+  weg.innerHTML = PRULLENBAK;  // vaste, eigen SVG; geen gebruikersinvoer
+  weg.onclick = (e) => { e.stopPropagation(); verwijderGesprek(g.id, weg); };
+  regel.append(titel, weg);
+  regel.onclick = () => {
+    showView("chat");
+    hervatGesprek(g.id).catch(() => addMsg("system", "Kon dit gesprek niet openen."));
+  };
+  return regel;
+}
 
 async function laadGesprekken() {
   if (!tenantSel.value) return;
@@ -195,16 +231,60 @@ async function laadGesprekken() {
     const res = await fetch(`/conversations?tenant_id=${tenantSel.value}`);
     if (!res.ok) return;
     const lijst = await res.json();
-    chatHistory.innerHTML = `<option value="">Eerdere gesprekken (${lijst.length})...</option>`;
-    for (const g of lijst) {
-      const o = document.createElement("option");
-      o.value = g.id;
-      const datum = new Date(g.updated_at).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
-      o.textContent = `${datum} - ${g.title}`;
-      chatHistory.appendChild(o);
+    convList.innerHTML = "";
+    if (!lijst.length) {
+      const leeg = document.createElement("div");
+      leeg.className = "conv-empty";
+      leeg.textContent = "Nog geen gesprekken";
+      convList.appendChild(leeg);
+      return;
     }
-    chatHistory.value = "";
+    let vorige = null;
+    for (const g of lijst) {
+      const periode = periodeVan(g.updated_at);
+      if (periode !== vorige) {
+        const kop = document.createElement("div");
+        kop.className = "conv-group";
+        kop.textContent = periode;
+        convList.appendChild(kop);
+        vorige = periode;
+      }
+      convList.appendChild(gesprekRegel(g));
+    }
   } catch (e) { /* lijst is bijzaak; de chat moet gewoon werken */ }
+}
+
+function markeerActief() {
+  for (const el of convList.querySelectorAll(".conv-item")) {
+    el.classList.toggle("active", el.dataset.id === conversationId);
+  }
+}
+
+// Twee klikken in plaats van confirm(): de eerste vraagt "Verwijderen?", de tweede
+// verwijdert. Na een paar seconden zonder tweede klik valt de knop terug.
+async function verwijderGesprek(id, knop) {
+  if (!knop.classList.contains("confirm")) {
+    knop.classList.add("confirm");
+    knop.textContent = "Verwijderen?";
+    setTimeout(() => {
+      if (knop.isConnected && knop.classList.contains("confirm")) {
+        knop.classList.remove("confirm");
+        knop.innerHTML = PRULLENBAK;
+      }
+    }, 4000);
+    return;
+  }
+  knop.disabled = true;
+  try {
+    const res = await fetch(`/conversations/${id}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 404) throw new Error("status " + res.status);
+    if (id === conversationId) nieuwGesprek();
+    toast("Gesprek verwijderd", "ok");
+  } catch (e) {
+    toast("Kon het gesprek niet verwijderen: " + e.message, "fout");
+  } finally {
+    laadGesprekken();
+  }
 }
 
 async function hervatGesprek(id) {
@@ -215,18 +295,30 @@ async function hervatGesprek(id) {
   for (const m of g.messages) addMsg(m.role === "user" ? "user" : "assistant", m.content);
   bewaarGesprek(g.id);
   if (g.template_id) chatTemplate.value = g.template_id;
+  leegVoorbeeld();
   if (g.preview_html) showChatPreview(g.preview_html);
   chat.scrollTop = chat.scrollHeight;
+  markeerActief();
 }
 
-chatHistory.onchange = () => { if (chatHistory.value) hervatGesprek(chatHistory.value); };
+// Voorbeeldpaneel terug naar leeg, zodat een ander gesprek niet het voorbeeld
+// van het vorige laat zien.
+function leegVoorbeeld() {
+  chatPreviewFrame.srcdoc = "";
+  chatPreviewWrap.classList.remove("show");
+  chatPreview.classList.remove("has-preview");
+}
 
-document.getElementById("newChat").onclick = () => {
+function nieuwGesprek() {
   bewaarGesprek(null);
   chat.innerHTML = "";
-  addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?");
-  chatHistory.value = "";
-};
+  leegVoorbeeld();
+  addMsg("assistant", OPENING);
+  markeerActief();
+  input.focus();
+}
+
+document.getElementById("newChat").onclick = () => { showView("chat"); nieuwGesprek(); };
 
 // Snelstarts uit de nieuwsbrief-soorten van het bedrijf: scheelt typen en
 // stuurt de assistent meteen naar de juiste bron.
@@ -252,6 +344,7 @@ tenantSel.addEventListener("change", () => {
   let bewaard = null;
   try { bewaard = localStorage.getItem(chatKey()); } catch (e) { /* prive-modus */ }
   conversationId = null;
+  leegVoorbeeld();
   if (bewaard) {
     hervatGesprek(bewaard).catch(() => addMsg("assistant", "Waar wil je dat ik de nieuwsbrief over schrijf?"));
   } else {
