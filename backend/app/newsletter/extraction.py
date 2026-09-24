@@ -306,11 +306,12 @@ def extract_links(llm, raw_html: str, *, source_url: str, query: str, model: str
     text = html_to_text(raw_html, source_url)
     response = llm.messages.create(
         model=model,
-        max_tokens=2000,
+        max_tokens=4000,
         system=_LINKS_SYSTEM,
         output_config={"format": {"type": "json_schema", "schema": _LINKS_SCHEMA}},
         messages=[{"role": "user", "content": f"Zoekopdracht: {query}\n\nPagina-inhoud:\n{text}"}],
     )
+    _require_not_truncated(response, wat="links")
     return _parse_json(response).get("links", [])
 
 

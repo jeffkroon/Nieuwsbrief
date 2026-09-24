@@ -265,3 +265,11 @@ def test_extract_products_normaal_antwoord_faalt_niet_op_de_check() -> None:
     llm = FakeLLM(payload, stop_reason="end_turn")
     products = extract_products(llm, "<html>x</html>", source_url="https://shop.nl/collections/all")
     assert products == payload["products"]
+
+
+def test_extract_links_afgekapt_antwoord_geeft_duidelijke_fout() -> None:
+    """Zelfde bugklasse als bij producten/wedstrijden: een afgekapt antwoord mag nooit
+    stil als "0 links gevonden" worden gelezen."""
+    llm = FakeLLM({"links": [{"label": "x"}]}, stop_reason="max_tokens")
+    with pytest.raises(ValueError, match="niet alle links"):
+        extract_links(llm, "<html>veel links</html>", source_url="https://x.nl/", query="arsenal")
