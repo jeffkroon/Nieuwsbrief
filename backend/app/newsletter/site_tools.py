@@ -14,7 +14,11 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 from app.newsletter import banner_check, catalog, extraction
-from app.newsletter.page_images import banner_candidates
+from app.newsletter.page_images import (
+    MIN_BANNER_WIDTH,
+    banner_candidates,
+    measure_image,
+)
 from app.newsletter.tool_context import ToolContext, load_tenant, require_llm
 from app.newsletter.tool_memory import with_memory
 from app.repositories import images as images_repo
@@ -297,6 +301,71 @@ def _tool_find_page_images(ctx: ToolContext, tool_input: dict) -> dict:
     return with_memory(ctx.session, ctx.conversation_id, "find_page_images", {"url": url}, _haal_op)
 
 
+# Hoeveel productfoto's uit de catalogus we maximaal als banner voorleggen.
+_CATALOG_BANNER_LIMIT = 4
+
+
+def _catalog_banner_candidates(ctx: ToolContext, query: str | None) -> list[dict]:
+    """Productfoto's uit de catalogus die bij het thema passen, als banner bruikbaar.
+
+    Shopify-foto's worden door de shop zelf liggend bijgesneden; andere foto's
+    tellen alleen mee als ze zelf liggend en breed genoeg zijn. De catalogus is
+    dezelfde (onthouden) als die van find_products, dus meestal gratis.
+    """
+    if not query:
+        return []
+    website = (load_tenant(ctx).config or {}).get("website_url")
+    if not website:
+        return []
+    try:
+        volledig = with_memory(
+            ctx.session, ctx.conversation_id, "find_products", {"url": website},
+            lambda: _catalog_of(ctx, website),
+        )
+    except ValueError:
+        return []
+    resultaat: list[dict] = []
+    gezien: set[str] = set()
+    for product in catalog.filter_products(volledig["products"], query):
+        foto = product.get("image_url")
+        if not foto or foto in gezien:
+            continue
+        gezien.add(foto)
+        kandidaat = _als_catalogus_banner(ctx, product, foto)
+        if kandidaat is not None:
+            resultaat.append(kandidaat)
+        if len(resultaat) >= _CATALOG_BANNER_LIMIT:
+            break
+    return resultaat
+
+
+def _als_catalogus_banner(ctx: ToolContext, product: dict, foto: str) -> dict | None:
+    if extraction.is_croppable(foto):
+        banner, breedte, hoogte, bijgesneden = extraction.normalize_banner_url(foto), 1200, 600, True
+    else:
+        gemeten = measure_image(foto, ctx.http_client)
+        if gemeten is None or not gemeten.landscape or gemeten.width < MIN_BANNER_WIDTH:
+            return None
+        banner, breedte, hoogte, bijgesneden = foto, gemeten.width, gemeten.height, False
+    if banner_check.looks_blank(banner, ctx.http_client):
+        return None
+    kandidaat = {
+        "name": product["name"],
+        "page_url": product.get("url"),
+        "banner_url": banner,
+        "width": breedte,
+        "height": hoogte,
+        "source": "catalogus",
+    }
+    if bijgesneden:
+        kandidaat["bijgesneden"] = "productfoto, door de webshop liggend bijgesneden uit het midden"
+        kandidaat["banner_url_bovenkant"] = banner.replace("crop=center", "crop=top")
+    beschrijving = banner_check.describe(ctx.llm, banner, ctx.http_client)
+    if beschrijving:
+        kandidaat["beschrijving"] = beschrijving
+    return kandidaat
+
+
 def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
     """Het eigen bannerbeeld (og:image) van een pagina van de klantensite ophalen.
 
@@ -311,6 +380,7 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
     if not url:
         raise ValueError("geen URL om een banner te zoeken; geef een pagina-URL mee")
     crop = brand.get("banner_crop") or "landscape"
+    query = (tool_input.get("query") or "").strip() or None
 
     def _haal_op() -> dict:
         status, html = extraction.fetch_page(url, ctx.http_client)
@@ -370,9 +440,21 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
             "gebruiker akkoord is; 'alternatives' zijn andere foto's van dezelfde pagina.",
         }
 
-    return with_memory(
+    result = with_memory(
         ctx.session, ctx.conversation_id, "find_banner", {"url": url, "crop": crop}, _haal_op
     )
+    uit_catalogus = _catalog_banner_candidates(ctx, query)
+    if not uit_catalogus:
+        return result
+    sleutel = "alternatives" if result.get("banner_url") else "candidates"
+    return {
+        **result,
+        sleutel: [*uit_catalogus, *(result.get(sleutel) or [])],
+        "catalogus_query": query,
+        "message": result["message"] + " De kandidaten met source 'catalogus' zijn "
+        "productfoto's uit de hele catalogus die passen bij de zoekterm; kies op "
+        "'beschrijving' de foto die het best bij het thema past.",
+    }
 
 
 def _tool_find_matches(ctx: ToolContext, tool_input: dict) -> dict:

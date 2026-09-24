@@ -117,13 +117,15 @@ TOOL_DEFINITIONS = [
         "(bv. de collectiepagina waar de nieuwsbrief over gaat). Het beeld wordt "
         "genormaliseerd naar mail-formaat en in code gecheckt op bereikbaarheid. "
         "Heeft de pagina zelf geen banner, dan krijg je de banners van de gelinkte "
-        "collecties als 'candidates' terug: toon die en laat de gebruiker kiezen. "
+        "collecties als 'candidates' terug: toon die en laat de gebruiker kiezen. Met "
+        "query komen er passende productfoto's uit de hele catalogus bij. "
         "Gebruik dit voor de headerfoto als er geen passende bannerfoto in "
         "list_images('banner') staat; laat de gebruiker het resultaat bevestigen.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "url": {"type": "string", "description": "Pagina-URL om de banner van te pakken, bv. de collectie- of source_url van de gekozen nieuwsbrief-soort"},
+                "query": {"type": "string", "description": "Thema in zoekwoorden, bv. 'zilver ketting' of 'lorawan gateway': voegt passende productfoto's uit de HELE catalogus toe als kandidaten (met beschrijving). Geef dit altijd mee."},
             },
         },
     },
