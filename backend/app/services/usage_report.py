@@ -109,8 +109,10 @@ def _tenant_usage(groups: Sequence[UsageGroup], conversations: int) -> TenantUsa
 
 
 def _by_tenant(groups: Sequence[UsageGroup]) -> dict[uuid.UUID | None, list[UsageGroup]]:
-    tenant_ids = dict.fromkeys(g.tenant_id for g in groups)
-    return {tid: [g for g in groups if g.tenant_id == tid] for tid in tenant_ids}
+    result: dict[uuid.UUID | None, list[UsageGroup]] = {}
+    for group in groups:  # één doorloop; volgorde van eerste voorkomen blijft behouden
+        result.setdefault(group.tenant_id, []).append(group)
+    return result
 
 
 def build_report(
