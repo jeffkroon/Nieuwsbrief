@@ -14,6 +14,10 @@ services:
     dockerfile_path: backend/Dockerfile
     http_port: 8080
     instance_size_slug: basic-xxs
+    # Bewust één instance: de rate limiters (login, chat, resultaten) en de caches
+    # (validatie, catalogus, fotobeschrijvingen) staan in het geheugen van het proces.
+    # Meer instances vraagt eerst om een gedeelde opslag (bv. Postgres of Redis),
+    # anders telt elke instance zijn eigen limiet en cache.
     instance_count: 1
     health_check:
       http_path: /health
