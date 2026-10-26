@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from app.newsletter.html_safety import Invuller, invuller
 from app.newsletter.models import PRICE_ON_REQUEST, NewsletterContent
 
 CARD_ROW_START = "<!-- ##KAART_RIJ## -->"
@@ -91,15 +92,15 @@ def _card_units(
     return units
 
 
-def _fill_card(card_tpl: str, unit: dict) -> str:
+def _fill_card(card_tpl: str, unit: dict, fill: Invuller) -> str:
     replacements = {
-        "{{KAART_TITEL}}": unit["titel"],
-        "{{KAART_SUBTITEL}}": unit["subtitel"],
-        "{{KAART_PRIJS}}": unit["prijs"],
-        "{{KAART_URL}}": unit["url"],
-        "{{KAART_IMAGE_URL}}": unit["image_url"],
-        "{{KAART_KNOP_TEKST}}": unit["knop_tekst"],
-        "{{KAART_LABEL}}": unit["label"],
+        "{{KAART_TITEL}}": fill.text(unit["titel"]),
+        "{{KAART_SUBTITEL}}": fill.text(unit["subtitel"]),
+        "{{KAART_PRIJS}}": fill.text(unit["prijs"]),
+        "{{KAART_URL}}": fill.href(unit["url"]),
+        "{{KAART_IMAGE_URL}}": fill.src(unit["image_url"]),
+        "{{KAART_KNOP_TEKST}}": fill.text(unit["knop_tekst"]),
+        "{{KAART_LABEL}}": fill.text(unit["label"]),
     }
     filled = card_tpl
     for placeholder, value in replacements.items():
@@ -124,19 +125,23 @@ def render_template_cards(
     brand: dict,
     content: NewsletterContent,
     image_fallback: ImageFallback,
+    *,
+    escape: bool = True,
 ) -> str:
     """Vervang het ##KAART##-blok door de kaart-markup, herhaald per inhoudsblok.
 
     Zonder kaart-blok in de template komt de HTML ongewijzigd terug. Zonder
     inhoud wordt het hele blok (inclusief rij-wrapper) netjes verwijderd.
+    escape=False alleen voor tool-proof (terugvullen met originele fragmenten).
     """
     card_region = _extract(html, CARD_TPL_START, CARD_TPL_END)
     if card_region is None:
         return html
     card_start, card_end, card_tpl = card_region
 
+    fill = invuller(escape)
     units = _card_units(content, brand, image_fallback)
-    cards = [_fill_card(card_tpl, u) for u in units]
+    cards = [_fill_card(card_tpl, u, fill) for u in units]
 
     row_region = _extract(html, CARD_ROW_START, CARD_ROW_END)
     if row_region is None or not (row_region[0] < card_start and card_end <= row_region[1]):

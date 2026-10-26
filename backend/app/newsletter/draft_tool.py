@@ -24,7 +24,7 @@ from app.newsletter.mail_checks import (
     blocking_messages,
     check_newsletter,
 )
-from app.newsletter.newsletter_build import build_newsletter
+from app.newsletter.newsletter_build import BuiltNewsletter, build_newsletter
 from app.newsletter.tool_context import ToolContext, load_tenant, validation_cache
 from app.newsletter.utm import add_utm, utm_params
 from app.repositories import newsletters as newsletters_repo
@@ -114,8 +114,14 @@ def _try_update(
         return f"Het vorige concept kon niet worden bijgewerkt ({exc}); het staat nog in {conn.label}"
 
 
-def _create(ctx: ToolContext, conn: EspConnection, tenant, brand, content, html, tool_input):
-    """Nieuw concept aanmaken en vastleggen; een platformfout wordt ook vastgelegd."""
+def _create(ctx: ToolContext, conn: EspConnection, built: BuiltNewsletter, html: str):
+    """Nieuw concept aanmaken en vastleggen; een platformfout wordt ook vastgelegd.
+
+    Bewaart de volledige samengevoegde invoer (built.input), niet alleen wat de
+    agent deze keer meegaf; anders mist een concept na "wijzig één ding" velden.
+    Onderwerp, preheader en campagnenaam gaan ruw naar het platform (platte tekst).
+    """
+    tenant, brand, content = built.tenant, built.brand, built.content
     try:
         draft = conn.client.create_draft(
             name=_campaign_name(brand["brand_name"], content.theme),
@@ -129,7 +135,7 @@ def _create(ctx: ToolContext, conn: EspConnection, tenant, brand, content, html,
     except ESP_ERRORS:
         newsletters_repo.create_newsletter(
             ctx.session, tenant_id=tenant.id, conversation_id=ctx.conversation_id,
-            subject=content.subject, theme=content.theme, html=html, input=tool_input,
+            subject=content.subject, theme=content.theme, html=html, input=built.input,
             status="failed",
         )
         raise
@@ -141,7 +147,7 @@ def _create(ctx: ToolContext, conn: EspConnection, tenant, brand, content, html,
         subject=content.subject,
         theme=content.theme,
         html=html,
-        input=tool_input,
+        input=built.input,
         brevo_campaign_id=None if use_text_ref else draft.campaign_id,
         esp_campaign_ref=str(draft.campaign_id) if use_text_ref else None,
         esp=conn.esp,
@@ -187,10 +193,9 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
     factories = EspFactories(ctx.brevo_factory, ctx.klaviyo_factory, ctx.activecampaign_factory)
     conn = connect(ctx.session, ctx.cipher, load_tenant(ctx), factories)
 
-    tenant, brand, content, matches, clubs, items, html, _unfilled, is_fallback = (
-        build_newsletter(ctx, tool_input)
-    )
-    prepared = _prepare_html(html, conn.esp, brand, content)
+    built = build_newsletter(ctx, tool_input)
+    tenant, brand, content = built.tenant, built.brand, built.content
+    prepared = _prepare_html(built.html, conn.esp, brand, content)
 
     existing = None
     if not tool_input.get("new_draft"):
@@ -206,10 +211,10 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
     if updated:
         newsletter = newsletters_repo.update_newsletter(
             ctx.session, existing, subject=content.subject, theme=content.theme,
-            html=prepared.html, input=tool_input,
+            html=prepared.html, input=built.input,
         )
     else:
-        newsletter = _create(ctx, conn, tenant, brand, content, prepared.html, tool_input)
+        newsletter = _create(ctx, conn, built, prepared.html)
 
     ref = campaign_ref(newsletter)
     return {
@@ -221,19 +226,21 @@ def _tool_create_newsletter_draft(ctx: ToolContext, tool_input: dict) -> dict:
         "updated_existing_draft": updated,
         "matches_used": [
             {"home": m.home, "away": m.away, "url": m.url, "price": m.price, "image_url": m.image_url}
-            for m in matches
+            for m in built.matches
         ],
         "clubs_used": [
-            {"name": c.name, "url": c.url, "price": c.price, "image_url": c.image_url} for c in clubs
+            {"name": c.name, "url": c.url, "price": c.price, "image_url": c.image_url}
+            for c in built.clubs
         ],
         "items_used": [
-            {"title": i.title, "url": i.url, "price": i.price, "image_url": i.image_url} for i in items
+            {"title": i.title, "url": i.url, "price": i.price, "image_url": i.image_url}
+            for i in built.items
         ],
         "esp_notes": list(prepared.notes),
         "aandachtspunten": advisory_messages(prepared.findings),
         "message": _message(
             conn, updated=updated, fallback_reason=fallback_reason,
-            content=content, is_fallback=is_fallback,
+            content=content, is_fallback=built.is_fallback,
         ),
     }
 

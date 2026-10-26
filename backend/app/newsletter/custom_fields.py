@@ -15,6 +15,9 @@ niet in de prompt.
 from __future__ import annotations
 
 import re
+from typing import Callable
+
+from app.newsletter.html_safety import invuller
 
 SLOT_PATTERN = re.compile(r"\{\{VAK_([A-Z0-9_]+)\}\}")
 SECTION_START = "<!-- ##SECTIE## -->"
@@ -54,11 +57,11 @@ def normalize_custom_fields(raw: dict) -> dict[str, str]:
     return clean
 
 
-def _fill(html: str, fields: dict[str, str]) -> str:
-    return SLOT_PATTERN.sub(lambda m: fields.get(m.group(1), ""), html)
+def _fill(html: str, fields: dict[str, str], text: Callable[[str | None], str]) -> str:
+    return SLOT_PATTERN.sub(lambda m: text(fields.get(m.group(1), "")), html)
 
 
-def fill_custom_fields(html: str, fields: dict[str, str]) -> str:
+def fill_custom_fields(html: str, fields: dict[str, str], *, escape: bool = True) -> str:
     """Vul de {{VAK_*}}-placeholders en laat lege ##SECTIE##-blokken vervallen.
 
     Volgorde per sectieblok: heeft geen enkel vak erbinnen inhoud, dan verdwijnt
@@ -67,8 +70,12 @@ def fill_custom_fields(html: str, fields: dict[str, str]) -> str:
     binnen een ##SECTIE##-blok; een vak daarbuiten wordt bij leeg gewoon een
     lege tekst (de omliggende markup blijft staan). Geneste blokken zijn een
     harde fout: liever falen dan kapotte HTML versturen.
+
+    De tekst wordt geëscapet; escape=False alleen voor tool-proof, dat terugvult
+    met de originele HTML-fragmenten.
     """
     fields = normalize_custom_fields(fields)
+    text = invuller(escape).text
     parts: list[str] = []
     rest = html or ""
     while True:
@@ -84,10 +91,10 @@ def fill_custom_fields(html: str, fields: dict[str, str]) -> str:
                 "geneste ##SECTIE##-blokken worden niet ondersteund; sluit elk blok "
                 "eerst af met <!-- /##SECTIE## --> voordat een nieuw blok begint"
             )
-        parts.append(_fill(rest[:start], fields))
+        parts.append(_fill(rest[:start], fields, text))
         slots = SLOT_PATTERN.findall(inner)
         if any((fields.get(name) or "").strip() for name in slots):
-            parts.append(_fill(inner, fields))
+            parts.append(_fill(inner, fields, text))
         rest = rest[end + len(SECTION_END):]
-    parts.append(_fill(rest, fields))
+    parts.append(_fill(rest, fields, text))
     return "".join(parts)

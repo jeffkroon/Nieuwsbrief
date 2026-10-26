@@ -11,8 +11,10 @@ import re
 
 from app.newsletter import extraction
 from app.newsletter.custom_fields import normalize_custom_fields
+from app.newsletter.html_safety import has_scheme
 from app.newsletter.models import PRICE_ON_REQUEST, Club, Item, Match, Section
 from app.newsletter.page_images import best_product_image
+from app.newsletter.site_tools import _require_image
 from app.newsletter.tool_context import ToolContext, require_llm, validation_cache
 from app.repositories import images as images_repo
 
@@ -204,6 +206,56 @@ def _require_reachable(ctx: ToolContext, url: str) -> None:
     if status != 200:
         raise ValueError(extraction.fetch_probleem(url, status))
     validation_cache.set(("ok", url), True)
+
+
+_WEB_SCHEMES = ("http://", "https://")
+_NO_FETCH_SCHEMES = ("mailto:", "tel:")
+
+
+def validated_cta_link(ctx: ToolContext, url: str, *, veld: str) -> str:
+    """Knoplink (hoofd- of slotknop): een webadres moet echt bestaan (200, gecacht).
+
+    mailto: en tel: mogen zonder ophalen (daar valt niets te controleren). Elk
+    ander schema is een harde fout: de renderer zou er anders stil '#' van maken.
+    """
+    if has_scheme(url, _NO_FETCH_SCHEMES):
+        return url
+    if not has_scheme(url, _WEB_SCHEMES):
+        raise ValueError(
+            f"{veld} moet een volledige link zijn (https://...), mailto: of tel:, "
+            f"niet {url!r}."
+        )
+    try:
+        _require_reachable(ctx, url)
+    except ValueError as exc:
+        raise ValueError(
+            f"{veld}: {exc} Gebruik een link die echt bestaat (bv. uit find_products, "
+            "find_ticket_links of de website van het bedrijf)."
+        ) from exc
+    return url
+
+
+def validated_header_image(ctx: ToolContext, value: str | None) -> str | None:
+    """Bannerfoto: een volledige URL moet een bereikbare afbeelding zijn (gecacht).
+
+    Een foto uit de eigen bibliotheek (opgezocht via bestandsnaam) is bij het
+    uploaden al gecontroleerd en wordt niet opnieuw opgehaald.
+    """
+    url = resolve_image(ctx, value)
+    if not url or not has_scheme(value, _WEB_SCHEMES):
+        return url
+    hit, _ok = validation_cache.get(("image", url))
+    if hit:
+        return url
+    try:
+        _require_image(ctx, url)
+    except ValueError as exc:
+        raise ValueError(
+            f"header_image_url: {exc}. Kies een foto via find_banner of list_images, "
+            "of laat de bannerfoto weg."
+        ) from exc
+    validation_cache.set(("image", url), True)
+    return url
 
 
 def validated_sections(ctx: ToolContext, raw_sections: list[dict]) -> list[Section]:

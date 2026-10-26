@@ -67,3 +67,11 @@ def test_gewone_procent_codering_krijgt_gewoon_utm() -> None:
     """%20 is geen platform-tag; zo'n link hoort wel gemeten te worden."""
     html = f'<a href="{SITE}/reis%20naar%20rome">x</a>'
     assert "utm_source=nieuwsbrief" in add_utm(html, PARAMS, website_url=SITE)
+
+
+def test_geescapete_href_blijft_een_geldige_link() -> None:
+    # De renderer zet & als &amp; in de href; UTM mag daar geen "amp;b" van maken.
+    html = f'<a href="{SITE}/tickets/?a=1&amp;b=2">x</a>'
+    resultaat = add_utm(html, PARAMS, website_url=SITE)
+    assert "amp%3B" not in resultaat and "&amp;amp;" not in resultaat
+    assert f'href="{SITE}/tickets/?a=1&amp;b=2&amp;utm_source=nieuwsbrief' in resultaat
