@@ -2,19 +2,29 @@
 
 Vereist een draaiende Docker-daemon. Zonder Docker worden de DB-tests
 overgeslagen met een duidelijke melding (pure unit-tests draaien wel).
+
+Het schema wordt opgebouwd uit de SQL-bestanden in db/migrations/ (op volgorde),
+precies zoals productie, en niet uit Base.metadata.create_all: zo valt een model
+met een kolom die in geen migratie staat meteen op (test_schema_migrations.py).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+# conftest.py -> tests -> backend -> repo-root
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "db" / "migrations"
+
 MAIL_TABLES = (
     "mail.llm_usage",
+    "mail.images",
+    "mail.template_versions",
     "mail.users",
     "mail.tenant_secrets",
     "mail.messages",
@@ -24,6 +34,19 @@ MAIL_TABLES = (
     "mail.audit_events",
     "mail.tenants",
 )
+
+
+def migration_files() -> list[Path]:
+    """Alle migraties in toepassingsvolgorde (de bestandsnamen zijn genummerd)."""
+    return sorted(MIGRATIONS_DIR.glob("mail_*.sql"))
+
+
+def _apply_migrations(engine: Engine) -> None:
+    for bestand in migration_files():
+        with engine.begin() as conn:
+            # Rechtstreeks naar de driver: de SQL bevat $$-functies en ::casts die
+            # SQLAlchemy's text() als bind-parameters zou proberen te lezen.
+            conn.exec_driver_sql(bestand.read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="session")
@@ -40,12 +63,8 @@ def pg_engine() -> Iterator[Engine]:
         pytest.skip(f"Docker/Postgres-container niet beschikbaar: {exc}")
 
     try:
-        from app.db.models import Base
-
         engine = create_engine(container.get_connection_url(), future=True)
-        with engine.begin() as conn:
-            conn.execute(text("create schema if not exists mail"))
-        Base.metadata.create_all(engine)
+        _apply_migrations(engine)
         yield engine
     finally:
         container.stop()
@@ -108,4 +127,7 @@ def _reset_chat_limiter():
     from app.newsletter.tool_context import validation_cache
 
     validation_cache.clear()
+    from app.newsletter import site_cache
+
+    site_cache.clear()
     yield

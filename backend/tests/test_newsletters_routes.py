@@ -99,6 +99,32 @@ def test_klaviyo_nieuwsbrief_gebruikt_de_tekst_referentie(client, session) -> No
     assert regel["esp"] == "klaviyo"
 
 
+def test_link_volgt_het_platform_van_de_nieuwsbrief_niet_dat_van_het_bedrijf(client, session) -> None:
+    """Gewisseld van platform: een oude Klaviyo-campagne linkt nog steeds naar Klaviyo."""
+    tenant = _tenant(
+        session, esp="activecampaign", activecampaign_api_url="https://klant.api-us1.com"
+    )
+    repo.create_newsletter(
+        session, tenant_id=tenant.id, subject="Oud", html="<p>x</p>",
+        esp_campaign_ref="01HXOUD", esp="klaviyo",
+    )
+    regel = client.get(f"/tenants/{tenant.id}/newsletters").json()[0]
+    assert regel["esp"] == "klaviyo"
+    assert regel["link_url"] == campaign_link("klaviyo", "01HXOUD").url
+    assert "api-us1" not in (regel["link_url"] or "")
+
+
+def test_nieuwsbrief_zonder_platform_valt_terug_op_het_bedrijf(client, session) -> None:
+    # Oude rijen van voor mail_015 hebben esp leeg; dan geldt het bedrijfsplatform.
+    tenant = _tenant(session, esp="klaviyo")
+    repo.create_newsletter(
+        session, tenant_id=tenant.id, subject="K", html="<p>x</p>", esp_campaign_ref="01HXABC"
+    )
+    regel = client.get(f"/tenants/{tenant.id}/newsletters").json()[0]
+    assert regel["esp"] == "klaviyo"
+    assert regel["link_url"] == campaign_link("klaviyo", "01HXABC").url
+
+
 # --- resultaten uit het verzendplatform ---------------------------------------
 class _FakeResultsBrevo:
     def __init__(self, results=None, error=None) -> None:
