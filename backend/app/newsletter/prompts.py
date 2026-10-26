@@ -39,11 +39,13 @@ in één keer de hele nieuwsbrief. Bedenk het samen: stel per onderdeel een voor
 opties voor, VRAAG wat de gebruiker wil, wacht op antwoord, en ga dan pas naar het
 volgende onderdeel. Doe alles pas in één keer als de gebruiker daar expliciet om vraagt.
 
-De huisstijl, de tone of voice en de nieuwsbrief-soorten van dit bedrijf staan al in
+De bedrijfsgegevens (naam, website, wedstrijdpagina en `claude_prompt`, in het blok
+BEDRIJF), de tone of voice en de nieuwsbrief-soorten van dit bedrijf staan al in
 deze instructies; roep `get_brand_config` of `analyze_website_tone` NIET elke beurt
 aan. Alleen als de gebruiker vraagt om de schrijfstijl te vernieuwen, of je een
-configuratieveld mist dat hieronder niet staat. Schrijf alle teksten in die tone of
-voice, gecombineerd met de `claude_prompt`.
+configuratieveld nodig hebt dat niet in het blok BEDRIJF staat (bv. kleuren, afzender
+of socials). Schrijf alle teksten in die tone of voice, gecombineerd met de
+`claude_prompt`.
 
 Doorloop daarna deze stappen, telkens overleggend:
 1. ONDERWERP: vraag waar de nieuwsbrief over moet gaan (begin met de openingsvraag).
@@ -182,10 +184,10 @@ Algemene regels:
   blijft de vaste basis (die beheert Dunion in de stijl-builder); meld dat kort.
   Knoppen kunnen apart: `button_bg` is de kaart-/productknop, `hero_button_bg` de
   knop op de banner, `cta_button_bg` de grote knop onderaan; vraag bij "maak de
-  knop rood" kort WELKE knop bedoeld wordt als dat niet duidelijk is. Dit geldt voor ALLE nieuwsbrieven van deze template; meld dat
-  erbij. Uitzondering: de kleur van de kop op de bannerfoto gaat per nieuwsbrief via
-  het veld `header_text_color`. Weigert de tool iets (bv. witruimte op een template
-  zonder spacing-tokens), leg dat eerlijk uit.
+  knop rood" kort WELKE knop bedoeld wordt als dat niet duidelijk is. De kleur van de
+  kop op de bannerfoto gaat niet via `style_overrides` maar via het veld
+  `header_text_color`, ook alleen voor deze nieuwsbrief. Weigert de tool iets (bv.
+  witruimte op een template zonder spacing-tokens), leg dat eerlijk uit.
 - Communiceer in het Nederlands.
 - Gebruik geen em-dashes; gebruik een komma of dubbele punt.
 - Gebruik geen emojis in de nieuwsbrief-teksten.
@@ -322,11 +324,37 @@ def _template_section(template_info: dict) -> str:
     return "\n".join(lines)
 
 
+# Velden uit tenant.config die in het blok BEDRIJF komen, in vaste volgorde: de
+# systeemprompt wordt gecachet, dus per bedrijf moet dit blok altijd identiek zijn.
+# Bewust geen secrets (API-keys) en geen tone of voice (die heeft een eigen blok).
+_BRAND_FIELDS: tuple[tuple[str, str], ...] = (
+    ("brand_name", "Bedrijfsnaam"),
+    ("website_url", "Website"),
+    ("matches_url", "Wedstrijdpagina"),
+    ("claude_prompt", "Extra instructies van het bedrijf (claude_prompt)"),
+)
+
+
+def _brand_section(brand: dict | None) -> str | None:
+    """Compact blok met de vaste bedrijfsgegevens; None als er niets gevuld is."""
+    if not brand:
+        return None
+    lines = []
+    for key, label in _BRAND_FIELDS:
+        value = brand.get(key)
+        if isinstance(value, str) and value.strip():
+            lines.append(f"{label}: {value.strip()}")
+    if not lines:
+        return None
+    return "\n".join(["=== BEDRIJF ===", *lines])
+
+
 def build_system_prompt(
     tone_of_voice: str | None = None,
     content_types: list[dict] | None = None,
     template_info: dict | None = None,
     esp: str | None = None,
+    brand: dict | None = None,
 ) -> str:
     """Bouw de system-prompt voor een bedrijf.
 
@@ -334,8 +362,9 @@ def build_system_prompt(
     tenant.config); zonder lijst geldt de voetbal-set. `template_info` (naam,
     has_sections, has_header_title, is_fallback) vertelt de assistent wat de
     actieve template kan. `esp` bepaalt hoe het verzendplatform heet in het
-    gesprek (Brevo of Klaviyo). Een bekende tone of voice wordt er verplicht
-    ingezet.
+    gesprek (Brevo of Klaviyo). `brand` (tenant.config) levert het blok BEDRIJF
+    met naam, website, wedstrijdpagina en claude_prompt. Een bekende tone of
+    voice wordt er verplicht ingezet.
     """
     types = content_types if content_types else DEFAULT_CONTENT_TYPES
     prompt = f"{_PROMPT_HEAD}\n{_content_section(types)}\n{_PROMPT_TAIL}"
@@ -345,6 +374,9 @@ def build_system_prompt(
         prompt = prompt.replace("Brevo", esp_names[esp])
     if template_info:
         prompt = f"{prompt}\n\n{_template_section(template_info)}"
+    brand_section = _brand_section(brand)
+    if brand_section:
+        prompt = f"{prompt}\n\n{brand_section}"
     if not tone_of_voice:
         return prompt
     return (
