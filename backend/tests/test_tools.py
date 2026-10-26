@@ -1286,10 +1286,12 @@ def test_zonder_gesprek_wordt_er_wel_gewoon_elke_keer_opgehaald(session, cipher)
     # Geen conversation_id (bv. losse API-aanroep): geen werkgeheugen, altijd vers.
     tenant = _tenant(session)
     http, teller = _tellende_http(lambda r: httpx.Response(200, text="<html>shop</html>"))
-    llm = FakeLLM({"products": []})
+    # (De catalogus van find_products zit in een eigen cache per bedrijf, zie
+    # test_site_cache.py; daarom hier find_matches.)
+    llm = FakeLLM({"matches": []})
     ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher, llm=llm, http_client=http)
-    execute_tool("find_products", {"url": CONFIG["website_url"]}, ctx)
-    execute_tool("find_products", {"url": CONFIG["website_url"]}, ctx)
+    execute_tool("find_matches", {"url": CONFIG["matches_url"]}, ctx)
+    execute_tool("find_matches", {"url": CONFIG["matches_url"]}, ctx)
     assert teller["n"] == 2
 
 

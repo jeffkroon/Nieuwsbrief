@@ -2,7 +2,8 @@
 
 find_matches/find_products/find_ticket_links laten het LLM echte inhoud van de site
 halen; de banner-tools meten foto's in code. Resultaten worden per gesprek
-onthouden (tool_memory), zodat dezelfde pagina niet twee keer wordt uitgelezen.
+onthouden (tool_memory), zodat dezelfde pagina niet twee keer wordt uitgelezen. De
+catalogus en fotobeschrijvingen staan in een proces-lokale cache (site_cache).
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from app.newsletter import banner_check, catalog, extraction
+from app.newsletter import banner_check, catalog, extraction, site_cache
 from app.newsletter.page_images import (
     MIN_BANNER_WIDTH,
     banner_candidates,
@@ -126,11 +127,8 @@ def _tool_find_products(ctx: ToolContext, tool_input: dict) -> dict:
         raise ValueError("geen URL om producten te zoeken; geef een collectie-URL mee")
     query = (tool_input.get("query") or "").strip() or None
 
-    # De catalogus wordt per URL onthouden; zoeken daarbinnen kost dan niets extra.
-    volledig = with_memory(
-        ctx.session, ctx.conversation_id, "find_products", {"url": url},
-        lambda: _catalog_of(ctx, url),
-    )
+    # De catalogus wordt per (bedrijf, URL) onthouden; zoeken daarbinnen kost dan niets extra.
+    volledig = site_cache.cached_catalog(ctx.tenant_id, url, lambda: _catalog_of(ctx, url))
     gevonden = catalog.filter_products(volledig["products"], query)
     getoond = gevonden[: catalog.MAX_RETURNED]
     result = {
@@ -222,6 +220,13 @@ def _collection_banner_candidates(
 _DESCRIBE_LIMIT = 6
 
 
+def _beschrijf(ctx: ToolContext, url: str) -> str | None:
+    """Wat er op de foto staat; per foto-URL onthouden, dus één Haiku-call per foto."""
+    return site_cache.cached_description(
+        url, lambda: banner_check.describe(ctx.llm, url, ctx.http_client)
+    )
+
+
 def _page_banner_candidates(
     ctx: ToolContext, url: str, html: str, *, exclude: tuple = (), limit: int = 6
 ) -> list[dict]:
@@ -247,7 +252,7 @@ def _page_banner_candidates(
             )
             kandidaat["banner_url_bovenkant"] = beeld.url.replace("crop=center", "crop=top")
         if len(resultaat) < _DESCRIBE_LIMIT:
-            beschrijving = banner_check.describe(ctx.llm, beeld.url, ctx.http_client)
+            beschrijving = _beschrijf(ctx, beeld.url)
             if beschrijving:
                 kandidaat["beschrijving"] = beschrijving
         resultaat.append(kandidaat)
@@ -310,7 +315,7 @@ def _catalog_banner_candidates(ctx: ToolContext, query: str | None) -> list[dict
 
     Shopify-foto's worden door de shop zelf liggend bijgesneden; andere foto's
     tellen alleen mee als ze zelf liggend en breed genoeg zijn. De catalogus is
-    dezelfde (onthouden) als die van find_products, dus meestal gratis.
+    dezelfde (gecachete) als die van find_products, dus meestal gratis.
     """
     if not query:
         return []
@@ -318,10 +323,7 @@ def _catalog_banner_candidates(ctx: ToolContext, query: str | None) -> list[dict
     if not website:
         return []
     try:
-        volledig = with_memory(
-            ctx.session, ctx.conversation_id, "find_products", {"url": website},
-            lambda: _catalog_of(ctx, website),
-        )
+        volledig = site_cache.cached_catalog(ctx.tenant_id, website, lambda: _catalog_of(ctx, website))
     except ValueError:
         return []
     resultaat: list[dict] = []
@@ -360,7 +362,7 @@ def _als_catalogus_banner(ctx: ToolContext, product: dict, foto: str) -> dict | 
     if bijgesneden:
         kandidaat["bijgesneden"] = "productfoto, door de webshop liggend bijgesneden uit het midden"
         kandidaat["banner_url_bovenkant"] = banner.replace("crop=center", "crop=top")
-    beschrijving = banner_check.describe(ctx.llm, banner, ctx.http_client)
+    beschrijving = _beschrijf(ctx, banner)
     if beschrijving:
         kandidaat["beschrijving"] = beschrijving
     return kandidaat
@@ -432,7 +434,7 @@ def _tool_find_banner(ctx: ToolContext, tool_input: dict) -> dict:
         return {
             "source_url": url,
             "banner_url": banner,
-            "beschrijving": banner_check.describe(ctx.llm, banner, ctx.http_client),
+            "beschrijving": _beschrijf(ctx, banner),
             "alternatives": alternatieven,
             "message": "Echte banner van de site (bereikbaarheid gecheckt). 'beschrijving' "
             "zegt wat erop staat: past die niet bij het thema, kies dan een alternatief of "

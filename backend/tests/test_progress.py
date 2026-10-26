@@ -61,7 +61,7 @@ def test_uit_werkgeheugen_wordt_zichtbaar_gemeld() -> None:
         )
     )
     assert "3 items opgehaald" in regel
-    assert "al eerder in dit gesprek opgehaald" in regel
+    assert "(al eerder opgehaald)" in regel
 
 
 def test_verse_aanroep_krijgt_geen_geheugen_notitie() -> None:

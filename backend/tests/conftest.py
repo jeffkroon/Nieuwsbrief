@@ -108,4 +108,7 @@ def _reset_chat_limiter():
     from app.newsletter.tool_context import validation_cache
 
     validation_cache.clear()
+    from app.newsletter import site_cache
+
+    site_cache.clear()
     yield
