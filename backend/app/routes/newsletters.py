@@ -55,7 +55,10 @@ def list_newsletters(
     """Gemaakte concepten, nieuwste eerst, met een link naar het verzendplatform."""
     tenant = _require_tenant(session, tenant_id)
     config = tenant.config or {}
-    esp = config.get("esp", "brevo")
+    # Het platform van het bedrijf geldt alleen voor oude rijen zonder eigen esp
+    # (van voor mail_015); wisselt een bedrijf van platform, dan blijft een oude
+    # campagne naar het platform linken waar hij echt staat.
+    bedrijf_esp = config.get("esp", "brevo")
     api_url = config.get("activecampaign_api_url", "")
 
     resultaat = []
@@ -65,6 +68,7 @@ def list_newsletters(
             if nieuwsbrief.brevo_campaign_id is not None
             else nieuwsbrief.esp_campaign_ref
         )
+        esp = nieuwsbrief.esp or bedrijf_esp
         link = campaign_link(esp, ref, api_url=api_url) if ref else None
         resultaat.append(
             NewsletterSummary(
