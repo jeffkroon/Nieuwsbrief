@@ -10,6 +10,7 @@ voordat er iets wordt opgeslagen of naar Brevo gaat.
 
 from __future__ import annotations
 
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
@@ -69,12 +70,18 @@ router = APIRouter(
 )
 
 STARTER_TEMPLATE = "voetbalreizenxl-main"
+VOORBEELD_HEADERS = {"Content-Security-Policy": "sandbox"}
+_ONVEILIG_TEKEN = re.compile(r"[^A-Za-z0-9._-]")
 
 
 def _veilige_naam(naam: str) -> str:
-    """Bestandsnaam zonder pad, zodat een ZIP niet buiten zijn map kan schrijven."""
-    basis = (naam or "afbeelding").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-    return basis.replace(" ", "-") or "afbeelding"
+    """Bestandsnaam zonder pad, zodat een ZIP niet buiten zijn map kan schrijven.
+
+    Alleen letters, cijfers, punt, liggend streepje en underscore blijven over;
+    al het andere wordt '-', zodat de naam ook in een URL of HTML niets kan breken.
+    """
+    basis = (naam or "").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    return _ONVEILIG_TEKEN.sub("-", basis) or "afbeelding"
 
 
 def _zorg_voor_bucket(storage) -> None:
@@ -508,4 +515,5 @@ def preview(
         rendered = render_newsletter(html_template, brand, content)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return Response(content=rendered, media_type="text/html")
+    # Zandbak-CSP: scripts in een (geuploade) template draaien nooit met de sessie.
+    return Response(content=rendered, media_type="text/html", headers=VOORBEELD_HEADERS)

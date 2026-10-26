@@ -27,6 +27,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 import httpx
 
 from app.newsletter.extraction import SITE_HEADERS, normalize_price
+from app.newsletter.safe_http import site_client
 
 SHOPIFY_PAGE_SIZE = 250
 MAX_SHOPIFY_PAGES = 8  # 2.000 producten; ruim genoeg voor een nieuwsbrief-keuze
@@ -65,7 +66,7 @@ def _get_json(client: httpx.Client | None, url: str, params: dict) -> dict | Non
         if client is not None:
             resp = client.get(url, params=params, headers=SITE_HEADERS)
         else:
-            with httpx.Client(timeout=20.0, follow_redirects=True) as c:
+            with site_client(timeout=20.0) as c:
                 resp = c.get(url, params=params, headers=SITE_HEADERS)
     except httpx.HTTPError:
         return None
@@ -149,7 +150,11 @@ def _woo_lang(url: str, client: httpx.Client | None) -> str | None:
     if m:
         return m.group(1)
     try:
-        resp = client.get(url, headers=SITE_HEADERS) if client else httpx.get(url, headers=SITE_HEADERS, timeout=20, follow_redirects=True)
+        if client is not None:
+            resp = client.get(url, headers=SITE_HEADERS)
+        else:
+            with site_client(timeout=20.0) as c:
+                resp = c.get(url, headers=SITE_HEADERS)
     except httpx.HTTPError:
         return None
     m = _HTML_LANG.search(resp.text[:5000])
@@ -161,7 +166,7 @@ def _woo_page(client: httpx.Client | None, endpoint: str, params: dict) -> tuple
         if client is not None:
             resp = client.get(endpoint, params=params, headers=SITE_HEADERS)
         else:
-            with httpx.Client(timeout=30.0, follow_redirects=True) as c:
+            with site_client(timeout=30.0) as c:
                 resp = c.get(endpoint, params=params, headers=SITE_HEADERS)
     except httpx.HTTPError:
         return None

@@ -16,6 +16,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 import httpx
 
 from app.newsletter.models import PRICE_ON_REQUEST
+from app.newsletter.safe_http import site_client
 
 EXTRACT_MODEL = "claude-haiku-4-5"  # goedkoop model voor extractie
 
@@ -258,7 +259,7 @@ def fetch_page(url: str, client: httpx.Client | None = None, timeout: float = 20
         if client is not None:
             resp = client.get(url, headers=SITE_HEADERS)
         else:
-            with httpx.Client(timeout=timeout, follow_redirects=True) as c:
+            with site_client(timeout=timeout) as c:
                 resp = c.get(url, headers=SITE_HEADERS)
         return resp.status_code, resp.text
     except httpx.HTTPError:

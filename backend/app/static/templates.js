@@ -250,8 +250,11 @@ function renderAdminList() {
   for (const t of templatesCache) {
     const el = document.createElement("div");
     el.className = "tmpl-item";
-    el.innerHTML = `<span>${t.name}</span>` + (t.is_default ? `<span class="badge">standaard</span>` : "")
-      + `<span style="margin-left:auto;"></span>`;
+    el.append(maakEl("span", { tekst: t.name }));
+    if (t.is_default) el.append(maakEl("span", { className: "badge", tekst: "standaard" }));
+    const opvulling = maakEl("span");
+    opvulling.style.marginLeft = "auto";
+    el.append(opvulling);
 
     const bewerk = document.createElement("button");
     bewerk.className = "edit";
@@ -465,8 +468,13 @@ async function toggleVersies(t, paneel) {
     const rij = document.createElement("div");
     rij.className = "v";
     const datum = new Date(v.created_at).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" });
-    rij.innerHTML = `<span>${datum}</span><small>${v.source}${v.actor ? " - " + v.actor : ""}</small>`
-      + (i === 0 ? `<small style="margin-left:auto;">huidige</small>` : `<span style="margin-left:auto;"></span>`);
+    const rechts = i === 0 ? maakEl("small", { tekst: "huidige" }) : maakEl("span");
+    rechts.style.marginLeft = "auto";
+    rij.append(
+      maakEl("span", { tekst: datum }),
+      maakEl("small", { tekst: v.source + (v.actor ? " - " + v.actor : "") }),
+      rechts,
+    );
     if (i > 0) {
       const knop = document.createElement("button");
       knop.className = "edit";

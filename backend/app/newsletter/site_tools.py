@@ -19,6 +19,7 @@ from app.newsletter.page_images import (
     banner_candidates,
     measure_image,
 )
+from app.newsletter.safe_http import site_client
 from app.newsletter.tool_context import ToolContext, load_tenant, require_llm
 from app.newsletter.tool_memory import with_memory
 from app.repositories import images as images_repo
@@ -153,7 +154,7 @@ def _require_image(ctx: ToolContext, url: str) -> None:
         if ctx.http_client is not None:
             resp = ctx.http_client.get(url, headers=extraction.SITE_HEADERS)
         else:
-            with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            with site_client(timeout=20.0) as client:
                 resp = client.get(url, headers=extraction.SITE_HEADERS)
     except httpx.HTTPError as exc:
         raise ValueError(f"banner-URL is onbereikbaar: {url} ({exc})") from exc

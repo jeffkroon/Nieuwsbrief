@@ -29,6 +29,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 from app.newsletter.extraction import SITE_HEADERS, is_croppable, normalize_banner_url
+from app.newsletter.safe_http import site_client
 
 # Grenzen voor bruikbaar beeld in een mail.
 MIN_BANNER_WIDTH = 600
@@ -271,7 +272,7 @@ def measure_image(
         if client is not None:
             resp = client.get(url, headers=headers)
         else:
-            with httpx.Client(timeout=timeout, follow_redirects=True) as c:
+            with site_client(timeout=timeout) as c:
                 resp = c.get(url, headers=headers)
     except httpx.HTTPError:
         return None

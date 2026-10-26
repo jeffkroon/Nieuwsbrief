@@ -11,7 +11,7 @@ async function laadNieuwsbrieven() {
     if (!res.ok) throw new Error("status " + res.status);
     rijen = await res.json();
   } catch (e) {
-    lijst.innerHTML = `<p class="hint">Kon de nieuwsbrieven niet laden: ${e.message}</p>`;
+    lijst.replaceChildren(maakEl("p", { className: "hint", tekst: "Kon de nieuwsbrieven niet laden: " + e.message }));
     return;
   }
   if (!rijen.length) {

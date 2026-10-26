@@ -52,6 +52,17 @@ function showView(name) {
 for (const k in navButtons) navButtons[k].onclick = () => showView(k);
 
 
+// ---- veilige DOM-opbouw ----
+// Serverdata (namen, bestandsnamen, foutmeldingen) gaat nooit via innerHTML de
+// pagina in: een naam als "<img onerror=...>" zou dan als HTML draaien.
+function maakEl(tag, { className = "", tekst = "", attrs = {} } = {}) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (tekst) el.textContent = tekst;
+  for (const [naam, waarde] of Object.entries(attrs)) el.setAttribute(naam, waarde);
+  return el;
+}
+
 // ---- meldingen ----
 // Terugkoppeling was één grijze regel die steeds werd overschreven: een fout en
 // een gelukte opslag zagen er identiek uit. Nu krijgt elke melding een kleur, en
@@ -90,11 +101,12 @@ function bevestig(vraag, { bevestigTekst = "Ja, doorgaan", gevaarlijk = true } =
       <p></p>
       <div class="dialoog-knoppen">
         <button class="btn secondary" data-nee>Annuleren</button>
-        <button class="btn ${gevaarlijk ? "gevaarlijk" : ""}" data-ja></button>
+        <button class="btn" data-ja></button>
       </div>
     </div>`;
     laag.querySelector("p").textContent = vraag;
     laag.querySelector("[data-ja]").textContent = bevestigTekst;
+    laag.querySelector("[data-ja]").classList.toggle("gevaarlijk", gevaarlijk);
 
     const sluit = (antwoord) => {
       document.removeEventListener("keydown", opToets);
