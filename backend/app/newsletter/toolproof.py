@@ -634,7 +634,9 @@ def roundtrip_check(
     for fragment in removed:
         referentie = referentie.replace(fragment, "", 1)
     try:
-        rendered = render_newsletter(result_html, brand, content)
+        # escape=False: de teruggevulde waarden zijn ORIGINELE HTML-fragmenten
+        # (met hun eigen entities en tags); escapen zou ze dubbel coderen.
+        rendered = render_newsletter(result_html, brand, content, escape=False)
     except ValueError as exc:
         return passed, [f"round-trip-render mislukt: {exc}"], notes
 

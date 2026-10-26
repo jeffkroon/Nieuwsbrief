@@ -102,6 +102,11 @@ def _http(handler) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
+def _ok_http() -> httpx.Client:
+    """Elke pagina bestaat: de knoplinks (main/slot CTA) worden live gecontroleerd."""
+    return _http(lambda r: httpx.Response(200, text="<html>ok</html>"))
+
+
 def test_get_brand_config(session, cipher) -> None:
     tenant = _tenant(session)
     ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
@@ -338,7 +343,7 @@ def test_create_draft_uses_chosen_template(session, cipher) -> None:
     payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
     ctx = ToolContext(
         session=session, tenant_id=tenant.id, cipher=cipher,
-        brevo_factory=factory, template_id=chosen.id,
+        brevo_factory=factory, template_id=chosen.id, http_client=_ok_http(),
     )
     execute_tool("create_newsletter_draft", payload, ctx)
     html = captured["client"].calls[0]["html"]
@@ -425,6 +430,7 @@ def test_create_draft_via_klaviyo_when_esp_configured(session, cipher) -> None:
         session=session, tenant_id=tenant.id, cipher=cipher,
         klaviyo_factory=FakeKlaviyo,
         brevo_factory=lambda k: pytest.fail("Brevo mag niet worden aangeroepen"),
+        http_client=_ok_http(),
     )
     result = execute_tool("create_newsletter_draft", payload, ctx)
     assert captured["key"] == "pk_geheim"
@@ -466,6 +472,7 @@ def test_create_draft_via_activecampaign_when_esp_configured(session, cipher) ->
         activecampaign_factory=FakeAC,
         brevo_factory=lambda k: pytest.fail("Brevo mag niet worden aangeroepen"),
         klaviyo_factory=lambda k: pytest.fail("Klaviyo mag niet worden aangeroepen"),
+        http_client=_ok_http(),
     )
     result = execute_tool("create_newsletter_draft", payload, ctx)
     assert captured["api_url"] == "https://account.api-us1.com"
@@ -650,6 +657,7 @@ def test_preview_newsletter_returns_html_without_brevo(session, cipher) -> None:
     ctx = ToolContext(
         session=session, tenant_id=tenant.id, cipher=cipher,
         brevo_factory=lambda key: FakeBrevo(key), preview_holder=holder,
+        http_client=_ok_http(),
     )
     result = execute_tool("preview_newsletter", payload, ctx)
     assert result["status"] == "preview"
@@ -662,7 +670,7 @@ def test_preview_does_not_require_confirmation(session, cipher) -> None:
     # Anders dan create_newsletter_draft heeft preview geen 'confirmed' nodig.
     tenant = _tenant(session)
     payload = {k: v for k, v in DRAFT_INPUT.items() if k not in ("matches", "confirmed")}
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher)
+    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher, http_client=_ok_http())
     result = execute_tool("preview_newsletter", payload, ctx)
     assert result["status"] == "preview"
 
@@ -674,7 +682,7 @@ def test_create_draft_general_no_matches(session, cipher) -> None:
     payload = {k: v for k, v in DRAFT_INPUT.items() if k != "matches"}
     ctx = ToolContext(
         session=session, tenant_id=tenant.id, cipher=cipher,
-        brevo_factory=lambda key: FakeBrevo(key),
+        brevo_factory=lambda key: FakeBrevo(key), http_client=_ok_http(),
     )
     result = execute_tool("create_newsletter_draft", payload, ctx)
     assert result["status"] == "ready"

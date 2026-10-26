@@ -13,7 +13,7 @@ from app.newsletter.templates import load_template
 from app.newsletter.toolproof import verify_toolproof
 from app.newsletter.tools import DEFAULT_TEMPLATE, ToolContext, execute_tool
 
-from tests.test_tools import CONFIG, _tenant
+from tests.test_tools import CONFIG, _ok_http, _tenant
 
 _INTERN = re.compile(r"\{\{[A-Z0-9_]+\}\}")  # interne tokens, niet de ESP-tags
 _VOETBAL = ("Bestel tickets", "Bekijk alle wedstrijden", "##BANNERS##", "##CARDS##")
@@ -85,7 +85,10 @@ def test_preview_zonder_eigen_template_waarschuwt(session, cipher) -> None:
         "main_cta_text": "Bekijk", "main_cta_url": "https://x/a",
         "slot_cta_text": "Contact", "slot_cta_url": "https://x/c",
     }
-    ctx = ToolContext(session=session, tenant_id=tenant.id, cipher=cipher, preview_holder=[])
+    ctx = ToolContext(
+        session=session, tenant_id=tenant.id, cipher=cipher, preview_holder=[],
+        http_client=_ok_http(),
+    )
     result = execute_tool("preview_newsletter", payload, ctx)
     assert "let_op_geen_eigen_template" in result
     html = ctx.preview_holder[0]

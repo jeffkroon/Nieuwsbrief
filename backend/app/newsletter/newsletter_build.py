@@ -1,17 +1,21 @@
 """Nieuwsbrief opbouwen en renderen, gedeeld door de preview- en de concept-tool.
 
 Kiest de template, legt stijl-overrides eroverheen, erft ontbrekende velden uit de
-vorige preview van het gesprek en rendert. preview_newsletter toont het resultaat
-alleen; er gaat niets naar een verzendplatform.
+vorige preview van het gesprek, controleert blokken en knop-/bannerlinks live en
+rendert. Pas na een gelukte render wordt de nieuwe stand van het gesprek bewaard.
+preview_newsletter toont het resultaat alleen; er gaat niets naar een verzendplatform.
 """
 
 from __future__ import annotations
 
-from app.db.models import Conversation
+from dataclasses import dataclass
+
+from app.db.models import Conversation, Tenant
 from app.newsletter.block_validation import (
-    resolve_image,
     validated_clubs,
+    validated_cta_link,
     validated_custom_fields,
+    validated_header_image,
     validated_items,
     validated_matches,
     validated_sections,
@@ -23,7 +27,7 @@ from app.newsletter.mail_checks import (
     blocking_messages,
     check_newsletter,
 )
-from app.newsletter.models import NewsletterContent
+from app.newsletter.models import Club, Item, Match, NewsletterContent
 from app.newsletter.renderer import render_newsletter
 from app.newsletter.styles import (
     COLOR_KEYS,
@@ -77,26 +81,41 @@ def _resolve_template_html(
 _NOT_INHERITED = frozenset({"confirmed", "new_draft"})
 
 
-def _inherit_last_preview(ctx: ToolContext, tool_input: dict) -> dict:
-    """Erf ontbrekende velden uit de vorige preview van dit gesprek.
+def _without_per_call(values: dict) -> dict:
+    return {k: v for k, v in values.items() if k not in _NOT_INHERITED}
+
+
+def _conversation(ctx: ToolContext) -> Conversation | None:
+    if ctx.conversation_id is None:
+        return None
+    return ctx.session.get(Conversation, ctx.conversation_id)
+
+
+def _merge_with_last_preview(ctx: ToolContext, tool_input: dict) -> dict:
+    """Vul ontbrekende velden aan uit de vorige preview van dit gesprek (puur, slaat niets op).
 
     Garantie in code: "wijzig één ding en render opnieuw" kan nooit meer velden
     kwijtraken (bv. de bannerfoto) doordat de agent ze vergeet te herhalen.
     Expliciet meegegeven waarden winnen altijd (ook een lege lijst = leegmaken);
     `confirmed` en `new_draft` (zie _NOT_INHERITED) worden nooit geërfd.
     """
-    if ctx.conversation_id is None:
-        return tool_input
-    conversation = ctx.session.get(Conversation, ctx.conversation_id)
+    conversation = _conversation(ctx)
+    previous = _without_per_call(conversation.last_preview or {}) if conversation else {}
+    return {**previous, **tool_input}
+
+
+def _remember_preview(ctx: ToolContext, merged_input: dict) -> None:
+    """Sla de samengevoegde invoer op als nieuwe stand van het gesprek.
+
+    Pas aanroepen NA een gelukte validatie en render: een mislukte poging laat
+    de vorige stand zo ongemoeid. De invoer blijft ruw (ongeëscapet), zodat
+    erven en opnieuw renderen nooit dubbel escapet.
+    """
+    conversation = _conversation(ctx)
     if conversation is None:
-        return tool_input
-    previous = {
-        k: v for k, v in (conversation.last_preview or {}).items() if k not in _NOT_INHERITED
-    }
-    merged = {**previous, **tool_input}
-    conversation.last_preview = {k: v for k, v in merged.items() if k not in _NOT_INHERITED}
+        return
+    conversation.last_preview = merged_input
     ctx.session.commit()
-    return merged
 
 
 def _apply_style_overrides(brand: dict, template_html: str, raw: dict | None) -> dict:
@@ -157,41 +176,58 @@ def _apply_style_overrides(brand: dict, template_html: str, raw: dict | None) ->
     return {**brand, "styles": {**basis, **clean}}
 
 
-def build_newsletter(ctx: ToolContext, tool_input: dict):
-    """Valideer wedstrijden/clubs/items, bouw de content, kies de template en render.
+@dataclass(frozen=True)
+class BuiltNewsletter:
+    """Uitkomst van build_newsletter.
 
-    Gedeeld door preview_newsletter (geen Brevo) en create_newsletter_draft (wel Brevo).
-    Geeft (tenant, brand, content, matches, clubs, items, html, unfilled, is_fallback)
-    terug; is_fallback=True betekent dat de neutrale ingebouwde template is gebruikt.
+    `input` is de samengevoegde RUWE invoer (vorige preview + deze aanroep, zonder
+    `confirmed`/`new_draft`): precies wat er gerenderd is, dus ook wat een concept
+    moet bewaren. is_fallback=True betekent dat de neutrale ingebouwde template is
+    gebruikt.
     """
-    tool_input = _inherit_last_preview(ctx, tool_input)
-    tenant = load_tenant(ctx)
-    brand = tenant.config
+
+    tenant: Tenant
+    brand: dict
+    content: NewsletterContent
+    matches: tuple[Match, ...]
+    clubs: tuple[Club, ...]
+    items: tuple[Item, ...]
+    html: str
+    unfilled: tuple[str, ...]
+    is_fallback: bool
+    input: dict
+
+
+def _header_text_color(tool_input: dict) -> str | None:
+    kleur = (tool_input.get("header_text_color") or "").strip() or None
+    if kleur and not is_valid_hex_color(kleur):
+        raise ValueError(
+            f"header_text_color moet een hex-kleur zijn (bv. '#ffffff'), niet {kleur!r}"
+        )
+    return kleur
+
+
+def _validated_content(ctx: ToolContext, tool_input: dict) -> NewsletterContent:
+    """Valideer alle blokken en links live en bouw de (ruwe) content."""
     matches = validated_matches(ctx, tool_input.get("matches", []))
     clubs = validated_clubs(ctx, tool_input.get("clubs", []))
     items = validated_items(ctx, tool_input.get("items", []))
     sections = validated_sections(ctx, tool_input.get("sections", []))
-    header_text_color = (tool_input.get("header_text_color") or "").strip() or None
-    if header_text_color and not is_valid_hex_color(header_text_color):
-        raise ValueError(
-            f"header_text_color moet een hex-kleur zijn (bv. '#ffffff'), "
-            f"niet {header_text_color!r}"
-        )
     custom_fields = validated_custom_fields(tool_input.get("custom_fields"))
-    content = NewsletterContent(
+    return NewsletterContent(
         theme=tool_input["theme"],
         subject=tool_input["subject"],
         header_title=tool_input.get("header_title"),
         header_subtitle=tool_input.get("header_subtitle"),
         header_cta_text=tool_input.get("header_cta_text"),
-        header_image_url=resolve_image(ctx, tool_input.get("header_image_url")),
-        header_text_color=header_text_color,
+        header_image_url=validated_header_image(ctx, tool_input.get("header_image_url")),
+        header_text_color=_header_text_color(tool_input),
         intro_1=tool_input["intro_1"],
         intro_2=tool_input["intro_2"],
         main_cta_text=tool_input["main_cta_text"],
-        main_cta_url=tool_input["main_cta_url"],
+        main_cta_url=validated_cta_link(ctx, tool_input["main_cta_url"], veld="main_cta_url"),
         slot_cta_text=tool_input["slot_cta_text"],
-        slot_cta_url=tool_input["slot_cta_url"],
+        slot_cta_url=validated_cta_link(ctx, tool_input["slot_cta_url"], veld="slot_cta_url"),
         preview_text=tool_input.get("preview_text"),
         matches=tuple(matches),
         clubs=tuple(clubs),
@@ -199,28 +235,47 @@ def build_newsletter(ctx: ToolContext, tool_input: dict):
         sections=tuple(sections),
         custom_fields=tuple(sorted(custom_fields.items())),
     )
-    template_html, brand, is_fallback = _resolve_template_html(ctx, tenant, brand)
-    brand = _apply_style_overrides(brand, template_html, tool_input.get("style_overrides"))
+
+
+def build_newsletter(ctx: ToolContext, tool_input: dict) -> BuiltNewsletter:
+    """Valideer wedstrijden/clubs/items/links, bouw de content, kies de template en render.
+
+    Gedeeld door preview_newsletter (geen Brevo) en create_newsletter_draft (wel Brevo).
+    Volgorde is een garantie: eerst puur samenvoegen met de vorige preview, dan
+    valideren en renderen, en pas na succes de nieuwe stand van het gesprek opslaan.
+    """
+    merged = _without_per_call(_merge_with_last_preview(ctx, tool_input))
+    tenant = load_tenant(ctx)
+    content = _validated_content(ctx, merged)
+    template_html, brand, is_fallback = _resolve_template_html(ctx, tenant, tenant.config)
+    brand = _apply_style_overrides(brand, template_html, merged.get("style_overrides"))
     html = render_newsletter(template_html, brand, content)
-    slots = find_custom_slots(template_html)
-    unfilled = [naam for naam in slots if not (custom_fields.get(naam) or '').strip()]
-    return tenant, brand, content, matches, clubs, items, html, unfilled, is_fallback
+    filled = dict(content.custom_fields)
+    unfilled = tuple(
+        naam for naam in find_custom_slots(template_html) if not (filled.get(naam) or "").strip()
+    )
+    _remember_preview(ctx, merged)
+    return BuiltNewsletter(
+        tenant=tenant, brand=brand, content=content, matches=content.matches,
+        clubs=content.clubs, items=content.items, html=html, unfilled=unfilled,
+        is_fallback=is_fallback, input=merged,
+    )
 
 
 def _tool_preview_newsletter(ctx: ToolContext, tool_input: dict) -> dict:
-    _, _, content, matches, clubs, items, html, unfilled, is_fallback = build_newsletter(
-        ctx, tool_input
-    )
+    built = build_newsletter(ctx, tool_input)
+    content, html, unfilled = built.content, built.html, built.unfilled
+    matches, clubs, items = built.matches, built.clubs, built.items
     ctx.preview_holder.append(html)  # frontend toont dit in het voorbeeldpaneel
     result_extra = {}
-    if is_fallback:
+    if built.is_fallback:
         result_extra["let_op_geen_eigen_template"] = (
             "Deze tenant heeft nog geen eigen template; er is een neutrale standaard "
             "gebruikt. Maak via de Bedrijven-tab een eigen template aan voor de juiste "
             "huisstijl."
         )
     if unfilled:
-        result_extra["invulvakken_nog_leeg"] = unfilled
+        result_extra["invulvakken_nog_leeg"] = list(unfilled)
         result_extra["invulvakken_hint"] = (
             "Deze template heeft eigen invulvakken die nog leeg zijn; die secties zijn uit "
             "de preview weggelaten. Schrijf zelf passende merkcopy voor de tekstvakken "

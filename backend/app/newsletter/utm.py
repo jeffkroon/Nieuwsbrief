@@ -13,8 +13,11 @@ Twee keuzes die het veilig houden:
 
 from __future__ import annotations
 
+import html as html_lib
 import re
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from app.newsletter.html_safety import escape_text
 
 # Platform-tags in een URL, bv. %UNSUBSCRIBELINK% van ActiveCampaign. Niet te
 # verwarren met gewone procent-codering (%20): die heeft geen sluitend procent
@@ -53,11 +56,13 @@ def add_utm(html: str, params: dict[str, str], *, website_url: str) -> str:
         return html
 
     def _vervang(match: re.Match) -> str:
-        url = match.group(3)
+        # De href staat HTML-geëscapet in de mail (&amp; tussen parameters);
+        # eerst terug naar de echte URL, anders wordt "amp;b" een eigen sleutel.
+        url = html_lib.unescape(match.group(3))
         nieuwe = _met_utm(url, params, eigen_host)
         if nieuwe is None:
             return match.group(0)
-        return f"{match.group(1)}{match.group(2)}{nieuwe}{match.group(2)}"
+        return f"{match.group(1)}{match.group(2)}{escape_text(nieuwe)}{match.group(2)}"
 
     return _HREF.sub(_vervang, html)
 
