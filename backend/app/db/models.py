@@ -154,11 +154,12 @@ class Conversation(Base):
     # Laatste preview-/draft-invoer van de agent: een her-render erft ontbrekende
     # velden hieruit, zodat "wijzig één ding" nooit andere velden kwijtraakt.
     last_preview: Mapped[dict | None] = mapped_column(JSONB)
-    # Compact werkgeheugen van dure data-tools (find_products, find_matches,
-    # find_ticket_links, find_banner, find_page_images) binnen dit gesprek, zodat
+    # Compact werkgeheugen van dure data-tools (find_matches, find_ticket_links,
+    # find_banner, find_page_images) binnen dit gesprek, zodat
     # dezelfde pagina niet twee keer wordt opgehaald/geextraheerd. Puur een
     # geheugen voor het KIEZEN; de uiteindelijke keuze wordt bij het concept nog
     # steeds altijd live opnieuw gevalideerd. Zie app/newsletter/tool_memory.py.
+    # De catalogus van find_products staat hier niet meer in (site_cache.py).
     tool_memory: Mapped[dict | None] = mapped_column(JSONB)
     # Gekozen template van dit gesprek: eenmaal gekozen blijft die gelden, ook
     # als een vervolgbericht de keuze niet opnieuw meestuurt.
@@ -233,6 +234,8 @@ class Newsletter(Base):
 
 
 class Image(Base):
+    """Foto in de bibliotheek van een bedrijf (migratie: mail_016, zie db/migrations/README.md)."""
+
     __tablename__ = "images"
 
     id: Mapped[uuid.UUID] = _uuid_pk()
