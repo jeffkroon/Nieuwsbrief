@@ -1,0 +1,5 @@
+# Lokaal en in CI: runtime plus de test-tools.
+-r requirements.txt
+pytest>=8
+pytest-cov>=5
+testcontainers[postgres]>=4.0
