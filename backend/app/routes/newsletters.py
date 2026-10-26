@@ -124,7 +124,15 @@ def refresh_newsletter_results(
 def newsletter_html(
     tenant_id: uuid.UUID, newsletter_id: uuid.UUID, session: Session = Depends(get_session)
 ) -> Response:
-    """De verstuurde HTML van dit concept, voor het voorbeeld-venster."""
+    """De verstuurde HTML van dit concept, voor het voorbeeld-venster.
+
+    Met een zandbak-CSP: ook wie de URL direct opent, draait geen scripts uit de
+    nieuwsbrief met de sessie van het dashboard.
+    """
     _require_tenant(session, tenant_id)
     nieuwsbrief = _require_newsletter(session, tenant_id, newsletter_id)
-    return Response(content=nieuwsbrief.html or "", media_type="text/html")
+    return Response(
+        content=nieuwsbrief.html or "",
+        media_type="text/html",
+        headers={"Content-Security-Policy": "sandbox"},
+    )

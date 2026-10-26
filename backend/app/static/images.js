@@ -32,9 +32,12 @@ async function loadImages() {
   for (const im of imgs) {
     const el = document.createElement("div");
     el.className = "thumb";
-    el.innerHTML = `<img src="${im.url}" alt=""><div class="meta"><div class="name">${im.filename}</div>`
-      + `<button data-id="${im.id}">verwijderen</button></div>`;
-    el.querySelector("button").onclick = async () => {
+    // textContent/setAttribute, geen innerHTML: de bestandsnaam komt van de uploader.
+    const meta = maakEl("div", { className: "meta" });
+    const knop = maakEl("button", { tekst: "verwijderen", attrs: { "data-id": im.id } });
+    meta.append(maakEl("div", { className: "name", tekst: im.filename }), knop);
+    el.append(maakEl("img", { attrs: { src: im.url, alt: "" } }), meta);
+    knop.onclick = async () => {
       await fetch(`/tenants/${tid}/images/${im.id}`, { method: "DELETE" });
       loadImages();
     };

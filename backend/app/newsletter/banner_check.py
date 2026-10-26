@@ -21,6 +21,7 @@ import httpx
 
 from app.newsletter.extraction import SITE_HEADERS, is_croppable
 from app.newsletter.image_describe import describe_image
+from app.newsletter.safe_http import site_client
 
 # Standaardafwijking van de grijswaarden: daaronder is het beeld (bijna) egaal.
 BLANK_STDDEV = 8.0
@@ -43,7 +44,7 @@ def _download(url: str, client: httpx.Client | None) -> tuple[bytes, str] | None
         if client is not None:
             resp = client.get(url, headers=SITE_HEADERS)
         else:
-            with httpx.Client(timeout=15.0, follow_redirects=True) as c:
+            with site_client(timeout=15.0) as c:
                 resp = c.get(url, headers=SITE_HEADERS)
     except httpx.HTTPError:
         return None

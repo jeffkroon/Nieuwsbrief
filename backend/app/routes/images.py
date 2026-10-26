@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
@@ -29,9 +30,13 @@ def _require_tenant(session: Session, tenant_id: uuid.UUID):
     return tenant
 
 
+_UNSAFE_CHAR = re.compile(r"[^A-Za-z0-9._-]")
+
+
 def _safe_name(name: str) -> str:
-    base = (name or "foto").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-    return base.replace(" ", "-") or "foto"
+    """Bestandsnaam zonder pad, met alleen [A-Za-z0-9._-]; al het andere wordt '-'."""
+    base = (name or "").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    return _UNSAFE_CHAR.sub("-", base) or "foto"
 
 
 @router.get("/image-categories", response_model=ImageCategoriesRead)

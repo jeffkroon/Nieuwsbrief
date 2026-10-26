@@ -409,10 +409,16 @@ async function loadCompanies() {
   for (const t of tenants) {
     const el = document.createElement("div");
     el.className = "company-item";
-    el.innerHTML = `<strong>${t.name}</strong><span class="hint">${t.slug}</span>`
-      + `<span class="tmpl-health hint">template controleren...</span>`
-      + `<span style="margin-left:auto;"></span>`
-      + `<button class="edit">bewerken</button><button class="del">verwijderen</button>`;
+    const opvulling = maakEl("span");
+    opvulling.style.marginLeft = "auto";
+    el.append(
+      maakEl("strong", { tekst: t.name }),
+      maakEl("span", { className: "hint", tekst: t.slug }),
+      maakEl("span", { className: "tmpl-health hint", tekst: "template controleren..." }),
+      opvulling,
+      maakEl("button", { className: "edit", tekst: "bewerken" }),
+      maakEl("button", { className: "del", tekst: "verwijderen" }),
+    );
     el.querySelector(".edit").onclick = () => fillCompanyForm(t);
     toonTemplateGezondheid(t.id, el.querySelector(".tmpl-health"));
     el.querySelector(".del").onclick = async () => {

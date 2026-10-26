@@ -61,7 +61,7 @@
             </span>
           </div>
           <div id="chatPreviewEmpty" class="hint"><strong style="color:var(--text);font-size:14.5px;">Hier verschijnt je nieuwsbrief</strong>Zodra de assistent een voorbeeld maakt, zie je hem hier live, nog voordat er een concept in het verzendplatform staat.</div>
-          <div id="chatPreviewWrap"><iframe id="chatPreviewFrame" title="Voorbeeld nieuwsbrief"></iframe></div>
+          <div id="chatPreviewWrap"><iframe id="chatPreviewFrame" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Voorbeeld nieuwsbrief"></iframe></div>
         </div>
       </div>
     </div>
@@ -98,7 +98,7 @@
       <div class="card">
         <h2>Voorbeeld</h2>
         <div id="nlPreviewEmpty" class="hint">Kies hierboven een nieuwsbrief om hem hier te bekijken.</div>
-        <iframe id="nlPreviewFrame" class="preview-frame" title="Voorbeeld nieuwsbrief" style="display:none;"></iframe>
+        <iframe id="nlPreviewFrame" sandbox="allow-popups allow-popups-to-escape-sandbox" class="preview-frame" title="Voorbeeld nieuwsbrief" style="display:none;"></iframe>
       </div>
     </div>
 
@@ -195,7 +195,7 @@
         <div class="preview-col">
           <p class="hint" style="margin:0;">Live voorbeeld op ware grootte, verandert direct mee:</p>
           <div class="preview-scaler" id="tmplPreviewScaler">
-            <iframe id="tmplPreviewFrame" title="Voorbeeld"></iframe>
+            <iframe id="tmplPreviewFrame" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Voorbeeld"></iframe>
           </div>
         </div>
         </div>
@@ -226,7 +226,7 @@
         <div class="diff" id="toolproofDiff" style="display:none;"></div>
         <div id="toolproofReport" style="display:none; margin-top:10px; padding:12px; border:1px solid var(--border); border-radius:8px; background:#fafbfc; font-size:13px; white-space:pre-wrap;"></div>
         <p class="hint" style="margin:10px 0 0;">Live voorbeeld (ververst automatisch terwijl je typt):</p>
-        <iframe id="adminPreviewFrame" class="preview-frame mini" title="Voorbeeld layout"></iframe>
+        <iframe id="adminPreviewFrame" sandbox="allow-popups allow-popups-to-escape-sandbox" class="preview-frame mini" title="Voorbeeld layout"></iframe>
         <div id="tmplList" style="margin-top:14px;"></div>
       </div>
     </div>
