@@ -1,5 +1,14 @@
 # Nieuwsbrief-product: Masterplan
 
+> **Status oktober 2026:** fase 0 t/m 3 zijn af en draaien in productie
+> (DigitalOcean, deploy bij push op main). Sindsdien bijgekomen: Klaviyo en
+> ActiveCampaign naast Brevo, eigen templates per bedrijf met invulvakken en
+> tool-proof-garantie, beeldbibliotheek met fotobeschrijvingen, Supabase Auth voor
+> klant-logins, kwaliteitscontroles/UTM/CSS-inlining, AI-kostenoverzicht, gesprekken
+> in de sidebar, concept bijwerken en resultaten uit de ESP, en productcatalogus en
+> banners van de klantensite (Shopify/WooCommerce). Zie `git log` voor details.
+> De rest van dit document is de oorspronkelijke opzet en is niet bijgewerkt.
+
 **Status:** architectuur vastgesteld 2026-06-26. Vervangt het oude plan (Slack +
 GitHub Actions + Claude Code CLI). Dat oude pad is verlaten.
 
@@ -119,7 +128,7 @@ Let op: het oude `SKILL.md` gebruikte afwijkende namen (`club_afbeeldingen`,
 
 ```bash
 cd backend && python -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime + test-tools
 uvicorn app.main:app --reload
 # Chat: http://localhost:8000/   |   API-docs: http://localhost:8000/docs
 ```
