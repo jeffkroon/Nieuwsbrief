@@ -227,3 +227,11 @@ def test_toolproof_roundtrip_blijft_byte_identiek_met_speciale_tekens() -> None:
     assert result.failed == []
     assert result.ok, result.checks_failed
     assert any("byte-identiek" in p for p in result.checks_passed), result.checks_passed
+
+
+def test_safe_href_vult_https_aan_voor_kale_www_link() -> None:
+    # Een website of social die zonder schema is opgeslagen ("www.x.nl") werd '#';
+    # aanvullen met https:// houdt de link werkend in plaats van hem te breken.
+    assert safe_href("www.voorbeeld.nl/actie") == "https://www.voorbeeld.nl/actie"
+    assert safe_href("  WWW.voorbeeld.nl") == "https://WWW.voorbeeld.nl"
+    assert safe_href("javascript:alert(1)") == "#"

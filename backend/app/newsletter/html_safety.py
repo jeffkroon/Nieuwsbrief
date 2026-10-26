@@ -48,7 +48,14 @@ def _safe_url(value: str | None, schemes: tuple[str, ...], unsafe: str) -> str:
 
 
 def safe_href(value: str | None) -> str:
-    """Link voor een href: http(s), mailto of tel; anders '#'. Leeg blijft leeg."""
+    """Link voor een href: http(s), mailto of tel; anders '#'. Leeg blijft leeg.
+
+    Een kale "www.x.nl" (zo opgeslagen in het bedrijfsformulier) krijgt https://
+    ervoor: anders zou een werkende website-link ineens '#' worden.
+    """
+    kaal = (value or "").strip()
+    if kaal.lower().startswith("www."):
+        value = f"https://{kaal}"
     return _safe_url(value, LINK_SCHEMES, _UNSAFE_LINK)
 
 
