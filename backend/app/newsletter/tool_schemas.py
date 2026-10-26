@@ -15,9 +15,10 @@ from app.newsletter.styles import COLOR_KEYS, EMAIL_SAFE_FONTS, FONT_KEY, SPACIN
 TOOL_DEFINITIONS = [
     {
         "name": "get_brand_config",
-        "description": "Haal de merk-configuratie (kleuren, afzender, socials, claude_prompt, "
-        "matches_url) van de huidige tenant op. De huisstijl staat al in je instructies: "
-        "alleen aanroepen als je een configuratieveld mist, niet elke beurt.",
+        "description": "Haal de volledige merk-configuratie (kleuren, afzender, socials) van "
+        "de huidige tenant op. Naam, website, matches_url en claude_prompt staan al in het "
+        "blok BEDRIJF in je instructies: alleen aanroepen als je een veld nodig hebt dat "
+        "daar niet in staat, niet elke beurt.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
@@ -152,7 +153,7 @@ TOOL_DEFINITIONS = [
                 "slot_cta_text": {"type": "string"},
                 "slot_cta_url": {"type": "string"},
                 "preview_text": {"type": "string"},
-                "confirmed": {"type": "boolean", "description": "Zet alleen op true NADAT de gebruiker expliciet toestemming heeft gegeven om het concept in Brevo aan te maken"},
+                "confirmed": {"type": "boolean", "description": "Zet alleen op true NADAT de gebruiker expliciet toestemming heeft gegeven om het concept bij het verzendplatform aan te maken"},
                 "new_draft": {"type": "boolean", "description": "Standaard wordt een concept dat in DIT gesprek al is aangemaakt BIJGEWERKT (zelfde campagne) in plaats van een nieuw concept te maken. Zet alleen op true als de gebruiker expliciet een APART, extra concept wil (bv. een tweede variant)."},
                 "header_image_url": {"type": "string", "description": "De bannerfoto: een BESTANDSNAAM uit list_images('banner') (bv. 'allianz-arena.jpg'), of de volledige banner_url die find_banner teruggaf. Nooit een zelf verzonnen URL."},
                 "header_text_color": {"type": "string", "description": "Optioneel: hex-kleur voor de kop en ondertitel op de bannerfoto, bv. '#ffffff'. Alleen meegeven als de gebruiker om een andere kleur vraagt; standaard geldt de kopkleur uit de stijl-builder."},
@@ -267,8 +268,8 @@ TOOL_DEFINITIONS = [
 
 
 # preview_newsletter heeft exact dezelfde velden als create_newsletter_draft, maar
-# zonder 'confirmed' (er gaat niets naar Brevo). We leiden de schema af zodat de twee
-# nooit uit elkaar lopen.
+# zonder 'confirmed' (er gaat niets naar het verzendplatform). We leiden de schema af
+# zodat de twee nooit uit elkaar lopen.
 _draft_def = next(t for t in TOOL_DEFINITIONS if t["name"] == "create_newsletter_draft")
 _preview_schema = copy.deepcopy(_draft_def["input_schema"])
 _preview_schema["properties"].pop("confirmed", None)
@@ -277,8 +278,8 @@ TOOL_DEFINITIONS.append(
     {
         "name": "preview_newsletter",
         "description": "Render een VOORBEELD van de nieuwsbrief en toon het direct aan de "
-        "gebruiker in het voorbeeldpaneel naast de chat. Maakt NIETS aan in Brevo. Roep dit "
-        "ALTIJD eerst aan en laat de gebruiker het voorbeeld zien, voordat je toestemming "
+        "gebruiker in het voorbeeldpaneel naast de chat. Maakt NIETS aan bij het "
+        "verzendplatform. Roep dit ALTIJD eerst aan en laat de gebruiker het voorbeeld zien, voordat je toestemming "
         "vraagt voor create_newsletter_draft. Zelfde velden (zonder 'confirmed'); links en "
         "prijzen worden net zo live gevalideerd en gescrapet.",
         "input_schema": _preview_schema,

@@ -137,10 +137,13 @@ def run_conversation_turn(
         builtin_name=(tenant.config or {}).get("template") if tenant else None,
     )
 
-    esp = (tenant.config or {}).get("esp") if tenant else None
+    brand = (tenant.config or {}) if tenant else None
+    esp = brand.get("esp") if brand else None
     result = run_agent_turn(
         client,
-        system=build_system_prompt(tone, content_types, template_info, esp=esp),
+        system=build_system_prompt(
+            tone, content_types, template_info, esp=esp, brand=brand
+        ),
         messages=claude_messages,
         tools=TOOL_DEFINITIONS,
         dispatch=lambda name, tool_input: execute_tool(name, tool_input, ctx),
