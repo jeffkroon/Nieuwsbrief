@@ -449,11 +449,11 @@ def test_volgende_beurt_krijgt_de_huidige_nieuwsbrief_mee(client, session, fake_
     laatste = fake.messages.calls[1]["messages"][-1]["content"]
     assert laatste[0]["text"] == "de teksten zijn cringy, verbeter dat"
     stand = laatste[-1]["text"]
-    assert "HUIDIGE STAND" in stand
+    assert "STAND van de nieuwsbrief" in stand
     assert "Jouw herfst, jouw glow" in stand and "https://cdn/b.jpg" in stand
-    # De stand wordt niet als bericht opgeslagen (anders stapelen verouderde kopieën op).
+    # De stand komt niet in de berichttekst (hij staat apart in de metadata).
     detail = client.get(f"/conversations/{start['conversation_id']}").json()
-    assert not any("HUIDIGE STAND" in (m.get("content") or "") for m in detail["messages"])
+    assert not any("STAND van de nieuwsbrief" in (m.get("content") or "") for m in detail["messages"])
 
 
 def test_gesprek_verwijderen_houdt_de_nieuwsbrief(client, session, fake_anthropic) -> None:
