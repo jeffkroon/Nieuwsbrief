@@ -8,12 +8,19 @@ from types import SimpleNamespace
 import pytest
 
 from app.newsletter.orchestrator import DEFAULT_MODEL, run_agent_turn
+from tests.fake_stream import FakeStream
 
 
 @dataclass
 class FakeText:
     text: str
     type: str = "text"
+
+
+@dataclass
+class FakeThinking:
+    thinking: str
+    type: str = "thinking"
 
 
 @dataclass
@@ -35,10 +42,12 @@ class FakeMessages:
     responses: list
     calls: list = field(default_factory=list)
 
-    def create(self, **kwargs):
+    def stream(self, **kwargs):
         # Snapshot de messages-lijst: de orchestrator hergebruikt en muteert 'm.
+        # Alleen stream(): de orchestrator streamt elke ronde, een create()-call
+        # zou hier dus meteen falen.
         self.calls.append({**kwargs, "messages": list(kwargs["messages"])})
-        return self.responses.pop(0)
+        return FakeStream(self.responses.pop(0))
 
 
 class FakeAnthropic:
@@ -305,3 +314,77 @@ def test_afbreken_slaat_ook_de_tool_aanroep_over() -> None:
             dispatch=_dispatch, should_stop=_should_stop,
         )
     assert aangeroepen == [], "de tool had niet meer aangeroepen mogen worden"
+
+
+# --- Tekst streamen ---------------------------------------------------------
+def test_tekst_komt_in_volgorde_binnen_via_on_text() -> None:
+    """Een beurt duurt soms een minuut; de tekst moet meegroeien terwijl het
+    model schrijft, per ronde gelabeld zodat de chat de blokken kan scheiden."""
+    gezien = []
+    client = FakeAnthropic(
+        [
+            FakeResponse(
+                [FakeText("Ik zoek even de producten op."), FakeToolUse("t1", "find_products", {})],
+                "tool_use",
+            ),
+            FakeResponse([FakeText("Het voorbeeld staat klaar, kijk maar.")], "end_turn"),
+        ]
+    )
+    resultaat = run_agent_turn(
+        client, system="s", messages=[{"role": "user", "content": "hoi"}], tools=[],
+        dispatch=lambda n, i: {}, on_text=gezien.append,
+    )
+    assert len(gezien) > 2, "de tekst moet in stukjes komen, niet in een keer"
+    assert [d.iteration for d in gezien] == sorted(d.iteration for d in gezien)
+    per_ronde: dict[int, str] = {}
+    for delta in gezien:
+        per_ronde[delta.iteration] = per_ronde.get(delta.iteration, "") + delta.text
+    assert per_ronde == {
+        1: "Ik zoek even de producten op.",
+        2: "Het voorbeeld staat klaar, kijk maar.",
+    }
+    assert resultaat.final_text == per_ronde[2]
+
+
+def test_thinking_en_tool_invoer_streamen_niet() -> None:
+    gezien = []
+    client = FakeAnthropic(
+        [
+            FakeResponse(
+                [FakeThinking("geheime overweging"), FakeToolUse("t1", "find_products", {"q": "x"})],
+                "tool_use",
+            ),
+            FakeResponse([FakeThinking("nog meer denken"), FakeText("klaar")], "end_turn"),
+        ]
+    )
+    run_agent_turn(
+        client, system="s", messages=[{"role": "user", "content": "hoi"}], tools=[],
+        dispatch=lambda n, i: {}, on_text=gezien.append,
+    )
+    assert [(d.iteration, d.text) for d in gezien] == [(2, "klaar")]
+
+
+def test_kapotte_tekstluisteraar_breekt_de_beurt_niet() -> None:
+    """Meeschrijven is bijzaak; het eindantwoord moet er altijd komen."""
+
+    def _kapot(delta):
+        raise RuntimeError("luisteraar stuk")
+
+    client = FakeAnthropic([FakeResponse([FakeText("toch helemaal klaar")], "end_turn")])
+    resultaat = run_agent_turn(
+        client, system="s", messages=[{"role": "user", "content": "hoi"}], tools=[],
+        dispatch=lambda n, i: {}, on_text=_kapot,
+    )
+    assert resultaat.final_text == "toch helemaal klaar"
+    assert resultaat.stop_reason == "end_turn"
+
+
+def test_stream_krijgt_dezelfde_parameters_als_voorheen() -> None:
+    """Streamen verandert niets aan model, thinking, caching of context editing."""
+    client, _ = _run([FakeResponse([FakeText("ok")], "end_turn")])
+    call = client.messages.calls[0]
+    assert set(call) == {
+        "model", "max_tokens", "thinking", "output_config", "betas",
+        "context_management", "system", "tools", "messages",
+    }
+    assert call["max_tokens"] == 16000
