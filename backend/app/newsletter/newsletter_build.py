@@ -22,6 +22,7 @@ from app.newsletter.block_validation import (
 )
 from app.newsletter.capabilities import style_key_has_effect
 from app.newsletter.custom_fields import find_custom_slots
+from app.newsletter.earlier_values import EARLIER_KEY, updated_earlier
 from app.newsletter.mail_checks import (
     advisory_messages,
     blocking_messages,
@@ -77,8 +78,9 @@ def _resolve_template_html(
 
 
 # Keuzes die per aanroep gelden en nooit mogen meeliften naar een volgende render:
-# de toestemming voor het concept, en de keuze voor een apart nieuw concept.
-_NOT_INHERITED = frozenset({"confirmed", "new_draft"})
+# de toestemming voor het concept, en de keuze voor een apart nieuw concept. Plus
+# de vorige teksten (_eerder): die horen bij de stand, nooit bij een render-invoer.
+_NOT_INHERITED = frozenset({"confirmed", "new_draft", EARLIER_KEY})
 
 
 def _without_per_call(values: dict) -> dict:
@@ -97,7 +99,7 @@ def _merge_with_last_preview(ctx: ToolContext, tool_input: dict) -> dict:
     Garantie in code: "wijzig één ding en render opnieuw" kan nooit meer velden
     kwijtraken (bv. de bannerfoto) doordat de agent ze vergeet te herhalen.
     Expliciet meegegeven waarden winnen altijd (ook een lege lijst = leegmaken);
-    `confirmed` en `new_draft` (zie _NOT_INHERITED) worden nooit geërfd.
+    `confirmed`, `new_draft` en `_eerder` (zie _NOT_INHERITED) worden nooit geërfd.
     """
     conversation = _conversation(ctx)
     previous = _without_per_call(conversation.last_preview or {}) if conversation else {}
@@ -114,7 +116,12 @@ def _remember_preview(ctx: ToolContext, merged_input: dict) -> None:
     conversation = _conversation(ctx)
     if conversation is None:
         return
-    conversation.last_preview = merged_input
+    # Vorige teksten bijwerken (alleen bij een echte wijziging), zodat de
+    # assistent iets kan terugzetten zonder oude standen in de geschiedenis.
+    earlier = updated_earlier(conversation.last_preview, merged_input)
+    conversation.last_preview = (
+        {**merged_input, EARLIER_KEY: earlier} if earlier else merged_input
+    )
     ctx.session.commit()
 
 

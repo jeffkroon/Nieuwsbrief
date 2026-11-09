@@ -159,7 +159,8 @@ def test_continue_conversation_keeps_history(client, session, fake_anthropic) ->
     # De tweede create-call kreeg de volledige geschiedenis mee (user, assistant, user).
     second_history = fake.messages.calls[1]["messages"]
     assert [m["role"] for m in second_history] == ["user", "assistant", "user"]
-    assert second_history[0]["content"] == "eerste vraag"
+    # Gebruikersberichten altijd als één tekstblok (stabiele cache-prefix), oude zonder markering.
+    assert second_history[0]["content"] == [{"type": "text", "text": "eerste vraag"}]
     assert second_history[1]["content"] == "Eerste antwoord."
     # Het laatste bericht krijgt een cache-markering (geschiedenis-caching);
     # de tekst zelf blijft gelijk.
