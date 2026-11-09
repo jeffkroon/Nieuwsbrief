@@ -12,17 +12,12 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Conversation, Message, Tenant
+from app.db.models import Conversation, Tenant
 from app.newsletter.orchestrator import ToolEvent, run_agent_turn
 from app.newsletter.progress import describe
 from app.newsletter.prompts import build_system_prompt
 from app.newsletter.capabilities import template_capabilities
-from app.newsletter.current_state import (
-    note_for_turn,
-    state_metadata,
-    stored_note,
-    with_state_note,
-)
+from app.newsletter.current_state import replay_message, with_current_state
 from app.newsletter.renderer import SECTIONS_MARKER
 from app.newsletter.templates import load_template
 from app.newsletter.tools import (
@@ -39,18 +34,6 @@ from app.services.tone import ensure_tone
 
 # Alleen deze rollen worden teruggespeeld naar Claude als geschiedenis.
 _REPLAYABLE_ROLES = {"user", "assistant"}
-
-
-def _replayable(history: list[Message]) -> list[tuple[dict, str | None]]:
-    """Terug te spelen berichten met hun opgeslagen stand-notitie (of None).
-
-    Losse waarden, geen ORM-objecten: daarna wordt er gecommit.
-    """
-    return [
-        ({"role": m.role, "content": m.content}, stored_note(m.metadata_))
-        for m in history
-        if m.role in _REPLAYABLE_ROLES and m.content
-    ]
 
 
 def _template_info(
@@ -115,25 +98,23 @@ def run_conversation_turn(
         conversation.template_id = template_id
     template_id = template_id or conversation.template_id
 
-    # Eerdere berichten met de stand-notitie die ze destijds meekregen; de nieuwe
-    # notitie gaat over de stand van VÓÓR deze beurt en wordt precies zo opgeslagen
-    # als hij wordt meegestuurd. Zo komt elke beurt byte-identiek terug en leest de
-    # volgende beurt de hele geschiedenis uit de prompt-cache.
-    earlier = _replayable(repo.list_messages(session, conversation.id))
-    note = note_for_turn(conversation.last_preview, [n for _, n in earlier])
-    repo.add_message(
-        session, conversation.id, "user", user_text, metadata=state_metadata(note)
-    )
-    claude_messages = [
-        with_state_note(message, n)
-        for message, n in [*earlier, ({"role": "user", "content": user_text}, note)]
-    ]
+    repo.add_message(session, conversation.id, "user", user_text)
 
     # Elke Claude-call van deze beurt (orchestrator én Haiku-extracties) wordt
     # geregistreerd in mail.llm_usage: meten wat een gesprek werkelijk kost.
     client = TrackingLLM(
         client, session, purpose="chat",
         tenant_id=conversation.tenant_id, conversation_id=conversation.id,
+    )
+
+    history = repo.list_messages(session, conversation.id)
+    claude_messages = with_current_state(
+        [
+            replay_message(m.role, m.content)
+            for m in history
+            if m.role in _REPLAYABLE_ROLES and m.content
+        ],
+        conversation.last_preview,
     )
 
     ctx = ToolContext(

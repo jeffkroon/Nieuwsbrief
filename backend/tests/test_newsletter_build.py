@@ -237,4 +237,7 @@ def test_gelukte_preview_slaat_de_samengevoegde_stand_op(session, cipher) -> Non
     ctx = _ctx(session, cipher, tenant, conversation_id=gesprek.id)
     execute_tool("preview_newsletter", PREVIEW, ctx)
     execute_tool("preview_newsletter", {"intro_1": "Nieuw"}, ctx)
-    assert _stand(session, gesprek.id) == {**PREVIEW, "intro_1": "Nieuw"}
+    # Plus de vorige intro, om terug te kunnen zetten (zie test_eerder_gebruikt.py).
+    assert _stand(session, gesprek.id) == {
+        **PREVIEW, "intro_1": "Nieuw", "_eerder": {"intro_1": [PREVIEW["intro_1"]]}
+    }

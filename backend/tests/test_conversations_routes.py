@@ -153,7 +153,8 @@ def test_continue_conversation_keeps_history(client, session, fake_anthropic) ->
     # De tweede create-call kreeg de volledige geschiedenis mee (user, assistant, user).
     second_history = fake.messages.calls[1]["messages"]
     assert [m["role"] for m in second_history] == ["user", "assistant", "user"]
-    assert second_history[0]["content"] == "eerste vraag"
+    # Gebruikersberichten altijd als één tekstblok (stabiele cache-prefix), oude zonder markering.
+    assert second_history[0]["content"] == [{"type": "text", "text": "eerste vraag"}]
     assert second_history[1]["content"] == "Eerste antwoord."
     # Het laatste bericht krijgt een cache-markering (geschiedenis-caching);
     # de tekst zelf blijft gelijk.
@@ -449,11 +450,11 @@ def test_volgende_beurt_krijgt_de_huidige_nieuwsbrief_mee(client, session, fake_
     laatste = fake.messages.calls[1]["messages"][-1]["content"]
     assert laatste[0]["text"] == "de teksten zijn cringy, verbeter dat"
     stand = laatste[-1]["text"]
-    assert "STAND van de nieuwsbrief" in stand
+    assert "HUIDIGE STAND" in stand
     assert "Jouw herfst, jouw glow" in stand and "https://cdn/b.jpg" in stand
-    # De stand komt niet in de berichttekst (hij staat apart in de metadata).
+    # De stand wordt niet als bericht opgeslagen (anders stapelen verouderde kopieën op).
     detail = client.get(f"/conversations/{start['conversation_id']}").json()
-    assert not any("STAND van de nieuwsbrief" in (m.get("content") or "") for m in detail["messages"])
+    assert not any("HUIDIGE STAND" in (m.get("content") or "") for m in detail["messages"])
 
 
 def test_gesprek_verwijderen_houdt_de_nieuwsbrief(client, session, fake_anthropic) -> None:
