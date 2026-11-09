@@ -32,7 +32,7 @@ from app.schemas import (
     ConversationSummary,
     MessageSend,
 )
-from app.newsletter.orchestrator import TurnCancelled
+from app.newsletter.orchestrator import TextDelta, TurnCancelled
 from app.services.conversation import TurnReply, run_conversation_turn
 from app.services.crypto import SecretCipher
 
@@ -271,7 +271,8 @@ async def stream_turn(
     """Zelfde beurt als POST /conversations, maar met tussenstanden onderweg.
 
     Een beurt duurt soms een minuut (pagina's ophalen, prijzen controleren). De
-    stap-events laten zien waar de assistent mee bezig is; verbreekt de gebruiker
+    stap-events laten zien waar de assistent mee bezig is en de text-events
+    schrijven het antwoord mee terwijl het model schrijft; verbreekt de gebruiker
     de verbinding, dan stopt de beurt bij de eerstvolgende stap in plaats van nog
     dure rondes te draaien.
     """
@@ -304,6 +305,7 @@ async def stream_turn(
                     template_id=body.template_id,
                     on_step=lambda tekst: events.put({"type": "step", "text": tekst}),
                     should_stop=afbreken.is_set,
+                    on_text=lambda delta: events.put(_tekst_event(delta)),
                 )
                 events.put(
                     {
@@ -358,6 +360,16 @@ def _kies_gesprek(session: Session, body: ConversationStart, info: SessionInfo):
     if tenants_repo.get_tenant(session, body.tenant_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="tenant niet gevonden")
     return repo.create_conversation(session, tenant_id=body.tenant_id, channel=body.channel)
+
+
+def _tekst_event(delta: TextDelta) -> dict:
+    """Een stukje meegeschreven tekst als stream-event.
+
+    `iteration` is de modelronde: een nieuw nummer betekent een nieuw tekstblok.
+    Tekst uit een ronde die op tools uitkomt is tussentekst; het `done`-event
+    levert daarna het definitieve antwoord, en dat is leidend.
+    """
+    return {"type": "text", "iteration": delta.iteration, "text": delta.text}
 
 
 def _sse(payload: dict) -> str:

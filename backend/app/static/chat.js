@@ -166,6 +166,7 @@ async function sendMessage() {
   chat.appendChild(stappen);
   chat.scrollTop = chat.scrollHeight;
 
+  const schrijver = meeschrijver(stappen, bezig);
   lopendeBeurt = new AbortController();
   try {
     const res = await fetch("/conversations/stream", {
@@ -185,12 +186,16 @@ async function sendMessage() {
       addMsg("system", "Fout (" + res.status + "): " + (err.detail || "onbekend"));
       return;
     }
-    await leesStroom(res.body, stappen, bezig);
+    await leesStroom(res.body, stappen, bezig, schrijver);
   } catch (e) {
     stappen.remove();
+    schrijver.weg();
     if (e.name === "AbortError") addMsg("system", "Gestopt. Je vorige antwoorden blijven staan.");
     else addMsg("system", "Netwerkfout: " + e.message);
   } finally {
+    // Stroom zonder slotbericht (verbinding weg): halve tekst staat niet in de
+    // database, dus ook niet op het scherm laten staan.
+    schrijver.weg();
     lopendeBeurt = null;
     document.getElementById("stop").style.display = "none";
     send.disabled = false; input.disabled = false; input.focus();
@@ -198,8 +203,64 @@ async function sendMessage() {
   }
 }
 
+// Staat de lijst (bijna) onderaan? Alleen dan meescrollen, zodat iemand die
+// tijdens het schrijven omhoog scrollt om iets terug te lezen niet wordt teruggetrokken.
+function bijOnderkant() {
+  return chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
+}
+
+// Meeschrijven: een assistent-bubbel die groeit terwijl het model schrijft.
+// Elke modelronde (e.iteration) is een eigen tekstblok. Tekst uit een ronde die op
+// tools uitkomt ("Ik zoek even de producten op") verhuist naar het stappenpaneel
+// zodra er een stap of een nieuwe ronde komt. Alles via textContent, nooit als HTML.
+function meeschrijver(stappen, bezig) {
+  let bubbel = null, ronde = null;
+  const naarStappen = () => {
+    if (!bubbel) return;
+    const tekst = bubbel.textContent.trim();
+    if (tekst) {
+      const regel = document.createElement("div");
+      regel.className = "say";
+      regel.textContent = tekst;
+      stappen.insertBefore(regel, bezig);
+    }
+    bubbel.remove();
+    bubbel = null;
+  };
+  return {
+    tekst(e) {
+      const volgen = bijOnderkant();
+      if (bubbel && e.iteration !== ronde) naarStappen();
+      if (!bubbel) {
+        bubbel = document.createElement("div");
+        bubbel.className = "msg assistant streaming";
+        chat.appendChild(bubbel);
+        ronde = e.iteration;
+      }
+      bubbel.textContent += e.text;
+      if (volgen) chat.scrollTop = chat.scrollHeight;
+    },
+    stap: naarStappen,
+    // Het slotbericht is leidend: de meegeschreven tekst wordt vervangen door
+    // het definitieve antwoord, precies zoals het in de database staat.
+    klaar(antwoord) {
+      if (!bubbel) return false;
+      bubbel.textContent = "";
+      bubbel.classList.remove("streaming");
+      bubbel.classList.add("md");
+      bubbel.appendChild(renderMarkdown(antwoord));
+      bubbel = null;
+      return true;
+    },
+    weg() {
+      if (bubbel) bubbel.remove();
+      bubbel = null;
+    },
+  };
+}
+
 // Server-sent events lezen: elke "data: {...}"-regel is een gebeurtenis.
-async function leesStroom(body, stappen, bezig) {
+async function leesStroom(body, stappen, bezig, schrijver) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -216,7 +277,10 @@ async function leesStroom(body, stappen, bezig) {
       try { e = JSON.parse(regel.slice(6)); } catch (err) { continue; }
       if (e.type === "start") {
         bewaarGesprek(e.conversation_id);
+      } else if (e.type === "text") {
+        schrijver.tekst(e);
       } else if (e.type === "step") {
+        schrijver.stap();
         const stap = document.createElement("div");
         stap.textContent = e.text;
         stappen.insertBefore(stap, bezig);
@@ -224,13 +288,17 @@ async function leesStroom(body, stappen, bezig) {
       } else if (e.type === "done") {
         bezig.remove();
         if (!stappen.childElementCount) stappen.remove();
-        addMsg("assistant", e.reply);
+        const volgen = bijOnderkant();
+        if (!schrijver.klaar(e.reply)) addMsg("assistant", e.reply);
+        else if (volgen) chat.scrollTop = chat.scrollHeight;
         if (e.preview_html) showChatPreview(e.preview_html);
       } else if (e.type === "error") {
         bezig.remove();
+        schrijver.weg();
         addMsg("system", e.detail);
       } else if (e.type === "cancelled") {
         bezig.remove();
+        schrijver.weg();
         addMsg("system", "Gestopt.");
       }
     }

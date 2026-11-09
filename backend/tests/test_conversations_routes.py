@@ -12,6 +12,7 @@ from app.deps import get_anthropic_client
 from app.main import app
 from app.repositories import tenants as tenants_repo
 from app.schemas import TenantCreate
+from tests.fake_stream import FakeStream
 
 CONFIG = {
     "brand_name": "VoetbalreizenXL",
@@ -64,12 +65,17 @@ class FakeMessages:
         self.calls.append({**kwargs, "messages": list(kwargs["messages"])})
         return self.responses.pop(0)
 
+    def stream(self, **kwargs):
+        self.calls.append({**kwargs, "messages": list(kwargs["messages"])})
+        return FakeStream(self.responses.pop(0))
+
 
 class FakeAnthropic:
     def __init__(self, responses: list) -> None:
         self.messages = FakeMessages(responses=list(responses))
-        # De orchestrator draait op de beta-endpoint (context editing); zelfde fake.
-        self.beta = SimpleNamespace(messages=self.messages)
+        # De orchestrator streamt op de beta-endpoint (context editing); zelfde
+        # antwoorden, maar alleen stream(): een create()-call daar zou falen.
+        self.beta = SimpleNamespace(messages=SimpleNamespace(stream=self.messages.stream))
 
 
 @pytest.fixture
@@ -298,6 +304,48 @@ def test_stream_geeft_stappen_en_een_slotbericht(client, session, fake_anthropic
     assert uuid.UUID(slot["conversation_id"]) == uuid.UUID(events[0]["conversation_id"])
 
 
+def test_stream_schrijft_de_tekst_mee_voor_het_slotbericht(client, session, fake_anthropic) -> None:
+    """De tekst moet woord voor woord verschijnen, per ronde gelabeld; het
+    slotbericht blijft leidend (dat staat in de database)."""
+    tenant = _tenant(session)
+    fake_anthropic(
+        [
+            FakeResponse(
+                [FakeText("Ik kijk even naar de huisstijl."), FakeToolUse("t1", "get_brand_config", {})],
+                "tool_use",
+            ),
+            FakeResponse([FakeText("Ik gebruik de oranje huisstijl.")], "end_turn"),
+        ]
+    )
+    events = _sse_events(
+        client.post(
+            "/conversations/stream", json={"tenant_id": str(tenant.id), "message": "hoi"}
+        ).text
+    )
+    soorten = [e["type"] for e in events]
+    assert soorten[-1] == "done"
+    tekst = [e for e in events if e["type"] == "text"]
+    assert len(tekst) > 2, "de tekst moet in stukjes komen"
+    assert soorten.index("text") < soorten.index("done")
+
+    per_ronde: dict[int, str] = {}
+    for e in tekst:
+        per_ronde[e["iteration"]] = per_ronde.get(e["iteration"], "") + e["text"]
+    assert per_ronde == {1: "Ik kijk even naar de huisstijl.", 2: "Ik gebruik de oranje huisstijl."}
+    # De tussentekst komt voor de tool-stap, het antwoord erna.
+    assert soorten.index("step") > soorten.index("text")
+    assert events[-1]["reply"] == per_ronde[2]
+
+
+def test_gewone_post_blijft_werken_zonder_meeschrijven(client, session, fake_anthropic) -> None:
+    """De niet-streamende route heeft geen luisteraar en geeft alleen het antwoord."""
+    tenant = _tenant(session)
+    fake_anthropic([FakeResponse([FakeText("Gewoon klaar.")], "end_turn")])
+    resp = client.post("/conversations", json={"tenant_id": str(tenant.id), "message": "hoi"})
+    assert resp.status_code == 201
+    assert resp.json()["reply"] == "Gewoon klaar."
+
+
 def test_stream_zet_het_gesprek_voort(client, session, fake_anthropic) -> None:
     tenant = _tenant(session)
     fake_anthropic([FakeResponse([FakeText("eerste")], "end_turn")])
@@ -330,6 +378,9 @@ def test_stream_meldt_een_fout_als_event(client, session, fake_anthropic) -> Non
 
     class _Stuk:
         def create(self, **kwargs):
+            raise RuntimeError("iteratielimiet")
+
+        def stream(self, **kwargs):
             raise RuntimeError("iteratielimiet")
 
     fake = fake_anthropic([])

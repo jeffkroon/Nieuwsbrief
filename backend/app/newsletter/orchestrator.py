@@ -17,6 +17,9 @@ blijven staan. Zo blijft een lange chat betaalbaar en binnen de context-limiet
 zonder dat de assistent context of kwaliteit verliest. Geen budget_tokens (gebruik
 adaptive thinking). De system-prompt + tools worden gecachet (prompt caching), zodat
 dat vaste deel niet elke loop-stap opnieuw vol wordt afgerekend.
+
+Elke ronde wordt gestreamd: de antwoordtekst gaat stukje voor stukje naar de chat
+terwijl het model schrijft, zodat een beurt van een minuut niet stil blijft.
 """
 
 from __future__ import annotations
@@ -55,6 +58,24 @@ class ToolEvent:
 
 # Voortgang melden tijdens een beurt (voor de streamende chat); optioneel.
 EventSink = Callable[[ToolEvent], None]
+
+
+@dataclass(frozen=True)
+class TextDelta:
+    """Een stukje antwoordtekst, zodra het model het schrijft.
+
+    `iteration` is de modelronde binnen de beurt (vanaf 1). Tekst uit een ronde
+    die op tools uitkomt ("Ik zoek even de producten op") hoort bij een
+    tussenstap; de tekst van de laatste ronde is het antwoord. Met het nummer
+    weet de chat welk stukje bij welk tekstblok hoort.
+    """
+
+    iteration: int
+    text: str
+
+
+# Meeschrijven tijdens een beurt (voor de streamende chat); optioneel.
+TextSink = Callable[[TextDelta], None]
 
 
 class TurnCancelled(RuntimeError):
@@ -118,13 +139,15 @@ def run_agent_turn(
     max_iterations: int = MAX_ITERATIONS,
     on_event: EventSink | None = None,
     should_stop: Callable[[], bool] | None = None,
+    on_text: TextSink | None = None,
 ) -> ConversationResult:
     """Voer één agent-beurt uit tot Claude stopt of een limiet bereikt is.
 
     `on_event` krijgt elke tool-stap door, zodat de chat kan laten zien waar de
-    assistent mee bezig is. `should_stop` wordt tussen de stappen gecontroleerd:
-    geeft die True, dan stopt de beurt met TurnCancelled in plaats van nog een
-    (dure) ronde te doen.
+    assistent mee bezig is. `on_text` krijgt de antwoordtekst stukje voor stukje
+    terwijl het model schrijft (geen thinking, geen tool-invoer). `should_stop`
+    wordt tussen de stappen gecontroleerd: geeft die True, dan stopt de beurt met
+    TurnCancelled in plaats van nog een (dure) ronde te doen.
     """
     convo: list[dict] = list(messages)
     # Cache de system-prompt (rendert na de tools, dus dit cachet tools + system samen).
@@ -135,7 +158,7 @@ def run_agent_turn(
     for iteration in range(1, max_iterations + 1):
         if should_stop is not None and should_stop():
             raise TurnCancelled("beurt afgebroken voor de volgende stap")
-        response = client.beta.messages.create(
+        stream = client.beta.messages.stream(
             model=model,
             max_tokens=MAX_OUTPUT_TOKENS,
             thinking={"type": "adaptive"},
@@ -149,6 +172,7 @@ def run_agent_turn(
             # wordt de volgende call uit de cache gelezen i.p.v. vol afgerekend.
             messages=_with_history_cache(convo),
         )
+        response = _read_stream(stream, iteration, on_text)
         convo.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason == "tool_use":
@@ -171,6 +195,22 @@ def run_agent_turn(
         )
 
     raise RuntimeError(f"agent-beurt bereikte de iteratielimiet ({max_iterations})")
+
+
+def _read_stream(stream: Any, iteration: int, on_text: TextSink | None) -> Any:
+    """Lees één modelronde uit en geef het volledige antwoord terug.
+
+    `text_stream` van de SDK levert alleen text-deltas: thinking en tool-invoer
+    gaan niet naar de chat. Daarna geeft get_final_message() hetzelfde antwoord
+    als een gewone create-call (en registreert TrackingLLM de usage precies een
+    keer). Afbreken midden in een ronde doen we bewust niet: dan wordt het
+    verbruik van die ronde niet vastgelegd. should_stop werkt tussen de rondes.
+    """
+    with stream as lopend:
+        if on_text is not None:
+            for stuk in lopend.text_stream:
+                _emit(on_text, TextDelta(iteration=iteration, text=stuk))
+        return lopend.get_final_message()
 
 
 def _run_tools(
@@ -212,11 +252,11 @@ def _run_tools(
     return results
 
 
-def _emit(on_event: EventSink | None, event: ToolEvent) -> None:
-    """Voortgang melden mag de beurt nooit laten mislukken."""
-    if on_event is None:
+def _emit(listener: EventSink | TextSink | None, event: ToolEvent | TextDelta) -> None:
+    """Voortgang of tekst melden mag de beurt nooit laten mislukken."""
+    if listener is None:
         return
     try:
-        on_event(event)
+        listener(event)
     except Exception:  # noqa: BLE001 - een kapotte luisteraar is geen reden te stoppen
         pass

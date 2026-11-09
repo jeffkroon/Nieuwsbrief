@@ -34,6 +34,22 @@ def test_chat_gebruikt_de_streamende_route(client) -> None:
     assert "text/event-stream" not in html  # de browser leest de stroom zelf uit
 
 
+def test_chat_schrijft_het_antwoord_mee(client) -> None:
+    """De tekst verschijnt terwijl het model schrijft, altijd via textContent
+    (modeltekst mag nooit als HTML worden geinterpreteerd), en het slotbericht
+    vervangt de meegeschreven tekst zodat scherm en database gelijk zijn."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "app" / "static" / "chat.js").read_text()
+    assert 'e.type === "text"' in js
+    assert "e.iteration" in js  # een nieuwe ronde is een nieuw tekstblok
+    assert "bubbel.textContent += e.text" in js
+    # Geen innerHTML in de buurt van de meegeschreven tekst.
+    begin = js.index("function meeschrijver")
+    einde = js.index("\n}\n", begin)
+    assert "innerHTML" not in js[begin:einde]
+
+
 def test_chat_heeft_stopknop_en_gespreksgeschiedenis(client) -> None:
     html = _frontend(client)
     for element in ('id="stop"', 'id="convList"', 'id="newChat"', 'id="quickStarts"'):

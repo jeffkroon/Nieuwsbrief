@@ -220,6 +220,51 @@ def test_tracking_llm_records_streaming(session) -> None:
     assert rows[0].output_tokens == 340 and rows[0].cache_read_tokens == 7600
 
 
+def test_streamende_agentbeurt_registreert_elke_ronde_precies_een_keer(session) -> None:
+    """De orchestrator streamt nu elke ronde en leest de tekst mee; de usage moet
+    nog steeds precies één regel per Claude-call opleveren, niet nul en niet twee."""
+    from types import SimpleNamespace
+
+    from app.db.models import LlmUsage
+    from app.newsletter.orchestrator import run_agent_turn
+    from app.services.llm_usage import TrackingLLM
+    from tests.fake_stream import FakeStream
+
+    antwoorden = [
+        SimpleNamespace(
+            usage=_FakeUsage(),
+            stop_reason="tool_use",
+            content=[
+                SimpleNamespace(type="text", text="Even kijken."),
+                SimpleNamespace(type="tool_use", id="t1", name="get_brand_config", input={}),
+            ],
+        ),
+        SimpleNamespace(
+            usage=_FakeUsage(),
+            stop_reason="end_turn",
+            content=[SimpleNamespace(type="text", text="Klaar met schrijven.")],
+        ),
+    ]
+
+    class _Messages:
+        def stream(self, **kwargs):
+            return FakeStream(antwoorden.pop(0))
+
+    inner = SimpleNamespace(beta=SimpleNamespace(messages=_Messages()))
+    tracked = TrackingLLM(inner, session, purpose="chat")
+    gezien = []
+    resultaat = run_agent_turn(
+        tracked, system="s", messages=[{"role": "user", "content": "hoi"}], tools=[],
+        dispatch=lambda n, i: {}, model="claude-sonnet-5", on_text=gezien.append,
+    )
+
+    assert resultaat.final_text == "Klaar met schrijven."
+    assert "".join(d.text for d in gezien) == "Even kijken.Klaar met schrijven."
+    rows = session.query(LlmUsage).all()
+    assert len(rows) == 2  # twee rondes, twee regels
+    assert {r.model for r in rows} == {"claude-sonnet-5"}
+
+
 def test_recording_failure_never_breaks_the_call(session) -> None:
     from app.services.llm_usage import TrackingLLM
 

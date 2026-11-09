@@ -117,8 +117,10 @@ class _BetaProxy:
 class TrackingLLM:
     """Dun laagje om de Anthropic-client dat elke call registreert.
 
-    Dekt zowel client.messages.create (extracties, toolproof) als
-    client.beta.messages.create (de orchestrator-loop). Alles wat verder op de
+    Dekt client.messages.create/stream (extracties, toolproof) en
+    client.beta.messages.create/stream (de orchestrator-loop streamt). Bij een
+    stream telt get_final_message(), dus precies een regel per call, ook als de
+    tekst onderweg via text_stream is meegelezen. Alles wat verder op de
     client wordt opgevraagd gaat ongewijzigd door naar de echte client.
     """
 
