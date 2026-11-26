@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 
 from app.newsletter import extraction
-from app.newsletter.custom_fields import normalize_custom_fields
+from app.newsletter.custom_fields import image_slots, normalize_custom_fields
 from app.newsletter.html_safety import has_scheme
 from app.newsletter.models import PRICE_ON_REQUEST, Club, Item, Match, Section
 from app.newsletter.page_images import best_product_image
@@ -289,6 +289,43 @@ def validated_sections(ctx: ToolContext, raw_sections: list[dict]) -> list[Secti
         else:
             raise ValueError(f"onbekende sectie-soort: {kind!r}")
     return sections
+
+
+def _library_url(ctx: ToolContext, value: str) -> str | None:
+    """Alleen een EXACTE bestandsnaam (eventueel 'categorie:naam') uit de bibliotheek."""
+    name = value.split(":")[-1].strip()
+    for image in images_repo.list_images(ctx.session, ctx.tenant_id):
+        if image.filename == name:
+            return image.url
+    return None
+
+
+def resolved_custom_images(
+    ctx: ToolContext, fields: dict[str, str], template_html: str
+) -> dict[str, str]:
+    """Fotovakken (een {{VAK_*}} in een src-attribuut) krijgen een echte URL.
+
+    Een bestandsnaam uit de eigen bibliotheek wordt de opslag-URL; een volledige
+    http(s)-URL en een leeg vak blijven staan. Iets anders zou een kapotte foto in
+    de mail geven: dan weigeren we met uitleg. Tekstvakken blijven onaangeroerd.
+    Bewust geen 'bevat'-match zoals resolve_image: hier liever weigeren dan gokken.
+    """
+    fotovakken = image_slots(template_html)
+    resolved: dict[str, str] = {}
+    for name, value in fields.items():
+        waarde = value.strip()
+        if name not in fotovakken or not waarde or has_scheme(waarde, _WEB_SCHEMES):
+            resolved[name] = value
+            continue
+        url = _library_url(ctx, waarde)
+        if url is None:
+            raise ValueError(
+                f"custom_fields['{name}'] staat in de template als foto (VAK_{name}) "
+                f"maar '{waarde}' is geen foto uit de bibliotheek en geen volledige URL. "
+                "Gebruik de exacte bestandsnaam of de url uit list_images, of laat het vak leeg."
+            )
+        resolved[name] = url
+    return resolved
 
 
 def validated_custom_fields(raw) -> dict[str, str]:

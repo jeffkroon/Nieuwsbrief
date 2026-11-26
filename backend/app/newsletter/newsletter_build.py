@@ -8,12 +8,13 @@ preview_newsletter toont het resultaat alleen; er gaat niets naar een verzendpla
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.db.models import Conversation, Tenant
 from app.newsletter.block_validation import (
     validated_clubs,
     validated_cta_link,
+    resolved_custom_images,
     validated_custom_fields,
     validated_header_image,
     validated_items,
@@ -255,6 +256,13 @@ def build_newsletter(ctx: ToolContext, tool_input: dict) -> BuiltNewsletter:
     tenant = load_tenant(ctx)
     content = _validated_content(ctx, merged)
     template_html, brand, is_fallback = _resolve_template_html(ctx, tenant, tenant.config)
+    # Fotovakken pas hier: welke vakken een foto zijn, staat in de gekozen template.
+    content = replace(
+        content,
+        custom_fields=tuple(
+            sorted(resolved_custom_images(ctx, dict(content.custom_fields), template_html).items())
+        ),
+    )
     brand = _apply_style_overrides(brand, template_html, merged.get("style_overrides"))
     html = render_newsletter(template_html, brand, content)
     filled = dict(content.custom_fields)
