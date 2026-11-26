@@ -24,6 +24,14 @@ SECTION_START = "<!-- ##SECTIE## -->"
 SECTION_END = "<!-- /##SECTIE## -->"
 
 
+_IMAGE_SLOT_PATTERN = re.compile(r"""\bsrc\s*=\s*["']\{\{VAK_([A-Z0-9_]+)\}\}["']""", re.IGNORECASE)
+
+
+def image_slots(html: str) -> set[str]:
+    """Invulvakken die als foto-adres dienen (staan in een src-attribuut)."""
+    return {name.upper() for name in _IMAGE_SLOT_PATTERN.findall(html or "")}
+
+
 def find_custom_slots(html: str) -> list[str]:
     """Alle eigen invulvakken in een template, uniek en in volgorde van voorkomen."""
     seen: list[str] = []
