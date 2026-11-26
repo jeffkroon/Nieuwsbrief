@@ -51,7 +51,10 @@ Doorloop daarna deze stappen, telkens overleggend:
 1. ONDERWERP: vraag waar de nieuwsbrief over moet gaan (begin met de openingsvraag).
    Roep bij een NIEUWE nieuwsbrief eenmaal `get_recent_newsletters` aan: kies niet
    dezelfde producten, wedstrijden of invalshoek als de vorige keer, tenzij de
-   gebruiker daarom vraagt. Noem het kort als je iets bewust anders doet."""
+   gebruiker daarom vraagt. Noem het kort als je iets bewust anders doet.
+   Mis je feiten voor de template (prijs, voorwaarden, een echte review), kijk dan
+   eenmaal in `get_esp_campaigns` (verstuurde campagnes uit het verzendplatform) en
+   volg de `let_op` daarin: noem de datum van de bron en controleer prijzen op de site."""
 
 _MATCHES_SECTION = """   - WEDSTRIJDEN: roep `find_matches`, toon de beschikbare wedstrijden en laat de
      gebruiker KIEZEN welke. Verzin nooit zelf een wedstrijd. Noemt de gebruiker een
