@@ -11,7 +11,13 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
-from app.deps import SessionInfo, current_session_info, get_session, get_supabase_auth
+from app.deps import (
+    SessionInfo,
+    current_session_info,
+    get_session,
+    get_supabase_auth,
+    may_manage_layout,
+)
 from app.middleware import COOKIE_NAME, SESSION_MAX_AGE, make_session_token
 from app.ratelimit import SlidingWindowRateLimiter, client_ip
 from app.repositories import tenants as tenants_repo
@@ -159,6 +165,7 @@ def me(info: SessionInfo = Depends(current_session_info)) -> dict:
     return {
         "role": info.role,
         "is_admin": info.role == "admin",
+        "can_manage_layout": may_manage_layout(info.role, info, None),
         "tenant_id": str(info.tenant_id) if info.tenant_id else None,
     }
 

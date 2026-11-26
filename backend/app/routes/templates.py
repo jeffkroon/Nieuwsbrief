@@ -1,7 +1,8 @@
 """Routes voor nieuwsbrief-templates per bedrijf.
 
 Rolverdeling:
-- Layout (HTML) toevoegen/bewerken/verwijderen: alleen Dunion-admin (require_admin).
+- Layout (HTML) toevoegen/bewerken/verwijderen: Dunion-admin, of de klant-login
+  voor het eigen bedrijf (require_layout_access).
 - Stijl (kleuren/lettertype) aanpassen + standaard kiezen: ook bedrijfsgebruikers.
 
 De preview rendert met voorbeeld-inhoud zodat een gebruiker het resultaat ziet
@@ -24,6 +25,7 @@ from app.deps import (
     get_session,
     get_storage,
     require_admin,
+    require_layout_access,
     require_tenant_access,
 )
 from app.services.llm_usage import TrackingLLM
@@ -148,9 +150,9 @@ def list_templates(tenant_id: uuid.UUID, session: Session = Depends(get_session)
     return repo.list_templates(session, tenant_id)
 
 
-@router.get("/templates/starter", dependencies=[Depends(require_admin)])
+@router.get("/templates/starter", dependencies=[Depends(require_layout_access)])
 def starter_html() -> dict:
-    """Geeft de ingebouwde standaard-layout terug als startpunt voor een admin."""
+    """Geeft de ingebouwde standaard-layout terug als startpunt."""
     return {"html": load_template(STARTER_TEMPLATE)}
 
 
@@ -203,11 +205,11 @@ def get_template(
     return _require_template(session, tenant_id, template_id)
 
 
-# --- Layout beheren (alleen admin) ----------------------------------------
+# --- Layout beheren (admin, of klant voor eigen bedrijf) ----------------------------------------
 @router.post(
     "/templates/validate",
     response_model=TemplateValidation,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_layout_access)],
 )
 def validate(tenant_id: uuid.UUID, body: TemplateValidateRequest) -> TemplateValidation:
     errors, warnings = validate_template_for_save(body.html)
@@ -217,7 +219,7 @@ def validate(tenant_id: uuid.UUID, body: TemplateValidateRequest) -> TemplateVal
 @router.post(
     "/templates/toolproof",
     response_model=TemplateToolproofResult,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_layout_access)],
 )
 def toolproof(
     tenant_id: uuid.UUID,
@@ -257,7 +259,7 @@ def toolproof(
 @router.post(
     "/templates/upload",
     response_model=TemplateImportResult,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_layout_access)],
 )
 def upload_template(
     tenant_id: uuid.UUID,
@@ -305,7 +307,7 @@ def upload_template(
 @router.post(
     "/templates/capabilities",
     response_model=TemplateCapabilitiesResult,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_layout_access)],
 )
 def capabilities(
     tenant_id: uuid.UUID,
@@ -329,7 +331,7 @@ def capabilities(
     "/templates",
     response_model=TemplateRead,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_layout_access)],
 )
 def create_template(
     tenant_id: uuid.UUID,
@@ -366,7 +368,7 @@ def create_template(
 @router.put(
     "/templates/{template_id}",
     response_model=TemplateRead,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_layout_access)],
 )
 def update_template(
     tenant_id: uuid.UUID,
@@ -405,7 +407,7 @@ def update_template(
 @router.delete(
     "/templates/{template_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_layout_access)],
 )
 def delete_template(
     tenant_id: uuid.UUID, template_id: uuid.UUID, session: Session = Depends(get_session)
@@ -416,11 +418,11 @@ def delete_template(
 
 
 
-# --- Versies (alleen admin) ------------------------------------------------
+# --- Versies (admin, of klant voor eigen bedrijf) ------------------------------------------------
 @router.get(
     "/templates/{template_id}/versions",
     response_model=list[TemplateVersionSummary],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_layout_access)],
 )
 def list_versions(
     tenant_id: uuid.UUID, template_id: uuid.UUID, session: Session = Depends(get_session)
@@ -432,7 +434,7 @@ def list_versions(
 @router.post(
     "/templates/{template_id}/versions/{version_id}/restore",
     response_model=TemplateRead,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_layout_access)],
 )
 def restore_version(
     tenant_id: uuid.UUID,

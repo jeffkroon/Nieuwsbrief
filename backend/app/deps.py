@@ -74,6 +74,32 @@ def require_admin(role: str = Depends(current_role)) -> None:
         )
 
 
+def may_manage_layout(role: str, info: SessionInfo, tenant_id: uuid.UUID | None) -> bool:
+    """Admin overal; een klant-login alleen op het eigen bedrijf.
+
+    `tenant_id=None` vraagt: mag deze sessie überhaupt ergens layouts beheren
+    (voor de frontend). Een ongebonden niet-admin-sessie mag het nergens.
+    """
+    if role == "admin":
+        return True
+    if info.tenant_id is None:
+        return False
+    return tenant_id is None or info.tenant_id == tenant_id
+
+
+def require_layout_access(
+    tenant_id: uuid.UUID,
+    role: str = Depends(current_role),
+    info: SessionInfo = Depends(current_session_info),
+) -> None:
+    """Template-layouts beheren: Dunion-admin, of de klant zelf voor het eigen bedrijf."""
+    if not may_manage_layout(role, info, tenant_id):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Je mag alleen de layouts van je eigen bedrijf beheren.",
+        )
+
+
 def get_esp_factories() -> EspFactories:
     """Verzendplatform-clients; tests vervangen dit door nep-clients."""
     return EspFactories()
