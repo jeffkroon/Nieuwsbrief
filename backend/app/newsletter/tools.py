@@ -11,14 +11,21 @@ echt zijn, ongeacht hoe de site is opgebouwd.
 
 Uitvoering per onderwerp: site_tools (site en fotobibliotheek lezen),
 block_validation (links, prijzen, foto's), newsletter_build (renderen + preview) en
-draft_tool (concept bij het verzendplatform) en history_tool (eerdere nieuwsbrieven).
+draft_tool (concept bij het verzendplatform) en history_tool (eerdere nieuwsbrieven) en esp_history_tool (verstuurde
+campagnes uit het verzendplatform).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from app.newsletter import draft_tool, history_tool, newsletter_build, site_tools
+from app.newsletter import (
+    draft_tool,
+    esp_history_tool,
+    history_tool,
+    newsletter_build,
+    site_tools,
+)
 from app.newsletter.tool_context import DEFAULT_TEMPLATE, ToolContext
 from app.newsletter.tool_schemas import TOOL_DEFINITIONS
 
@@ -29,6 +36,7 @@ _DISPATCH: dict[str, Callable[[ToolContext, dict], dict]] = {
     **newsletter_build.HANDLERS,
     **draft_tool.HANDLERS,
     **history_tool.HANDLERS,
+    **esp_history_tool.HANDLERS,
 }
 
 

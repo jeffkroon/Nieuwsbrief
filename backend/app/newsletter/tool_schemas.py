@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 
+from app.newsletter.esp_history_tool import SCHEMA as _ESP_HISTORY_SCHEMA
 from app.newsletter.history_tool import SCHEMA as _HISTORY_SCHEMA
 from app.newsletter.styles import COLOR_KEYS, EMAIL_SAFE_FONTS, FONT_KEY, SPACING_KEYS
 
@@ -335,3 +336,4 @@ _draft_def["input_schema"]["properties"]["style_overrides"] = _STYLE_OVERRIDES_S
 _preview_schema["properties"]["style_overrides"] = _STYLE_OVERRIDES_SCHEMA
 
 TOOL_DEFINITIONS.append(_HISTORY_SCHEMA)
+TOOL_DEFINITIONS.append(_ESP_HISTORY_SCHEMA)

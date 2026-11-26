@@ -21,6 +21,7 @@ in de versleutelde opslag. Dezelfde key werkt voor v1 en v3.
 
 from __future__ import annotations
 
+import html as html_lib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -78,6 +79,23 @@ class ActiveCampaignError(Exception):
 class ActiveCampaignDraft:
     campaign_id: str
     message_id: str
+
+
+@dataclass(frozen=True)
+class PastCampaign:
+    """Een eerder verstuurde campagne, als kale tekst (voor feiten, niet voor opmaak)."""
+
+    campaign_id: str
+    name: str
+    subject: str
+    sent_at: str  # ISO-tijd van verzenden zoals ActiveCampaign die geeft
+    text: str
+
+
+# Per campagne genoeg voor prijzen/voorwaarden/reviews, zonder het tokenbudget op te eten.
+PAST_TEXT_MAX_CHARS = 4000
+# Er staan ook concepten tussen; haal wat extra op zodat er genoeg verstuurde overblijven.
+_PAST_FETCH_FACTOR = 3
 
 
 def _text_fallback(html: str) -> str:
@@ -246,6 +264,44 @@ class ActiveCampaignClient:
                 break
             offset += 100
         return lists
+
+    def get_past_campaigns(self, limit: int = 3) -> list[PastCampaign]:
+        """De laatst VERSTUURDE campagnes met onderwerp, verzenddatum en kale tekst.
+
+        Alleen-lezen (uitsluitend GET). Concepten en geplande campagnes vallen af:
+        daarin staan nog geen feiten die de klant echt heeft gecommuniceerd.
+        """
+        body = self._get_v3(
+            "campaigns",
+            {"limit": limit * _PAST_FETCH_FACTOR, "orders[sdate]": "DESC"},
+        )
+        result: list[PastCampaign] = []
+        for campaign in body.get("campaigns") or []:
+            if len(result) >= limit:
+                break
+            if _STATUS.get(str(campaign.get("status"))) != SENT:
+                continue
+            past = self._past_campaign(campaign)
+            if past is not None:
+                result.append(past)
+        return result
+
+    def _past_campaign(self, campaign: dict) -> PastCampaign | None:
+        campaign_id = str(campaign.get("id"))
+        links = self._get_v3(f"campaigns/{campaign_id}/campaignMessages")
+        messages = links.get("campaignMessages") or []
+        message_id = messages[0].get("messageid") if messages else None
+        if not message_id:
+            return None
+        message = self._get_v3(f"messages/{message_id}").get("message") or {}
+        text = html_lib.unescape(_text_fallback(message.get("html") or ""))
+        return PastCampaign(
+            campaign_id=campaign_id,
+            name=str(campaign.get("name") or ""),
+            subject=str(message.get("subject") or ""),
+            sent_at=str(campaign.get("sdate") or ""),
+            text=text[:PAST_TEXT_MAX_CHARS],
+        )
 
     def _campaign(self, campaign_id: str) -> dict:
         body = self._get_v3(f"campaigns/{campaign_id}")
