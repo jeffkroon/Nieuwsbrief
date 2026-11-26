@@ -25,6 +25,8 @@ document.getElementById("toneRefresh").onclick = async () => {
 
 // ---- templates ----
 let isAdmin = false;
+// Layouts beheren: Dunion-admin, of de klant zelf voor het eigen bedrijf.
+let canManageLayout = false;
 let templatesCache = [];
 const tmplSelect = document.getElementById("tmplSelect");
 const tmplStatus = document.getElementById("tmplStatus");
@@ -84,8 +86,10 @@ async function loadRole() {
   try {
     const me = await (await fetch("/me")).json();
     isAdmin = !!me.is_admin;
-  } catch (e) { isAdmin = false; }
-  document.getElementById("adminCard").style.display = isAdmin ? "block" : "none";
+    canManageLayout = !!me.can_manage_layout;
+  } catch (e) { isAdmin = false; canManageLayout = false; }
+  document.getElementById("adminCard").style.display = canManageLayout ? "block" : "none";
+  document.getElementById("adminCardScope").textContent = isAdmin ? "(alleen Dunion)" : "(van jouw bedrijf)";
   document.getElementById("navCompanies").style.display = isAdmin ? "" : "none";
   document.getElementById("roleBadge").textContent = isAdmin ? "Dunion-beheerder" : "Bedrijfsaccount";
 }
@@ -242,10 +246,10 @@ document.getElementById("tmplSetDefault").onclick = async () => {
   if (res.ok) loadTemplates();
 };
 
-// ---- admin: layouts beheren ----
+// ---- layouts beheren (admin, of klant voor eigen bedrijf) ----
 function renderAdminList() {
   const list = document.getElementById("tmplList");
-  if (!isAdmin) { list.innerHTML = ""; return; }
+  if (!canManageLayout) { list.innerHTML = ""; return; }
   list.innerHTML = templatesCache.length ? "" : `<p class="hint">Nog geen templates.</p>`;
   for (const t of templatesCache) {
     const el = document.createElement("div");
@@ -317,7 +321,7 @@ for (const k in STYLE_INPUTS) STYLE_INPUTS[k].addEventListener("input", () => {
   // Na toolproof telt de actuele kiezer-stand: een handmatige kleuraanpassing
   // gaat mee bij het opslaan in plaats van stil te verdwijnen.
   if (toolproofStyles) toolproofStyles = readStyleInputs();
-  if (isAdmin && document.getElementById("newTmplHtml").value.trim()) scheduleAdminPreview();
+  if (canManageLayout && document.getElementById("newTmplHtml").value.trim()) scheduleAdminPreview();
 });
 
 document.getElementById("tmplStarter").onclick = async () => {
